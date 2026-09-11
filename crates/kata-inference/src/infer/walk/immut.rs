@@ -149,11 +149,10 @@ where
                 for_each_subexpr(&cb.node, f);
             }
         }
-        TypedExprKind::ChannelSend { channel, value } => {
-            for_each_subexpr(&channel.node, f);
-            for_each_subexpr(&value.node, f);
+        TypedExprKind::ChannelOp { source, dest, .. } => {
+            for_each_subexpr(&source.node, f);
+            for_each_subexpr(&dest.node, f);
         }
-        TypedExprKind::ChannelRecv { channel, .. } => for_each_subexpr(&channel.node, f),
         TypedExprKind::Select {
             arms,
             timeout_ms,

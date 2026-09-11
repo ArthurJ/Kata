@@ -1,10 +1,10 @@
 //! Typeck de expressões CSP.
 //!
-//! `ChannelSend` (`<!`), `ChannelRecv` (`!>`), e `Select` são inferidos aqui.
+//! `ChannelOp` (`<!` / `!>`), e `Select` são inferidos aqui.
 //! `channel!()`, `queue!()`, `broadcast!()`, `rxf!()`, `fork!()` são
 //! interceptados em `infer_apply` (não despacham para DispatchTable).
 
-use kata_ast::{Expr, ReadMode, SelectArm, Span, Spanned};
+use kata_ast::{ChannelDir, Expr, ReadMode, SelectArm, Span, Spanned};
 use kata_core::escape::EscapeTarget;
 use kata_core::ty::{Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
@@ -15,37 +15,279 @@ use super::expr::InferCtx;
 use super::expr::infer_expr_hinted;
 use super::helpers::InferResult;
 
-/// `tx <! valor` — envio por canal.
+/// Operador direcional de canal: `source <! dest` (Left) ou `source !> dest` (Right).
 ///
-/// `channel` deve ter tipo `Sender::T`. `value` deve ter tipo `T`.
-/// Produz `Unit` (envio é side-effect). Effect = `ChannelOp`.
-pub(crate) fn infer_channel_send(
-    channel: &Spanned<Expr>,
-    value: &Spanned<Expr>,
+/// O dado flui na direção da seta. A inference decide se é send ou recv
+/// pelo tipo do `source`:
+/// - `Sender::T` → send: o source é o canal, o dest é o valor a enviar.
+/// - `Receiver::T` → recv: o source é o canal, o dest é o binding (Ident).
+///
+/// **Unificação bidirecional de T0:** quando o tipo do valor é concreto e o
+/// tipo do canal é `Var(T0)`, `T0` é resolvido para o tipo concreto no
+/// `TypeEnv`. Isso resolve o bug onde variáveis recebidas via canal ficavam
+/// com tipo `Var` não-resolvido.
+pub(crate) fn infer_channel_op(
+    source: &Spanned<Expr>,
+    direction: ChannelDir,
+    dest: &Spanned<Expr>,
+    span: &Span,
+    env: &mut TypeEnv,
+    ctx: &InferCtx,
+    tail_pos: bool,
+    hint: Option<&Ty>,
+) -> InferResult<TypedExpr> {
+    // Inferir o source (lado de onde o dado vem).
+    let typed_source = infer_expr_hinted(&source.node, &source.span, env, ctx, false, None)?;
+
+    // Despachar pelo tipo do source: Sender → send, Receiver → recv.
+    // Clonar o tipo interno antes de mover typed_source (evita borrow conflict).
+    match &typed_source.ty {
+        Ty::Sender(inner) => {
+            let elem_ty = (**inner).clone();
+            infer_send(typed_source, Box::new(elem_ty), dest, direction, span, env, ctx, tail_pos)
+        }
+        Ty::Receiver(inner) => {
+            let inner_ty = (**inner).clone();
+            infer_recv(
+                typed_source,
+                Box::new(inner_ty),
+                dest,
+                direction,
+                span,
+                env,
+                ctx,
+                tail_pos,
+                hint,
+            )
+        }
+        other => {
+            // Source não é canal. Se for Var, pode ser um canal não-resolvido.
+            if matches!(other, Ty::Var(_)) {
+                // Fallback conservador para type params não-resolvidos.
+                match direction {
+                    ChannelDir::Left => infer_send(
+                        typed_source,
+                        Box::new(Ty::Var("__chan_elem__".into())),
+                        dest,
+                        direction,
+                        span,
+                        env,
+                        ctx,
+                        tail_pos,
+                    ),
+                    ChannelDir::Right => infer_recv(
+                        typed_source,
+                        Box::new(Ty::Var("__chan_elem__".into())),
+                        dest,
+                        direction,
+                        span,
+                        env,
+                        ctx,
+                        tail_pos,
+                        hint,
+                    ),
+                }
+            } else {
+                // Source é um valor concreto (não-canal). O dest deve ser o canal.
+                // Isto acontece em `tx <! 42` (Left: dest=tx é o canal, source=42 é o valor)
+                // ou `42 !> tx` (Right: dest=tx é o canal, source=42 é o valor).
+                // Inferir o dest e checar se é Sender.
+                let typed_dest = infer_expr_hinted(&dest.node, &dest.span, env, ctx, false, None)?;
+                match &typed_dest.ty {
+                    Ty::Sender(inner) => {
+                        let elem_ty = (**inner).clone();
+                        // Inverter: dest é o canal, source é o valor.
+                        // Chamar infer_send com typed_dest como canal e source como valor.
+                        infer_send_flipped(
+                            typed_dest,
+                            Box::new(elem_ty),
+                            typed_source,
+                            direction,
+                            span,
+                            env,
+                            ctx,
+                            tail_pos,
+                        )
+                    }
+                    Ty::Receiver(inner) => {
+                        let inner_ty = (**inner).clone();
+                        // Inverter: dest é o canal (Receiver), source é o binding.
+                        infer_recv_flipped(
+                            typed_dest,
+                            Box::new(inner_ty),
+                            typed_source,
+                            direction,
+                            span,
+                            env,
+                            ctx,
+                            tail_pos,
+                            hint,
+                        )
+                    }
+                    dest_ty => {
+                        Err(MiddleError::TypeMismatch {
+                            expected: "Sender::T ou Receiver::T (canal)".into(),
+                            found: format!("source={other:?}, dest={dest_ty:?}"),
+                            span: (*span).into(),
+                        })
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Send flipped: o dest é o canal (Sender), o source é o valor.
+/// Usado quando `tx <! 42` é parseado como source=42, dest=tx.
+/// O `typed_channel` é o dest (já inferido como Sender), `typed_value` é o source.
+fn infer_send_flipped(
+    typed_channel: TypedExpr,
+    elem_ty: Box<Ty>,
+    typed_value: TypedExpr,
+    direction: ChannelDir,
     span: &Span,
     env: &mut TypeEnv,
     ctx: &InferCtx,
     tail_pos: bool,
 ) -> InferResult<TypedExpr> {
-    let typed_channel = infer_expr_hinted(&channel.node, &channel.span, env, ctx, false, None)?;
+    let channel_span = typed_channel.span;
+    let value_span = typed_value.span;
 
-    // Verifica que channel é Sender::T.
-    let elem_ty = match &typed_channel.ty {
-        Ty::Sender(inner) => (**inner).clone(),
-        other => {
+    // Proibe Ty::Action em canal.
+    if let Ty::Action(..) = &typed_value.ty {
+        return Err(MiddleError::TypeMismatch {
+            expected: "valor serializável (não-Action)".into(),
+            found: format!("Action não é permitida em canal. Tipo: `{}`", typed_value.ty),
+            span: value_span.into(),
+        });
+    }
+
+    // Proibe canais como payload.
+    if matches!(
+        &typed_value.ty,
+        Ty::Sender(_) | Ty::Receiver(_) | Ty::ReceiverFactory(_)
+    ) {
+        return Err(MiddleError::TypeMismatch {
+            expected: "valor serializável (não-Canal)".into(),
+            found: format!("Canal não é permitido em canal. Tipo: `{}`", typed_value.ty),
+            span: value_span.into(),
+        });
+    }
+
+    // Unificação bidirecional de T0.
+    let final_elem_ty = unify_channel_elem(&elem_ty, &typed_value.ty, env);
+
+    if !type_compatible(&typed_value.ty, &final_elem_ty) {
+        return Err(MiddleError::TypeMismatch {
+            expected: format!("{final_elem_ty:?}"),
+            found: format!("{}", typed_value.ty),
+            span: value_span.into(),
+        });
+    }
+
+    let escape = escape_for_channel_send(&typed_value.ty, tail_pos, ctx);
+    let typed_value = if escape != typed_value.escape {
+        TypedExpr { escape, ..typed_value }
+    } else {
+        typed_value
+    };
+
+    Ok(TypedExpr {
+        span: *span,
+        ty: Ty::Unit,
+        tail_pos,
+        escape,
+        kind: TypedExprKind::ChannelOp {
+            source: Box::new(Spanned::new(typed_value, value_span)),
+            direction,
+            dest: Box::new(Spanned::new(typed_channel, channel_span)),
+            elem_ty: final_elem_ty,
+            is_send: true,
+            bind_name: None,
+        },
+    })
+}
+
+/// Recv flipped: o dest é o canal (Receiver), o source é o binding.
+/// Usado quando `a <! rx` é parseado como source=a, dest=rx — mas na verdade
+/// rx é o canal e a é o binding. O `typed_channel` é o dest (Receiver).
+fn infer_recv_flipped(
+    typed_channel: TypedExpr,
+    inner: Box<Ty>,
+    typed_binding: TypedExpr,
+    direction: ChannelDir,
+    span: &Span,
+    env: &mut TypeEnv,
+    ctx: &InferCtx,
+    tail_pos: bool,
+    hint: Option<&Ty>,
+) -> InferResult<TypedExpr> {
+    let channel_span = typed_channel.span;
+    let recv_ty = match &*inner {
+        Ty::Var(_) if hint.is_some() && !matches!(hint.unwrap(), Ty::Var(_)) => {
+            hint.unwrap().clone()
+        }
+        _ => (*inner).clone(),
+    };
+
+    let binding_span = typed_binding.span;
+
+    // O binding deve ser um Ident.
+    let bind_name = match &typed_binding.kind {
+        TypedExprKind::Ident { name } => name.clone(),
+        _ => {
+            // Tentar extrair do span original.
             return Err(MiddleError::TypeMismatch {
-                expected: "Sender::T (canal sender)".into(),
-                found: format!("{other:?}"),
-                span: (*span).into(),
+                expected: "identificador (nome do binding de recebimento)".into(),
+                found: format!("{:?}", typed_binding.kind),
+                span: typed_binding.span.into(),
             });
         }
     };
 
-    // value deve ser do tipo T (o tipo do canal).
-    let typed_value = infer_expr_hinted(&value.node, &value.span, env, ctx, false, Some(&elem_ty))?;
+    env.define(&bind_name, recv_ty.clone(), "__local__");
 
-    // Proibe Ty::Action em canal — Actions são comportamento, não informação
-    // que possa viajar por um canal. (PRD §3.7)
+    let escape = if ctx.ret_ty.is_some() {
+        if tail_pos { EscapeTarget::Caller } else { EscapeTarget::Local }
+    } else {
+        EscapeTarget::Caller
+    };
+
+    Ok(TypedExpr {
+        span: *span,
+        ty: recv_ty.clone(),
+        tail_pos,
+        escape,
+        kind: TypedExprKind::ChannelOp {
+            source: Box::new(Spanned::new(typed_channel, channel_span)),
+            direction,
+            dest: Box::new(Spanned::new(typed_binding, binding_span)),
+            elem_ty: recv_ty,
+            is_send: false,
+            bind_name: Some(bind_name),
+        },
+    })
+}
+
+/// Send: `canal <! valor` ou `valor !> canal`.
+/// O `typed_channel` já foi inferido. `elem_ty` é o tipo interno do Sender.
+fn infer_send(
+    typed_channel: TypedExpr,
+    elem_ty: Box<Ty>,
+    value_expr: &Spanned<Expr>,
+    direction: ChannelDir,
+    span: &Span,
+    env: &mut TypeEnv,
+    ctx: &InferCtx,
+    tail_pos: bool,
+) -> InferResult<TypedExpr> {
+    let channel_span = typed_channel.span;
+
+    // Inferir o valor com hint = elem_ty do canal.
+    let typed_value =
+        infer_expr_hinted(&value_expr.node, &value_expr.span, env, ctx, false, Some(&elem_ty))?;
+
+    // Proibe Ty::Action em canal — Actions são comportamento, não informação.
     if let Ty::Action(..) = &typed_value.ty {
         return Err(MiddleError::TypeMismatch {
             expected: "valor serializável (não-Action)".into(),
@@ -54,18 +296,11 @@ pub(crate) fn infer_channel_send(
                  Tipo do valor: `{}`",
                 typed_value.ty
             ),
-            span: value.span.into(),
+            span: value_expr.span.into(),
         });
     }
 
-    // Proibe Ty::Sender/Receiver/ReceiverFactory em canal — canais não são
-    // valores de primeira classe que possam viajar por outros canais. Canais
-    // só se movem via argumentos de fork!, garantindo que a topologia de
-    // comunicação respeita a árvore de fibers (pai-filho e irmãos).
-    // Permitir endpoint mobility via canal quebraria a garantia de que Caller
-    // (caller_arena do sender) é sempre o LCA de sender e receiver, tornando
-    // a escape analysis insound. Canais também não podem ser retornados de
-    // Action (ver action_infer.rs — check ChannelInReturn).
+    // Proibe canais como payload (endpoint mobility).
     if matches!(
         &typed_value.ty,
         Ty::Sender(_) | Ty::Receiver(_) | Ty::ReceiverFactory(_)
@@ -77,24 +312,25 @@ pub(crate) fn infer_channel_send(
                  Tipo: `{}`",
                 typed_value.ty
             ),
-            span: value.span.into(),
+            span: value_expr.span.into(),
         });
     }
 
-    if !type_compatible(&typed_value.ty, &elem_ty) {
+    // ── Unificação bidirecional de T0 ──
+    // Se elem_ty é Var e o valor é concreto, resolver a Var no TypeEnv.
+    let final_elem_ty = unify_channel_elem(&elem_ty, &typed_value.ty, env);
+
+    if !type_compatible(&typed_value.ty, &final_elem_ty) {
         return Err(MiddleError::TypeMismatch {
-            expected: format!("{elem_ty:?}"),
+            expected: format!("{final_elem_ty:?}"),
             found: format!("{}", typed_value.ty),
-            span: value.span.into(),
+            span: value_expr.span.into(),
         });
     }
 
     let escape = escape_for_channel_send(&typed_value.ty, tail_pos, ctx);
 
-    // Override o escape do typed_value: se o valor é composto, precisa ser
-    // alocado na caller_arena (arena do pai) para sobreviver ao fiber
-    // que o envia. O inference do typed_value usou tail_pos=false → Local,
-    // mas o channel send exige que o valor sobreviva além do sender.
+    // Override escape: valores compostos precisam sobreviver ao sender.
     let typed_value = if escape != typed_value.escape {
         TypedExpr {
             escape,
@@ -104,46 +340,78 @@ pub(crate) fn infer_channel_send(
         typed_value
     };
 
+    // Construir source e dest conforme a direção.
+    let (source_typed, dest_typed) = match direction {
+        ChannelDir::Left => {
+            // dest <! source → channel é dest, value é source
+            (
+                Spanned::new(typed_value, value_expr.span),
+                Spanned::new(typed_channel, channel_span),
+            )
+        }
+        ChannelDir::Right => {
+            // source !> dest → channel é source, value é dest
+            (
+                Spanned::new(typed_channel, channel_span),
+                Spanned::new(typed_value, value_expr.span),
+            )
+        }
+    };
+
     Ok(TypedExpr {
         span: *span,
         ty: Ty::Unit,
         tail_pos,
         escape,
-        kind: TypedExprKind::ChannelSend {
-            channel: Box::new(Spanned::new(typed_channel, channel.span)),
-            value: Box::new(Spanned::new(typed_value, value.span)),
+        kind: TypedExprKind::ChannelOp {
+            source: Box::new(source_typed),
+            direction,
+            dest: Box::new(dest_typed),
+            elem_ty: final_elem_ty,
+            is_send: true,
+            bind_name: None,
         },
     })
 }
 
-/// `rx !> nome` — recebimento de canal.
-///
-/// `channel` deve ter tipo `Receiver::T`. Infere `T` e cria binding
-/// `bind_name: T` no `TypeEnv`. Produz `T` (o valor recebido).
-pub(crate) fn infer_channel_recv(
-    channel: &Spanned<Expr>,
-    bind_name: &str,
+/// Recv: `canal !> binding` ou `binding <! canal`.
+/// O `typed_channel` já foi inferido. `inner` é o tipo interno do Receiver.
+/// `hint` é o tipo esperado pelo contexto (return type, ascription, etc.).
+/// Se `inner` é `Var` e `hint` é concreto, `hint` resolve a variável de tipo.
+fn infer_recv(
+    typed_channel: TypedExpr,
+    inner: Box<Ty>,
+    dest_expr: &Spanned<Expr>,
+    direction: ChannelDir,
     span: &Span,
     env: &mut TypeEnv,
     ctx: &InferCtx,
     tail_pos: bool,
+    hint: Option<&Ty>,
 ) -> InferResult<TypedExpr> {
-    let typed_channel = infer_expr_hinted(&channel.node, &channel.span, env, ctx, false, None)?;
+    let channel_span = typed_channel.span;
+    // Se o tipo do canal é Var (não-resolvido), usar o hint se disponível.
+    let recv_ty = match &*inner {
+        Ty::Var(_) if hint.is_some() && !matches!(hint.unwrap(), Ty::Var(_)) => {
+            hint.unwrap().clone()
+        }
+        _ => (*inner).clone(),
+    };
 
-    // Verifica que channel é Receiver::T e extrai T.
-    let recv_ty = match &typed_channel.ty {
-        Ty::Receiver(inner) => (**inner).clone(),
-        other => {
+    // O dest deve ser um Ident (binding name).
+    let bind_name = match &dest_expr.node {
+        Expr::Ident { name } => name.clone(),
+        _ => {
             return Err(MiddleError::TypeMismatch {
-                expected: "Receiver::T (canal receiver)".into(),
-                found: format!("{other:?}"),
-                span: (*span).into(),
+                expected: "identificador (nome do binding de recebimento)".into(),
+                found: format!("{:?}", dest_expr.node),
+                span: dest_expr.span.into(),
             });
         }
     };
 
-    // Cria binding no TypeEnv: nome := recv_ty.
-    env.define(bind_name, recv_ty.clone(), "__local__");
+    // Criar binding no TypeEnv: bind_name := recv_ty.
+    env.define(&bind_name, recv_ty.clone(), "__local__");
 
     let escape = if ctx.ret_ty.is_some() {
         if tail_pos {
@@ -155,19 +423,74 @@ pub(crate) fn infer_channel_recv(
         EscapeTarget::Caller
     };
 
+    // O dest no TAST é o binding como Ident.
+    let dest_typed = TypedExpr {
+        span: dest_expr.span,
+        ty: recv_ty.clone(),
+        tail_pos: false,
+        escape: EscapeTarget::Local,
+        kind: TypedExprKind::Ident {
+            name: bind_name.clone(),
+        },
+    };
+
+    // Construir source e dest conforme a direção.
+    let (source_typed, dest_typed) = match direction {
+        ChannelDir::Left => {
+            // binding <! canal → canal é source (RHS), binding é dest (LHS)
+            (
+                Spanned::new(typed_channel, channel_span),
+                Spanned::new(dest_typed, dest_expr.span),
+            )
+        }
+        ChannelDir::Right => {
+            // canal !> binding → canal é source (LHS), binding é dest (RHS)
+            (
+                Spanned::new(typed_channel, channel_span),
+                Spanned::new(dest_typed, dest_expr.span),
+            )
+        }
+    };
+
     Ok(TypedExpr {
         span: *span,
         ty: recv_ty.clone(),
         tail_pos,
         escape,
-        kind: TypedExprKind::ChannelRecv {
-            channel: Box::new(Spanned::new(typed_channel, channel.span)),
-            recv_ty,
-            bind_name: bind_name.to_string(),
+        kind: TypedExprKind::ChannelOp {
+            source: Box::new(source_typed),
+            direction,
+            dest: Box::new(dest_typed),
+            elem_ty: recv_ty,
+            is_send: false,
+            bind_name: Some(bind_name),
         },
     })
 }
 
+/// Unifica `elem_ty` com `value_ty` quando um dos dois é `Ty::Var`.
+///
+/// Se `elem_ty` é `Var(name)` e `value_ty` é concreto, retorna `value_ty`
+/// (o tipo concreto substitui a variável de tipo). Caso contrário, retorna
+/// `elem_ty` inalterado.
+///
+/// Esta é a correção do bug de unificação de T0: antes, `type_compatible` apenas
+/// checava compatibilidade sem substituir a Var, deixando `T0` não-resolvido.
+/// O tipo resoluido é propagado no TAST (`elem_ty` no `ChannelOp`), e o
+/// `infer_recv` extrai o tipo do `Receiver` já resolvido.
+fn unify_channel_elem(elem_ty: &Ty, value_ty: &Ty, env: &mut TypeEnv) -> Ty {
+    match (elem_ty, value_ty) {
+        (Ty::Var(name), concrete) if !matches!(concrete, Ty::Var(_)) => {
+            // T0 := concreto. Propagar a substituição para TODOS os bindings
+            // no env (incluindo o receiver do mesmo canal).
+            let mut subs = std::collections::HashMap::new();
+            subs.insert(name.clone(), concrete.clone());
+            env.apply_substitutions(&subs);
+            concrete.clone()
+        }
+        _ => elem_ty.clone(),
+    }
+}
 /// `select` com braços de canal, I/O e timeout opcional.
 ///
 /// Cada braço lê de seu canal/handle e executa seu corpo

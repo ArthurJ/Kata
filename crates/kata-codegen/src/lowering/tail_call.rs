@@ -139,10 +139,9 @@ fn expr_has_tail_call(expr: &TypedExpr) -> bool {
                 || expr_has_tail_call(&collection.node)
         }
         TypedExprKind::FusedStream { source, .. } => expr_has_tail_call(&source.node),
-        TypedExprKind::ChannelSend { channel, value } => {
-            expr_has_tail_call(&channel.node) || expr_has_tail_call(&value.node)
+        TypedExprKind::ChannelOp { source, dest, .. } => {
+            expr_has_tail_call(&source.node) || expr_has_tail_call(&dest.node)
         }
-        TypedExprKind::ChannelRecv { channel, .. } => expr_has_tail_call(&channel.node),
         TypedExprKind::ChannelCreate { .. } => false,
         TypedExprKind::ReceiverFactoryCall { factory, .. } => expr_has_tail_call(&factory.node),
         TypedExprKind::Fork {

@@ -96,12 +96,9 @@ pub fn assert_no_holes(expr: &Spanned<Expr>) {
             assert_no_holes(collection);
         }
         // Nós CSP não contêm holes, recursam nos filhos
-        Expr::ChannelSend { channel, value } => {
-            assert_no_holes(channel);
-            assert_no_holes(value);
-        }
-        Expr::ChannelRecv { channel, .. } => {
-            assert_no_holes(channel);
+        Expr::ChannelOp { source, dest, .. } => {
+            assert_no_holes(source);
+            assert_no_holes(dest);
         }
         Expr::Select {
             arms,
@@ -237,12 +234,9 @@ pub fn assert_no_pipes(expr: &Spanned<Expr>) {
             assert_no_pipes(collection);
         }
         // Nós CSP não contêm pipes, recursam nos filhos
-        Expr::ChannelSend { channel, value } => {
-            assert_no_pipes(channel);
-            assert_no_pipes(value);
-        }
-        Expr::ChannelRecv { channel, .. } => {
-            assert_no_pipes(channel);
+        Expr::ChannelOp { source, dest, .. } => {
+            assert_no_pipes(source);
+            assert_no_pipes(dest);
         }
         Expr::Select {
             arms,

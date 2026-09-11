@@ -149,11 +149,10 @@ where
                 for_each_subexpr_mut(&mut cb.node, f);
             }
         }
-        TypedExprKind::ChannelSend { channel, value } => {
-            for_each_subexpr_mut(&mut channel.node, f);
-            for_each_subexpr_mut(&mut value.node, f);
+        TypedExprKind::ChannelOp { source, dest, .. } => {
+            for_each_subexpr_mut(&mut source.node, f);
+            for_each_subexpr_mut(&mut dest.node, f);
         }
-        TypedExprKind::ChannelRecv { channel, .. } => for_each_subexpr_mut(&mut channel.node, f),
         TypedExprKind::Select {
             arms,
             timeout_ms,

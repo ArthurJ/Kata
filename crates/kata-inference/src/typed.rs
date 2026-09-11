@@ -6,7 +6,7 @@
 //! `TypedExprKind` espelha `Expr` mas com `Spanned<TypedExpr>` em vez de
 //! `Spanned<Expr>` — a recursão é sobre a TAST, não sobre a AST.
 
-use kata_ast::{Span, Spanned};
+use kata_ast::{ChannelDir, Span, Spanned};
 use kata_core::escape::EscapeTarget;
 use kata_core::ty::Ty;
 
@@ -338,18 +338,25 @@ pub enum TypedExprKind {
     },
 
     // ── CSP — canais, select, fork ──────────────────────
-    /// `tx <! valor` — envio por canal.
-    ChannelSend {
-        channel: Box<Spanned<TypedExpr>>,
-        value: Box<Spanned<TypedExpr>>,
-    },
-
-    /// `rx !> nome` — recebimento de canal.
-    /// `recv_ty` é o tipo do valor recebido (inferido do tipo do canal).
-    ChannelRecv {
-        channel: Box<Spanned<TypedExpr>>,
-        recv_ty: Ty,
-        bind_name: String,
+    /// Operador direcional de canal: `<!` (Left) ou `!>` (Right).
+    ///
+    /// A inference decide se é send ou recv pelo tipo do `source`:
+    /// - `Sender::T` → send: `dest` é o valor, `source` é o canal.
+    /// - `Receiver::T` → recv: `source` é o canal, `dest` é o binding.
+    ///
+    /// `elem_ty` é o tipo do valor transportado (`T` em `Sender::T`).
+    /// `is_send` é true se o source é Sender (operação de envio).
+    /// `bind_name` é o nome do binding quando é recv (None para send).
+    ChannelOp {
+        source: Box<Spanned<TypedExpr>>,
+        direction: ChannelDir,
+        dest: Box<Spanned<TypedExpr>>,
+        /// Tipo do valor transportado pelo canal.
+        elem_ty: Ty,
+        /// true = send (source é Sender), false = recv (source é Receiver).
+        is_send: bool,
+        /// Nome do binding para recv (None para send).
+        bind_name: Option<String>,
     },
 
     /// `select` com braços.

@@ -13,14 +13,14 @@
 //! O braço `timeout N: body` é opcional e sempre o último.
 //!
 //! Como `!>` é um operador infixo em `parse_expr`, o parser de select
-//! chama `parse_expr` que produz `Expr::ChannelRecv { channel, bind_name }`
+//! chama `parse_expr` que produz `Expr::ChannelOp { source, direction, dest }`
 //! para cada braço. O `: body` é então parseado separadamente.
 //!
 //! Para distinguir braços de canal de braços de I/O, o parser inspeciona
-//! o `channel` dentro do `ChannelRecv`: se for `ActionCall { callee: "read", ... }`,
+//! o `source` dentro do `ChannelOp`: se for `ActionCall { callee: "read", ... }`,
 //! é um braço `IoRead`; caso contrário, é um braço `Channel`.
 
-use kata_ast::{Expr, ReadMode, SelectArm, Spanned, Token};
+use kata_ast::{ChannelDir, Expr, ReadMode, SelectArm, Spanned, Token};
 use kata_diagnostics::FrontendError;
 
 use crate::Parser;
@@ -61,12 +61,28 @@ impl Parser {
                 timeout_body = Some(Box::new(body));
             } else {
                 // `receiver !> nome: body` ou `read!(handle, n) !> nome: body`
-                // parse_expr consome `expr !> nome` como Expr::ChannelRecv.
+                // parse_expr consome `expr !> nome` como Expr::ChannelOp.
                 let recv_expr = parse_expr(self)?;
 
-                // Extrai channel e bind_name do ChannelRecv
+                // Extrai source (canal) e dest (bind_name) do ChannelOp.
+                // Para select, o braço deve ser `source !> dest` (Right).
                 let (channel, bind_name) = match recv_expr.node {
-                    Expr::ChannelRecv { channel, bind_name } => (*channel, bind_name),
+                    Expr::ChannelOp {
+                        source,
+                        direction: ChannelDir::Right,
+                        dest,
+                    } => {
+                        // dest deve ser um Ident (binding name)
+                        let name = match dest.node {
+                            Expr::Ident { name } => name,
+                            _ => {
+                                return Err(self.error(
+                                    "esperado identificador como destino de `!>` no braço do select",
+                                ));
+                            }
+                        };
+                        (*source, name)
+                    }
                     _ => {
                         return Err(self.error("esperado `receiver !> nome` no braço do select"));
                     }

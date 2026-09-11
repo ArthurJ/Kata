@@ -282,8 +282,8 @@ fn mark_channel_create_by_span(expr: &mut TypedExpr, target_span: kata_ast::Span
 /// o tipo do elemento do `Sender(inner)` e mapeia `span_do_ChannelCreate
 /// → inner`.
 ///
-/// Também coleta de `ChannelRecv` onde o `channel` é `Ident` em
-/// `channel_bindings` e o `recv_ty` é concreto.
+/// Também coleta de `ChannelOp` (recv) onde o `source` é `Ident` em
+/// `channel_bindings` e o `elem_ty` é concreto.
 fn collect_concrete_channel_types(
     expr: &TypedExpr,
     channel_bindings: &HashMap<String, kata_ast::Span>,
@@ -291,25 +291,23 @@ fn collect_concrete_channel_types(
 ) {
     walk::for_each_subexpr(expr, &mut |e| {
         match &e.kind {
-            TypedExprKind::ChannelSend { channel, .. } => {
-                if let TypedExprKind::Ident { name } = &channel.node.kind
+            TypedExprKind::ChannelOp { source, is_send, elem_ty, .. } => {
+                if let TypedExprKind::Ident { name } = &source.node.kind
                     && let Some(span) = channel_bindings.get(name)
-                    && let Ty::Sender(inner) = &channel.node.ty
-                    && !matches!(inner.as_ref(), Ty::Var(_))
                 {
-                    create_types
-                        .entry(*span)
-                        .or_insert_with(|| inner.as_ref().clone());
-                }
-            }
-            TypedExprKind::ChannelRecv {
-                channel, recv_ty, ..
-            } => {
-                if let TypedExprKind::Ident { name } = &channel.node.kind
-                    && let Some(span) = channel_bindings.get(name)
-                    && !matches!(recv_ty, Ty::Var(_))
-                {
-                    create_types.entry(*span).or_insert_with(|| recv_ty.clone());
+                    if *is_send {
+                        if let Ty::Sender(inner) = &source.node.ty
+                            && !matches!(inner.as_ref(), Ty::Var(_))
+                        {
+                            create_types
+                                .entry(*span)
+                                .or_insert_with(|| inner.as_ref().clone());
+                        }
+                    } else {
+                        if !matches!(elem_ty, Ty::Var(_)) {
+                            create_types.entry(*span).or_insert_with(|| elem_ty.clone());
+                        }
+                    }
                 }
             }
             _ => {}

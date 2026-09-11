@@ -270,17 +270,11 @@ fn desugar_pipes(expr: &Spanned<Expr>) -> Spanned<Expr> {
         ),
 
         // ── Nós CSP preservam estrutura, recursam nos filhos ──
-        Expr::ChannelSend { channel, value } => Spanned::new(
-            Expr::ChannelSend {
-                channel: Box::new(desugar_pipes(channel)),
-                value: Box::new(desugar_pipes(value)),
-            },
-            expr.span,
-        ),
-        Expr::ChannelRecv { channel, bind_name } => Spanned::new(
-            Expr::ChannelRecv {
-                channel: Box::new(desugar_pipes(channel)),
-                bind_name: bind_name.clone(),
+        Expr::ChannelOp { source, direction, dest } => Spanned::new(
+            Expr::ChannelOp {
+                source: Box::new(desugar_pipes(source)),
+                direction: *direction,
+                dest: Box::new(desugar_pipes(dest)),
             },
             expr.span,
         ),

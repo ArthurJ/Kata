@@ -465,12 +465,9 @@ fn collect_refs(
             }
         }
 
-        TypedExprKind::ChannelSend { channel, value } => {
-            collect_refs(&channel.node, reached_fns, reached_actions, fn_names);
-            collect_refs(&value.node, reached_fns, reached_actions, fn_names);
-        }
-        TypedExprKind::ChannelRecv { channel, .. } => {
-            collect_refs(&channel.node, reached_fns, reached_actions, fn_names);
+        TypedExprKind::ChannelOp { source, dest, .. } => {
+            collect_refs(&source.node, reached_fns, reached_actions, fn_names);
+            collect_refs(&dest.node, reached_fns, reached_actions, fn_names);
         }
         TypedExprKind::Select {
             arms,

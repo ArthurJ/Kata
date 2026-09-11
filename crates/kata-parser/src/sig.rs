@@ -368,10 +368,9 @@ fn expr_uses_name(expr: &Spanned<Expr>, name: &str) -> bool {
         Expr::In { item, collection } => {
             expr_uses_name(item, name) || expr_uses_name(collection, name)
         }
-        Expr::ChannelSend { channel, value } => {
-            expr_uses_name(channel, name) || expr_uses_name(value, name)
+        Expr::ChannelOp { source, dest, .. } => {
+            expr_uses_name(source, name) || expr_uses_name(dest, name)
         }
-        Expr::ChannelRecv { channel, .. } => expr_uses_name(channel, name),
         Expr::Select {
             arms,
             timeout_ms,

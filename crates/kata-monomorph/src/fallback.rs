@@ -217,12 +217,9 @@ fn fallback_in_expr(expr_span: &mut Spanned<TypedExpr>) {
                 fallback_in_expr(cb);
             }
         }
-        TypedExprKind::ChannelSend { channel, value } => {
-            fallback_in_expr(channel);
-            fallback_in_expr(value);
-        }
-        TypedExprKind::ChannelRecv { channel, .. } => {
-            fallback_in_expr(channel);
+        TypedExprKind::ChannelOp { source, dest, .. } => {
+            fallback_in_expr(source);
+            fallback_in_expr(dest);
         }
         TypedExprKind::Select {
             arms,

@@ -580,14 +580,10 @@ fn walk_expr(expr: Spanned<Expr>, ctx: &mut EmbedCtx) -> Spanned<Expr> {
             collection: Box::new(walk_expr(*collection, ctx)),
         },
 
-        Expr::ChannelSend { channel, value } => Expr::ChannelSend {
-            channel: Box::new(walk_expr(*channel, ctx)),
-            value: Box::new(walk_expr(*value, ctx)),
-        },
-
-        Expr::ChannelRecv { channel, bind_name } => Expr::ChannelRecv {
-            channel: Box::new(walk_expr(*channel, ctx)),
-            bind_name,
+        Expr::ChannelOp { source, direction, dest } => Expr::ChannelOp {
+            source: Box::new(walk_expr(*source, ctx)),
+            direction,
+            dest: Box::new(walk_expr(*dest, ctx)),
         },
 
         Expr::Select {

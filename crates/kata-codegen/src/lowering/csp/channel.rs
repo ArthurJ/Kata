@@ -227,44 +227,52 @@ pub(crate) fn lower_receiver_factory_call(
     Ok(rx_handle)
 }
 
-/// Lowera `TypedExprKind::ChannelSend` (`tx <! valor`).
+/// Lowera `TypedExprKind::ChannelOp` (`tx <! valor` ou `rx !> nome`).
 ///
-/// Chama `kata_rt_channel_send(handle, value)` e retorna Unit.
-pub(crate) fn lower_channel_send(
-    channel: &kata_ast::Spanned<TypedExpr>,
-    value: &kata_ast::Spanned<TypedExpr>,
+/// Despacha por `is_send`:
+/// - **Send** (`is_send = true`): `source` é o canal (Sender), `dest` é o valor.
+///   Chama `kata_rt_channel_send(handle, value)` e retorna Unit.
+/// - **Recv** (`is_send = false`): `source` é o canal (Receiver), `dest` é o binding.
+///   Chama `kata_rt_channel_recv(handle)`, cria binding `bind_name` no
+///   `var_map`, e retorna o valor recebido.
+pub(crate) fn lower_channel_op(
+    source: &kata_ast::Spanned<TypedExpr>,
+    dest: &kata_ast::Spanned<TypedExpr>,
+    elem_ty: &Ty,
+    is_send: bool,
+    bind_name: &Option<String>,
     ctx: &mut LowerCtx,
 ) -> Result<Value, super::super::CodegenError> {
-    let handle = super::super::expr::lower_expr(&channel.node, ctx)?;
-    let val = super::super::expr::lower_expr(&value.node, ctx)?;
+    if is_send {
+        // Send: encontrar qual operando é o canal (Sender) e qual é o valor.
+        // No TAST, o canal pode estar em source ou dest dependendo da direção.
+        let (channel_expr, value_expr) = if matches!(source.node.ty, Ty::Sender(_)) {
+            (&source.node, &dest.node)
+        } else {
+            (&dest.node, &source.node)
+        };
+        let handle = super::super::expr::lower_expr(channel_expr, ctx)?;
+        let val = super::super::expr::lower_expr(value_expr, ctx)?;
 
-    let fref = get_ffi(ctx, "kata_rt_channel_send")?;
-    ctx.builder.ins().call(fref, &[handle, val]);
+        let fref = get_ffi(ctx, "kata_rt_channel_send")?;
+        ctx.builder.ins().call(fref, &[handle, val]);
 
-    // ChannelSend retorna Unit.
-    Ok(ctx.builder.ins().iconst(I64, 0))
-}
+        Ok(ctx.builder.ins().iconst(I64, 0))
+    } else {
+        // Recv: o canal (Receiver) está em source, o binding está em dest.
+        let handle = super::super::expr::lower_expr(&source.node, ctx)?;
 
-/// Lowera `TypedExprKind::ChannelRecv` (`rx !> nome`).
-///
-/// Chama `kata_rt_channel_recv(handle)`, cria binding `bind_name` no
-/// `var_map`, e retorna o valor recebido.
-pub(crate) fn lower_channel_recv(
-    channel: &kata_ast::Spanned<TypedExpr>,
-    bind_name: &str,
-    recv_ty: &Ty,
-    ctx: &mut LowerCtx,
-) -> Result<Value, super::super::CodegenError> {
-    let handle = super::super::expr::lower_expr(&channel.node, ctx)?;
+        let fref = get_ffi(ctx, "kata_rt_channel_recv")?;
+        let inst = ctx.builder.ins().call(fref, &[handle]);
+        let val = ctx.builder.inst_results(inst)[0];
 
-    let fref = get_ffi(ctx, "kata_rt_channel_recv")?;
-    let inst = ctx.builder.ins().call(fref, &[handle]);
-    let val = ctx.builder.inst_results(inst)[0];
+        let name = bind_name
+            .as_ref()
+            .expect("ChannelOp recv deve ter bind_name");
+        let clif_ty = super::super::resolve_clif_ty(elem_ty, ctx.struct_registry);
+        let var = ctx.new_var(name, clif_ty);
+        ctx.builder.def_var(var, val);
 
-    // Criar binding no var_map (igual ao Let lowering).
-    let clif_ty = super::super::resolve_clif_ty(recv_ty, ctx.struct_registry);
-    let var = ctx.new_var(bind_name, clif_ty);
-    ctx.builder.def_var(var, val);
-
-    Ok(val)
+        Ok(val)
+    }
 }

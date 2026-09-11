@@ -1,7 +1,7 @@
 //! Verificação de pureza — uma expressão é pura se não contém efeitos colaterais.
 //!
 //! Uma expressão `@comptime` deve ser pura: não pode conter `ActionCall`,
-//! `Fork`, `ChannelSend`, `ChannelRecv`, `Select`, ou qualquer nó que produza
+//! `Fork`, `ChannelOp`, `Select`, ou qualquer nó que produza
 //! efeitos observáveis. Funções puras podem chamar outras funções puras;
 //! a verificação é transitiva (mas para a Fase 1, verificamos apenas a
 //! expressão direta — a transitividade será adicionada quando o call graph
@@ -16,8 +16,7 @@ use crate::ComptimeError;
 /// Percorre a TAST procurando nós impuros:
 /// - `ActionCall` — chama uma Action (impura por definição)
 /// - `Fork` — spawn de fiber (impuro)
-/// - `ChannelSend` — envio por canal (impuro)
-/// - `ChannelRecv` — recebimento de canal (impuro)
+/// - `ChannelOp` — operação de canal (impuro)
 /// - `Select` — select de canais (impuro)
 /// - `ChannelCreate` — criação de canal (impuro)
 /// - `ReceiverFactoryCall` — pede receiver (impuro)
@@ -42,11 +41,8 @@ fn check_purity_inner(expr: &TypedExpr) -> Result<(), ComptimeError> {
         TypedExprKind::Spawn { action_name, .. } => Err(ComptimeError::Impure {
             reason: format!("contém Spawn `{action_name}`"),
         }),
-        TypedExprKind::ChannelSend { .. } => Err(ComptimeError::Impure {
-            reason: "contém ChannelSend".into(),
-        }),
-        TypedExprKind::ChannelRecv { .. } => Err(ComptimeError::Impure {
-            reason: "contém ChannelRecv".into(),
+        TypedExprKind::ChannelOp { .. } => Err(ComptimeError::Impure {
+            reason: "contém ChannelOp".into(),
         }),
         TypedExprKind::Select { .. } => Err(ComptimeError::Impure {
             reason: "contém Select".into(),

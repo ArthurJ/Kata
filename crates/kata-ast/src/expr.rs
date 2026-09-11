@@ -242,16 +242,17 @@ pub enum Expr {
     },
 
     // ── CSP (Canais, Fork, Select) ───────────────────
-    /// `tx <! valor` — envio por canal.
-    ChannelSend {
-        channel: Box<Spanned<Expr>>,
-        value: Box<Spanned<Expr>>,
-    },
-
-    /// `rx !> nome` — recebimento de canal (binding em `nome`).
-    ChannelRecv {
-        channel: Box<Spanned<Expr>>,
-        bind_name: String,
+    /// Operador direcional de canal: `<!` (Left) ou `!>` (Right).
+    ///
+    /// O dado flui na direção da seta: `source` é de onde o dado vem,
+    /// `dest` é para onde ele vai. Em `tx <! 42`, source=42, dest=tx
+    /// (dado vai para a esquerda). Em `rx !> a`, source=rx, dest=a
+    /// (dado vai para a direita). A inference decide se é send ou recv
+    /// pelo tipo do source: Sender → send, Receiver → recv.
+    ChannelOp {
+        source: Box<Spanned<Expr>>,
+        direction: ChannelDir,
+        dest: Box<Spanned<Expr>>,
     },
 
     /// `select` com braços de canal e timeout.
@@ -369,6 +370,16 @@ pub struct MatchArm {
     /// Guard opcional após pattern ( : não implementado no parser ainda).
     pub guard: Option<Spanned<Expr>>,
     pub body: Spanned<Expr>,
+}
+
+/// Direção do operador de canal.
+///
+/// `Left` corresponde a `<!` (dado flui para a esquerda).
+/// `Right` corresponde a `!>` (dado flui para a direita).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChannelDir {
+    Left,
+    Right,
 }
 
 /// Modo de leitura num braço de `select` I/O.

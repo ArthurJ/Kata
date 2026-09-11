@@ -4,7 +4,7 @@
 //! Extraído de `expressions.rs` para separar a mecânica de precedência de
 //! operadores (`|>`, `|`, `?`, aplicação greedy) do parsing de átomos.
 
-use kata_ast::{Expr, Spanned, Token};
+use kata_ast::{ChannelDir, Expr, Spanned, Token};
 use kata_diagnostics::FrontendError;
 
 use crate::MAX_EXPR_DEPTH;
@@ -120,43 +120,34 @@ fn parse_expr_impl(parser: &mut Parser) -> Result<Spanned<Expr>, FrontendError> 
                 );
             }
             Token::SendArrow => {
-                // `tx <! valor` — envio por canal.
+                // `dest <! source` — dado flui para a esquerda (em dest).
+                // dest é o LHS, source é o RHS. Pode ser `tx <! 42` (send)
+                // ou `a <! rx` (recv) — a inference decide pelo tipo do source.
                 parser.advance(); // consume `<!`
                 let rhs = parse_apply(parser)?;
                 let span = lhs.span.cover(rhs.span);
                 lhs = Spanned::new(
-                    Expr::ChannelSend {
-                        channel: Box::new(lhs),
-                        value: Box::new(rhs),
+                    Expr::ChannelOp {
+                        source: Box::new(rhs),
+                        direction: ChannelDir::Left,
+                        dest: Box::new(lhs),
                     },
                     span,
                 );
             }
             Token::RecvArrow => {
-                // `rx !> nome` — recebimento de canal.
-                // `!>` exige um Ident como destino (binding name).
+                // `source !> dest` — dado flui para a direita (em dest).
+                // source é o LHS, dest é o RHS. Pode ser `rx !> a` (recv)
+                // ou `42 !> tx` (send) — a inference decide pelo tipo do source.
+                // `!>` exige um Ident como destino (binding name para recv).
                 parser.advance(); // consume `!>`
-                let name = match parser.peek() {
-                    Token::Ident(s) => {
-                        let n = s.clone();
-                        parser.advance();
-                        n
-                    }
-                    _ => {
-                        return Err(parser
-                            .error("identificador após `!>` (nome do binding de recebimento)"));
-                    }
-                };
-                let end_span = parser
-                    .tokens
-                    .get(parser.pos.wrapping_sub(1))
-                    .map(|t| t.span)
-                    .unwrap_or(lhs.span);
-                let span = lhs.span.cover(end_span);
+                let rhs = parse_apply(parser)?;
+                let span = lhs.span.cover(rhs.span);
                 lhs = Spanned::new(
-                    Expr::ChannelRecv {
-                        channel: Box::new(lhs),
-                        bind_name: name,
+                    Expr::ChannelOp {
+                        source: Box::new(lhs),
+                        direction: ChannelDir::Right,
+                        dest: Box::new(rhs),
                     },
                     span,
                 );

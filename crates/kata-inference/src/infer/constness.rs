@@ -8,7 +8,7 @@
 //!   `type_env` contém apenas bindings de módulo (constants anteriores e
 //!   funções nomeadas) — qualquer Ident que não está no `type_env` não é
 //!   comptime-available.
-//! - **Puro**: não pode conter ActionCall, Fork, ChannelSend, etc.
+//! - **Puro**: não pode conter ActionCall, Fork, ChannelOp, etc.
 
 use kata_core::ty::Ty;
 use kata_diagnostics::MiddleError;

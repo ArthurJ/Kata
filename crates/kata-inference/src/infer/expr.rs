@@ -1190,11 +1190,10 @@ pub(crate) fn infer_expr_hinted(
         }
 
         // ── CSP — typeck em csp.rs ──
-        Expr::ChannelSend { channel, value } => {
-            return super::csp::infer_channel_send(channel, value, span, env, ctx, tail_pos);
-        }
-        Expr::ChannelRecv { channel, bind_name } => {
-            return super::csp::infer_channel_recv(channel, bind_name, span, env, ctx, tail_pos);
+        Expr::ChannelOp { source, direction, dest } => {
+            return super::csp::infer_channel_op(
+                source, *direction, dest, span, env, ctx, tail_pos, hint,
+            );
         }
         Expr::Select {
             arms,

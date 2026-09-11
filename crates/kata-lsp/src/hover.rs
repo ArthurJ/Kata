@@ -112,7 +112,7 @@ fn children<'a>(
         TypeOf { expr } => Box::new(std::iter::once(expr.as_ref())),
         Return(expr) => Box::new(std::iter::once(expr.as_ref())),
         Reassign { value, .. } => Box::new(std::iter::once(value.as_ref())),
-        ChannelRecv { channel, .. } => Box::new(std::iter::once(channel.as_ref())),
+        ChannelOp { source, dest, .. } => Box::new([source.as_ref(), dest.as_ref()].into_iter()),
         ReceiverFactoryCall { factory, .. } => Box::new(std::iter::once(factory.as_ref())),
 
         // Closure: callee + args
@@ -213,9 +213,6 @@ fn children<'a>(
                 kata_inference::FusedStage::Map { callback, .. } => callback.as_ref(),
             }),
         )),
-
-        // ChannelSend: channel + value
-        ChannelSend { channel, value } => Box::new([channel.as_ref(), value.as_ref()].into_iter()),
 
         // Select: arm bodies + timeout
         Select {

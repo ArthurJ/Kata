@@ -520,12 +520,9 @@ fn rewrite_typed_expr(expr_span: &mut Spanned<TypedExpr>, ctx: &MonoCtx, acc: &m
             rewrite_typed_expr(factory, ctx, acc);
         }
         // CSP — recursão.
-        TypedExprKind::ChannelSend { channel, value } => {
-            rewrite_typed_expr(channel, ctx, acc);
-            rewrite_typed_expr(value, ctx, acc);
-        }
-        TypedExprKind::ChannelRecv { channel, .. } => {
-            rewrite_typed_expr(channel, ctx, acc);
+        TypedExprKind::ChannelOp { source, dest, .. } => {
+            rewrite_typed_expr(source, ctx, acc);
+            rewrite_typed_expr(dest, ctx, acc);
         }
         TypedExprKind::Select { arms, timeout_ms, timeout_body } => {
             for arm in arms {

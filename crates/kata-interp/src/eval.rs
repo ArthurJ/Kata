@@ -966,24 +966,38 @@ pub fn eval(
         } => Err(InterpError::Runtime(
             "canais cross-process não suportados no interpretador".to_string(),
         )),
-        TypedExprKind::ChannelSend { channel, value } => {
-            let handle = eval(ctx, channel, env)?;
-            let val = eval(ctx, value, env)?;
+        TypedExprKind::ChannelOp {
+            source,
+            dest,
+            elem_ty: _,
+            is_send: true,
+            ..
+        } => {
+            // Send: encontrar qual é o canal (Sender) e qual é o valor.
+            let (channel_expr, value_expr) = if matches!(source.node.ty, Ty::Sender(_)) {
+                (source, dest)
+            } else {
+                (dest, source)
+            };
+            let handle = eval(ctx, channel_expr, env)?;
+            let val = eval(ctx, value_expr, env)?;
             let result = rt::kata_rt_channel_send(handle, val);
             if result < 0 {
-                // WOULD_BLOCK — sem fiber, não pode bloquear.
                 return Err(InterpError::Runtime(
                     "channel_send bloqueado (sem fiber disponível)".to_string(),
                 ));
             }
-            Ok(0) // Unit
+            Ok(0)
         }
-        TypedExprKind::ChannelRecv {
-            channel,
-            recv_ty: _,
+        TypedExprKind::ChannelOp {
+            source,
+            dest: _,
+            elem_ty: _,
+            is_send: false,
             bind_name,
+            ..
         } => {
-            let handle = eval(ctx, channel, env)?;
+            let handle = eval(ctx, source, env)?;
             let val = rt::kata_rt_channel_recv(handle);
             if val < 0 && val != 0 {
                 // WOULD_BLOCK ou erro — sem fiber, não pode bloquear.
@@ -994,7 +1008,10 @@ pub fn eval(
                     "channel_recv sem dado disponível (sem fiber)".to_string(),
                 ));
             }
-            env.define(bind_name, val);
+            let name = bind_name
+                .as_ref()
+                .expect("ChannelOp recv deve ter bind_name");
+            env.define(name, val);
             Ok(val)
         }
         TypedExprKind::ReceiverFactoryCall {
