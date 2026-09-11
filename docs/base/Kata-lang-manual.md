@@ -1920,7 +1920,7 @@ pai). O typeck enforced essa topologia com duas restrições em compile-time:
 
 1. **`Sender`, `Receiver` e `ReceiverFactory` não trafegam via `<!`.** O
    typeck rejeita esses tipos como payload de envio (`MiddleError::TypeMismatch`
-   em `infer_channel_send`). Canais são operadores de comunicação, não valores
+   em `infer_channel_op`). Canais são operadores de comunicação, não valores
    de dados — não podem viajar por outros canais (endpoint mobility).
 
 2. **Canais não são retornados de Actions.** O typeck rejeita `Sender`/
@@ -2186,7 +2186,7 @@ Canais operam dentro da árvore de fibers de `fork!` — conectam apenas
 `Sender`, `Receiver` e `ReceiverFactory` são handles de operadores, não
 valores de dados. O typeck enforced duas restrições em compile-time:
 
-- **`<!` rejeita canais como payload** (`infer_channel_send`): enviar um
+- **`<!` rejeita canais como payload** (`infer_channel_op`): enviar um
   `Sender` ou `Receiver` por outro canal criaria conexões fora da árvore
   (tio-sobrinho, primos), quebrando a garantia de que o LCA de sender e
   receiver é o pai direto do sender.

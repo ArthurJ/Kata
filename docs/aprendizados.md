@@ -579,10 +579,17 @@ recursiva em `type_table.rs` garante que o codegen encontre o `type_id`
 correto para serialização. Resultado: Int, tupla, struct e lista funcionam
 com IPC.
 
+A unificação de `T0` também ocorre dentro de `infer_channel_op`:
+`unify_channel_elem` chama `env.apply_substitutions()` para propagar
+`T0 := concreto` a todos os bindings no env (incluindo o receiver do mesmo
+canal). Isso resolve o caso onde `rx !> a` deixava `a` com tipo `Var("T0")`
+em vez do tipo concreto do elemento do canal.
+
 A lição permanece válida: `type_compatible` com `Var` como coringa é um
 atalho que funciona para dispatch mas não para codegen que precisa do
-tipo concreto. A solução não é mudar `type_compatible`, mas adicionar um
-pass separado que resolve `Var` para tipo concreto na TAST antes do codegen.
+tipo concreto. A solução não é mudar `type_compatible`, mas resolver `Var`
+para tipo concreto — seja num pass pós-inferência (`cross_process.rs`)
+seja na unificação dentro da inferência (`unify_channel_elem`).
 
 ### L7. `kata-inference` faz três jobs numa só camada — separar na próxima iteração
 
