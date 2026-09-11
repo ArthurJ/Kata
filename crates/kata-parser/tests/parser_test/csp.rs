@@ -2,7 +2,7 @@
 //! select with timeout, fork! as ActionCall.
 
 use super::helpers::{first_item, parse_src};
-use kata_ast::{ChannelDir, Expr, Item, SelectArm};
+use kata_ast::{TransmissionDir, Expr, Item, SelectArm};
 
 // ── Token lexing: <! and !> ────────────────────────────────────────
 
@@ -13,12 +13,12 @@ fn lex_send_arrow() {
     let item = first_item(&m);
     match item {
         Item::EntryExpr(e) => match &e.node {
-            Expr::ChannelOp { source, direction, dest } => {
-                assert_eq!(direction, &ChannelDir::Left);
+            Expr::TransmissionOp { source, direction, dest } => {
+                assert_eq!(direction, &TransmissionDir::Left);
                 assert_eq!(dest.node, Expr::Ident { name: "tx".into() });
                 assert_eq!(source.node, Expr::IntLit { text: "42".into() });
             }
-            other => panic!("expected ChannelOp (Left), got {other:?}"),
+            other => panic!("expected TransmissionOp (Left), got {other:?}"),
         },
         other => panic!("expected EntryExpr, got {other:?}"),
     }
@@ -31,12 +31,12 @@ fn lex_recv_arrow() {
     let item = first_item(&m);
     match item {
         Item::EntryExpr(e) => match &e.node {
-            Expr::ChannelOp { source, direction, dest } => {
-                assert_eq!(direction, &ChannelDir::Right);
+            Expr::TransmissionOp { source, direction, dest } => {
+                assert_eq!(direction, &TransmissionDir::Right);
                 assert_eq!(source.node, Expr::Ident { name: "rx".into() });
                 assert_eq!(dest.node, Expr::Ident { name: "msg".into() });
             }
-            other => panic!("expected ChannelOp (Right), got {other:?}"),
+            other => panic!("expected TransmissionOp (Right), got {other:?}"),
         },
         other => panic!("expected EntryExpr, got {other:?}"),
     }
@@ -88,8 +88,8 @@ fn channel_send_complex_value() {
     let item = first_item(&m);
     match item {
         Item::EntryExpr(e) => match &e.node {
-            Expr::ChannelOp { source, direction, dest } => {
-                assert_eq!(direction, &ChannelDir::Left);
+            Expr::TransmissionOp { source, direction, dest } => {
+                assert_eq!(direction, &TransmissionDir::Left);
                 assert_eq!(dest.node, Expr::Ident { name: "tx".into() });
                 match &source.node {
                     Expr::Apply { callee, args } => {
@@ -99,7 +99,7 @@ fn channel_send_complex_value() {
                     other => panic!("expected Apply source, got {other:?}"),
                 }
             }
-            other => panic!("expected ChannelOp (Left), got {other:?}"),
+            other => panic!("expected TransmissionOp (Left), got {other:?}"),
         },
         other => panic!("expected EntryExpr, got {other:?}"),
     }
@@ -254,13 +254,13 @@ fn select_outside_action_is_error() {
 
 #[test]
 fn channel_send_in_let() {
-    // `constant x := tx <! 42` — constant value é ChannelOp (Left)
+    // `constant x := tx <! 42` — constant value é TransmissionOp (Left)
     let m = parse_src("constant x := tx <! 42");
     let item = first_item(&m);
     match item {
         Item::ConstantDecl { name, value } => {
             assert_eq!(name, "x");
-            assert!(matches!(value.node, Expr::ChannelOp { direction: ChannelDir::Left, .. }));
+            assert!(matches!(value.node, Expr::TransmissionOp { direction: TransmissionDir::Left, .. }));
         }
         other => panic!("expected ConstantDecl, got {other:?}"),
     }
@@ -277,25 +277,25 @@ fn send_arrow_left_assoc() {
     let item = first_item(&m);
     match item {
         Item::EntryExpr(e) => match &e.node {
-            Expr::ChannelOp { source, direction, dest } => {
-                assert_eq!(direction, &ChannelDir::Left);
-                // dest = (a <! b) → inner ChannelOp
+            Expr::TransmissionOp { source, direction, dest } => {
+                assert_eq!(direction, &TransmissionDir::Left);
+                // dest = (a <! b) → inner TransmissionOp
                 match &dest.node {
-                    Expr::ChannelOp {
+                    Expr::TransmissionOp {
                         source: inner_source,
                         direction: inner_dir,
                         dest: inner_dest,
                     } => {
-                        assert_eq!(inner_dir, &ChannelDir::Left);
+                        assert_eq!(inner_dir, &TransmissionDir::Left);
                         assert_eq!(inner_dest.node, Expr::Ident { name: "a".into() });
                         assert_eq!(inner_source.node, Expr::Ident { name: "b".into() });
                     }
-                    other => panic!("expected nested ChannelOp, got {other:?}"),
+                    other => panic!("expected nested TransmissionOp, got {other:?}"),
                 }
                 // source = c
                 assert_eq!(source.node, Expr::Ident { name: "c".into() });
             }
-            other => panic!("expected ChannelOp (Left), got {other:?}"),
+            other => panic!("expected TransmissionOp (Left), got {other:?}"),
         },
         other => panic!("expected EntryExpr, got {other:?}"),
     }

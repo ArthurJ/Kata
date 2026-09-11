@@ -1,10 +1,10 @@
 //! Typeck de expressões CSP.
 //!
-//! `ChannelOp` (`<!` / `!>`), e `Select` são inferidos aqui.
+//! `TransmissionOp` (`<!` / `!>`), e `Select` são inferidos aqui.
 //! `channel!()`, `queue!()`, `broadcast!()`, `rxf!()`, `fork!()` são
 //! interceptados em `infer_apply` (não despacham para DispatchTable).
 
-use kata_ast::{ChannelDir, Expr, ReadMode, SelectArm, Span, Spanned};
+use kata_ast::{TransmissionDir, Expr, ReadMode, SelectArm, Span, Spanned};
 use kata_core::escape::EscapeTarget;
 use kata_core::ty::{Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
@@ -26,9 +26,9 @@ use super::helpers::InferResult;
 /// tipo do canal é `Var(T0)`, `T0` é resolvido para o tipo concreto no
 /// `TypeEnv`. Isso resolve o bug onde variáveis recebidas via canal ficavam
 /// com tipo `Var` não-resolvido.
-pub(crate) fn infer_channel_op(
+pub(crate) fn infer_transmission_op(
     source: &Spanned<Expr>,
-    direction: ChannelDir,
+    direction: TransmissionDir,
     dest: &Spanned<Expr>,
     span: &Span,
     env: &mut TypeEnv,
@@ -65,7 +65,7 @@ pub(crate) fn infer_channel_op(
             if matches!(other, Ty::Var(_)) {
                 // Fallback conservador para type params não-resolvidos.
                 match direction {
-                    ChannelDir::Left => infer_send(
+                    TransmissionDir::Left => infer_send(
                         typed_source,
                         Box::new(Ty::Var("__chan_elem__".into())),
                         dest,
@@ -75,7 +75,7 @@ pub(crate) fn infer_channel_op(
                         ctx,
                         tail_pos,
                     ),
-                    ChannelDir::Right => infer_recv(
+                    TransmissionDir::Right => infer_recv(
                         typed_source,
                         Box::new(Ty::Var("__chan_elem__".into())),
                         dest,
@@ -144,7 +144,7 @@ fn infer_send_flipped(
     typed_channel: TypedExpr,
     elem_ty: Box<Ty>,
     typed_value: TypedExpr,
-    direction: ChannelDir,
+    direction: TransmissionDir,
     span: &Span,
     env: &mut TypeEnv,
     ctx: &InferCtx,
@@ -197,7 +197,7 @@ fn infer_send_flipped(
         ty: Ty::Unit,
         tail_pos,
         escape,
-        kind: TypedExprKind::ChannelOp {
+        kind: TypedExprKind::TransmissionOp {
             source: Box::new(Spanned::new(typed_value, value_span)),
             direction,
             dest: Box::new(Spanned::new(typed_channel, channel_span)),
@@ -215,7 +215,7 @@ fn infer_recv_flipped(
     typed_channel: TypedExpr,
     inner: Box<Ty>,
     typed_binding: TypedExpr,
-    direction: ChannelDir,
+    direction: TransmissionDir,
     span: &Span,
     env: &mut TypeEnv,
     ctx: &InferCtx,
@@ -258,7 +258,7 @@ fn infer_recv_flipped(
         ty: recv_ty.clone(),
         tail_pos,
         escape,
-        kind: TypedExprKind::ChannelOp {
+        kind: TypedExprKind::TransmissionOp {
             source: Box::new(Spanned::new(typed_channel, channel_span)),
             direction,
             dest: Box::new(Spanned::new(typed_binding, binding_span)),
@@ -275,7 +275,7 @@ fn infer_send(
     typed_channel: TypedExpr,
     elem_ty: Box<Ty>,
     value_expr: &Spanned<Expr>,
-    direction: ChannelDir,
+    direction: TransmissionDir,
     span: &Span,
     env: &mut TypeEnv,
     ctx: &InferCtx,
@@ -342,14 +342,14 @@ fn infer_send(
 
     // Construir source e dest conforme a direção.
     let (source_typed, dest_typed) = match direction {
-        ChannelDir::Left => {
+        TransmissionDir::Left => {
             // dest <! source → channel é dest, value é source
             (
                 Spanned::new(typed_value, value_expr.span),
                 Spanned::new(typed_channel, channel_span),
             )
         }
-        ChannelDir::Right => {
+        TransmissionDir::Right => {
             // source !> dest → channel é source, value é dest
             (
                 Spanned::new(typed_channel, channel_span),
@@ -363,7 +363,7 @@ fn infer_send(
         ty: Ty::Unit,
         tail_pos,
         escape,
-        kind: TypedExprKind::ChannelOp {
+        kind: TypedExprKind::TransmissionOp {
             source: Box::new(source_typed),
             direction,
             dest: Box::new(dest_typed),
@@ -382,7 +382,7 @@ fn infer_recv(
     typed_channel: TypedExpr,
     inner: Box<Ty>,
     dest_expr: &Spanned<Expr>,
-    direction: ChannelDir,
+    direction: TransmissionDir,
     span: &Span,
     env: &mut TypeEnv,
     ctx: &InferCtx,
@@ -436,14 +436,14 @@ fn infer_recv(
 
     // Construir source e dest conforme a direção.
     let (source_typed, dest_typed) = match direction {
-        ChannelDir::Left => {
+        TransmissionDir::Left => {
             // binding <! canal → canal é source (RHS), binding é dest (LHS)
             (
                 Spanned::new(typed_channel, channel_span),
                 Spanned::new(dest_typed, dest_expr.span),
             )
         }
-        ChannelDir::Right => {
+        TransmissionDir::Right => {
             // canal !> binding → canal é source (LHS), binding é dest (RHS)
             (
                 Spanned::new(typed_channel, channel_span),
@@ -457,7 +457,7 @@ fn infer_recv(
         ty: recv_ty.clone(),
         tail_pos,
         escape,
-        kind: TypedExprKind::ChannelOp {
+        kind: TypedExprKind::TransmissionOp {
             source: Box::new(source_typed),
             direction,
             dest: Box::new(dest_typed),
@@ -476,7 +476,7 @@ fn infer_recv(
 ///
 /// Esta é a correção do bug de unificação de T0: antes, `type_compatible` apenas
 /// checava compatibilidade sem substituir a Var, deixando `T0` não-resolvido.
-/// O tipo resoluido é propagado no TAST (`elem_ty` no `ChannelOp`), e o
+/// O tipo resoluido é propagado no TAST (`elem_ty` no `TransmissionOp`), e o
 /// `infer_recv` extrai o tipo do `Receiver` já resolvido.
 fn unify_channel_elem(elem_ty: &Ty, value_ty: &Ty, env: &mut TypeEnv) -> Ty {
     match (elem_ty, value_ty) {

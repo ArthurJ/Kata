@@ -4,7 +4,7 @@
 //! Extraído de `expressions.rs` para separar a mecânica de precedência de
 //! operadores (`|>`, `|`, `?`, aplicação greedy) do parsing de átomos.
 
-use kata_ast::{ChannelDir, Expr, Spanned, Token};
+use kata_ast::{TransmissionDir, Expr, Spanned, Token};
 use kata_diagnostics::FrontendError;
 
 use crate::MAX_EXPR_DEPTH;
@@ -127,9 +127,9 @@ fn parse_expr_impl(parser: &mut Parser) -> Result<Spanned<Expr>, FrontendError> 
                 let rhs = parse_apply(parser)?;
                 let span = lhs.span.cover(rhs.span);
                 lhs = Spanned::new(
-                    Expr::ChannelOp {
+                    Expr::TransmissionOp {
                         source: Box::new(rhs),
-                        direction: ChannelDir::Left,
+                        direction: TransmissionDir::Left,
                         dest: Box::new(lhs),
                     },
                     span,
@@ -144,9 +144,9 @@ fn parse_expr_impl(parser: &mut Parser) -> Result<Spanned<Expr>, FrontendError> 
                 let rhs = parse_apply(parser)?;
                 let span = lhs.span.cover(rhs.span);
                 lhs = Spanned::new(
-                    Expr::ChannelOp {
+                    Expr::TransmissionOp {
                         source: Box::new(lhs),
-                        direction: ChannelDir::Right,
+                        direction: TransmissionDir::Right,
                         dest: Box::new(rhs),
                     },
                     span,

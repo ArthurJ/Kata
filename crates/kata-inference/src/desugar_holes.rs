@@ -305,8 +305,8 @@ pub(crate) fn desugar_holes(expr: &Spanned<Expr>) -> Spanned<Expr> {
         ),
 
         // ── Nós CSP não contêm holes, preservam estrutura ──
-        Expr::ChannelOp { source, direction, dest } => Spanned::new(
-            Expr::ChannelOp {
+        Expr::TransmissionOp { source, direction, dest } => Spanned::new(
+            Expr::TransmissionOp {
                 source: Box::new(desugar_holes(source)),
                 direction: *direction,
                 dest: Box::new(desugar_holes(dest)),

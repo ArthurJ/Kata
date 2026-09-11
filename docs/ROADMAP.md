@@ -633,7 +633,7 @@ blocking no FD quando todos fibers estão blocked em IPC. 5 testes E2E em
 
 **Maquinaria de tipos construída:**
 - `Ty::Sender(Box<Ty>)`, `Ty::Receiver(Box<Ty>)`, `Ty::ReceiverFactory(Box<Ty>)`
-- `TypedExprKind::ChannelOp`, `Fork`, `ChannelCreate`
+- `TypedExprKind::TransmissionOp`, `Fork`, `ChannelCreate`
 - `ChannelKind`: Rendezvous, Buffered(N), Broadcast
 - Escape analysis para LCA entre fibers que compartilham canais
 - `EscapeTarget::Heap` para valores enviados via canal (root_arena)

@@ -1,6 +1,6 @@
 //! Lowering de operações CSP — canais, fork, select.
 //!
-//! Lowera `ChannelCreate`, `ChannelOp`, `Fork`, e `Select`
+//! Lowera `ChannelCreate`, `TransmissionOp`, `Fork`, e `Select`
 //! da TAST para chamadas FFI do runtime.
 //!
 //! - `channel!()` / `queue!(N)` / `broadcast!()` → FFI de criação + tupla (tx, rx)
@@ -15,7 +15,7 @@ mod fork_spawn;
 mod select;
 
 pub(crate) use channel::{
-    lower_channel_create, lower_channel_op, lower_receiver_factory_call,
+    lower_channel_create, lower_transmission_op, lower_receiver_factory_call,
 };
 pub(crate) use fork_spawn::{lower_fork, lower_spawn};
 pub(crate) use select::lower_select;

@@ -6,7 +6,7 @@
 //! `TypedExprKind` espelha `Expr` mas com `Spanned<TypedExpr>` em vez de
 //! `Spanned<Expr>` — a recursão é sobre a TAST, não sobre a AST.
 
-use kata_ast::{ChannelDir, Span, Spanned};
+use kata_ast::{TransmissionDir, Span, Spanned};
 use kata_core::escape::EscapeTarget;
 use kata_core::ty::Ty;
 
@@ -347,9 +347,9 @@ pub enum TypedExprKind {
     /// `elem_ty` é o tipo do valor transportado (`T` em `Sender::T`).
     /// `is_send` é true se o source é Sender (operação de envio).
     /// `bind_name` é o nome do binding quando é recv (None para send).
-    ChannelOp {
+    TransmissionOp {
         source: Box<Spanned<TypedExpr>>,
-        direction: ChannelDir,
+        direction: TransmissionDir,
         dest: Box<Spanned<TypedExpr>>,
         /// Tipo do valor transportado pelo canal.
         elem_ty: Ty,

@@ -129,7 +129,7 @@ fn collect_idents(expr: &Spanned<Expr>, out: &mut HashSet<String>) {
             collect_idents(item, out);
             collect_idents(collection, out);
         }
-        Expr::ChannelOp { source, dest, .. } => {
+        Expr::TransmissionOp { source, dest, .. } => {
             collect_idents(source, out);
             collect_idents(dest, out);
         }

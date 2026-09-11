@@ -270,8 +270,8 @@ fn desugar_pipes(expr: &Spanned<Expr>) -> Spanned<Expr> {
         ),
 
         // ── Nós CSP preservam estrutura, recursam nos filhos ──
-        Expr::ChannelOp { source, direction, dest } => Spanned::new(
-            Expr::ChannelOp {
+        Expr::TransmissionOp { source, direction, dest } => Spanned::new(
+            Expr::TransmissionOp {
                 source: Box::new(desugar_pipes(source)),
                 direction: *direction,
                 dest: Box::new(desugar_pipes(dest)),

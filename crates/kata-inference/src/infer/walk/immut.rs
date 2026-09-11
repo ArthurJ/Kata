@@ -149,7 +149,7 @@ where
                 for_each_subexpr(&cb.node, f);
             }
         }
-        TypedExprKind::ChannelOp { source, dest, .. } => {
+        TypedExprKind::TransmissionOp { source, dest, .. } => {
             for_each_subexpr(&source.node, f);
             for_each_subexpr(&dest.node, f);
         }

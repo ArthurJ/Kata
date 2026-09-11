@@ -966,7 +966,7 @@ pub fn eval(
         } => Err(InterpError::Runtime(
             "canais cross-process não suportados no interpretador".to_string(),
         )),
-        TypedExprKind::ChannelOp {
+        TypedExprKind::TransmissionOp {
             source,
             dest,
             elem_ty: _,
@@ -989,7 +989,7 @@ pub fn eval(
             }
             Ok(0)
         }
-        TypedExprKind::ChannelOp {
+        TypedExprKind::TransmissionOp {
             source,
             dest: _,
             elem_ty: _,
@@ -1010,7 +1010,7 @@ pub fn eval(
             }
             let name = bind_name
                 .as_ref()
-                .expect("ChannelOp recv deve ter bind_name");
+                .expect("TransmissionOp recv deve ter bind_name");
             env.define(name, val);
             Ok(val)
         }

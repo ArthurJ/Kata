@@ -96,7 +96,7 @@ pub fn assert_no_holes(expr: &Spanned<Expr>) {
             assert_no_holes(collection);
         }
         // Nós CSP não contêm holes, recursam nos filhos
-        Expr::ChannelOp { source, dest, .. } => {
+        Expr::TransmissionOp { source, dest, .. } => {
             assert_no_holes(source);
             assert_no_holes(dest);
         }
@@ -234,7 +234,7 @@ pub fn assert_no_pipes(expr: &Spanned<Expr>) {
             assert_no_pipes(collection);
         }
         // Nós CSP não contêm pipes, recursam nos filhos
-        Expr::ChannelOp { source, dest, .. } => {
+        Expr::TransmissionOp { source, dest, .. } => {
             assert_no_pipes(source);
             assert_no_pipes(dest);
         }

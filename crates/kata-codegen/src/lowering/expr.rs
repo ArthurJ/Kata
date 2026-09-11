@@ -713,14 +713,14 @@ pub(crate) fn lower_expr(
         ),
 
         // ── CSP — lowering ──
-        TypedExprKind::ChannelOp {
+        TypedExprKind::TransmissionOp {
             source,
             dest,
             elem_ty,
             is_send,
             bind_name,
             ..
-        } => super::csp::lower_channel_op(source, dest, elem_ty, *is_send, bind_name, ctx),
+        } => super::csp::lower_transmission_op(source, dest, elem_ty, *is_send, bind_name, ctx),
         TypedExprKind::ChannelCreate {
             kind,
             elem_ty,

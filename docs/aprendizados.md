@@ -527,7 +527,7 @@ controle que descende.
 
 ### L2. Enum `Effect` — não confluenciar conceitos ortogonais
 
-O enum `Effect` com 4 variants (`Puro`, `IO`, `Spawn`, `ChannelOp`) e o
+O enum `Effect` com 4 variants (`Puro`, `IO`, `Spawn`, `TransmissionOp`) e o
 campo `effect` de `TypedExpr` foram completamente removidos. Nenhum
 variant era consumido — zero `==`, `!=`, ou `matches!` sobre o campo em
 qualquer crate. Cerca de 80 referências em ~30 arquivos removidas. A

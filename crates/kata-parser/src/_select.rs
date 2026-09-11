@@ -13,14 +13,14 @@
 //! O braço `timeout N: body` é opcional e sempre o último.
 //!
 //! Como `!>` é um operador infixo em `parse_expr`, o parser de select
-//! chama `parse_expr` que produz `Expr::ChannelOp { source, direction, dest }`
+//! chama `parse_expr` que produz `Expr::TransmissionOp { source, direction, dest }`
 //! para cada braço. O `: body` é então parseado separadamente.
 //!
 //! Para distinguir braços de canal de braços de I/O, o parser inspeciona
-//! o `source` dentro do `ChannelOp`: se for `ActionCall { callee: "read", ... }`,
+//! o `source` dentro do `TransmissionOp`: se for `ActionCall { callee: "read", ... }`,
 //! é um braço `IoRead`; caso contrário, é um braço `Channel`.
 
-use kata_ast::{ChannelDir, Expr, ReadMode, SelectArm, Spanned, Token};
+use kata_ast::{TransmissionDir, Expr, ReadMode, SelectArm, Spanned, Token};
 use kata_diagnostics::FrontendError;
 
 use crate::Parser;
@@ -61,15 +61,15 @@ impl Parser {
                 timeout_body = Some(Box::new(body));
             } else {
                 // `receiver !> nome: body` ou `read!(handle, n) !> nome: body`
-                // parse_expr consome `expr !> nome` como Expr::ChannelOp.
+                // parse_expr consome `expr !> nome` como Expr::TransmissionOp.
                 let recv_expr = parse_expr(self)?;
 
-                // Extrai source (canal) e dest (bind_name) do ChannelOp.
+                // Extrai source (canal) e dest (bind_name) do TransmissionOp.
                 // Para select, o braço deve ser `source !> dest` (Right).
                 let (channel, bind_name) = match recv_expr.node {
-                    Expr::ChannelOp {
+                    Expr::TransmissionOp {
                         source,
-                        direction: ChannelDir::Right,
+                        direction: TransmissionDir::Right,
                         dest,
                     } => {
                         // dest deve ser um Ident (binding name)

@@ -1190,8 +1190,8 @@ pub(crate) fn infer_expr_hinted(
         }
 
         // ── CSP — typeck em csp.rs ──
-        Expr::ChannelOp { source, direction, dest } => {
-            return super::csp::infer_channel_op(
+        Expr::TransmissionOp { source, direction, dest } => {
+            return super::csp::infer_transmission_op(
                 source, *direction, dest, span, env, ctx, tail_pos, hint,
             );
         }

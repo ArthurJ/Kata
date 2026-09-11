@@ -227,7 +227,7 @@ pub(crate) fn lower_receiver_factory_call(
     Ok(rx_handle)
 }
 
-/// Lowera `TypedExprKind::ChannelOp` (`tx <! valor` ou `rx !> nome`).
+/// Lowera `TypedExprKind::TransmissionOp` (`tx <! valor` ou `rx !> nome`).
 ///
 /// Despacha por `is_send`:
 /// - **Send** (`is_send = true`): `source` é o canal (Sender), `dest` é o valor.
@@ -235,7 +235,7 @@ pub(crate) fn lower_receiver_factory_call(
 /// - **Recv** (`is_send = false`): `source` é o canal (Receiver), `dest` é o binding.
 ///   Chama `kata_rt_channel_recv(handle)`, cria binding `bind_name` no
 ///   `var_map`, e retorna o valor recebido.
-pub(crate) fn lower_channel_op(
+pub(crate) fn lower_transmission_op(
     source: &kata_ast::Spanned<TypedExpr>,
     dest: &kata_ast::Spanned<TypedExpr>,
     elem_ty: &Ty,
@@ -268,7 +268,7 @@ pub(crate) fn lower_channel_op(
 
         let name = bind_name
             .as_ref()
-            .expect("ChannelOp recv deve ter bind_name");
+            .expect("TransmissionOp recv deve ter bind_name");
         let clif_ty = super::super::resolve_clif_ty(elem_ty, ctx.struct_registry);
         let var = ctx.new_var(name, clif_ty);
         ctx.builder.def_var(var, val);

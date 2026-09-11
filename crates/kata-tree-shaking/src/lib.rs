@@ -465,7 +465,7 @@ fn collect_refs(
             }
         }
 
-        TypedExprKind::ChannelOp { source, dest, .. } => {
+        TypedExprKind::TransmissionOp { source, dest, .. } => {
             collect_refs(&source.node, reached_fns, reached_actions, fn_names);
             collect_refs(&dest.node, reached_fns, reached_actions, fn_names);
         }

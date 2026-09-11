@@ -249,9 +249,9 @@ pub enum Expr {
     /// (dado vai para a esquerda). Em `rx !> a`, source=rx, dest=a
     /// (dado vai para a direita). A inference decide se é send ou recv
     /// pelo tipo do source: Sender → send, Receiver → recv.
-    ChannelOp {
+    TransmissionOp {
         source: Box<Spanned<Expr>>,
-        direction: ChannelDir,
+        direction: TransmissionDir,
         dest: Box<Spanned<Expr>>,
     },
 
@@ -377,7 +377,7 @@ pub struct MatchArm {
 /// `Left` corresponde a `<!` (dado flui para a esquerda).
 /// `Right` corresponde a `!>` (dado flui para a direita).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ChannelDir {
+pub enum TransmissionDir {
     Left,
     Right,
 }

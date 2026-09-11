@@ -368,7 +368,7 @@ fn expr_uses_name(expr: &Spanned<Expr>, name: &str) -> bool {
         Expr::In { item, collection } => {
             expr_uses_name(item, name) || expr_uses_name(collection, name)
         }
-        Expr::ChannelOp { source, dest, .. } => {
+        Expr::TransmissionOp { source, dest, .. } => {
             expr_uses_name(source, name) || expr_uses_name(dest, name)
         }
         Expr::Select {

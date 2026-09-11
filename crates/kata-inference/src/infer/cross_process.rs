@@ -282,7 +282,7 @@ fn mark_channel_create_by_span(expr: &mut TypedExpr, target_span: kata_ast::Span
 /// o tipo do elemento do `Sender(inner)` e mapeia `span_do_ChannelCreate
 /// → inner`.
 ///
-/// Também coleta de `ChannelOp` (recv) onde o `source` é `Ident` em
+/// Também coleta de `TransmissionOp` (recv) onde o `source` é `Ident` em
 /// `channel_bindings` e o `elem_ty` é concreto.
 fn collect_concrete_channel_types(
     expr: &TypedExpr,
@@ -291,7 +291,7 @@ fn collect_concrete_channel_types(
 ) {
     walk::for_each_subexpr(expr, &mut |e| {
         match &e.kind {
-            TypedExprKind::ChannelOp { source, is_send, elem_ty, .. } => {
+            TypedExprKind::TransmissionOp { source, is_send, elem_ty, .. } => {
                 if let TypedExprKind::Ident { name } = &source.node.kind
                     && let Some(span) = channel_bindings.get(name)
                 {

@@ -149,7 +149,7 @@ where
                 for_each_subexpr_mut(&mut cb.node, f);
             }
         }
-        TypedExprKind::ChannelOp { source, dest, .. } => {
+        TypedExprKind::TransmissionOp { source, dest, .. } => {
             for_each_subexpr_mut(&mut source.node, f);
             for_each_subexpr_mut(&mut dest.node, f);
         }
