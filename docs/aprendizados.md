@@ -394,7 +394,7 @@ typeck. Não despacham, não têm overloads, não são redefiníveis:
 
 - `::` — ascription/qualificação (cinco contextos, mesmo token)
 - `!` — sufixo de chamada de Action
-- `<!`, `!>` — send/receive de canal
+- `<!`, `!>` — operadores de transmissão
 - `|` — fallback/coalescência
 - `?` — fail-fast (desugar para `return Err(e)`)
 - `|>` — pipeline (desugar no typeck)

@@ -382,13 +382,13 @@ assert!(cond, "msg custom")     # 2 args: panic!(msg) se False
   abort (`panic!`, `assert!(False)`) não podem usar `eval_src` — `exit(1)` mata
   o runner. Usar `#[ignore]` e validar via `cargo run --bin kata -- run`.
 
-### Canais CSP
+### Operadores de transmissão (`<!` e `!>`)
 | Operador | Direção | Exemplo |
 |---|---|---|
 | `<!` | Envio — "valor entra no canal" | `canal <! valor` |
 | `!>` | Recebimento — "valor sai do canal" | `canal !> variavel` |
 
-- `channel!`, `queue!(N)`, `broadcast!` são actions que criam canais.
+- `channel!`, `queue!(N)`, `broadcast!` são actions que criam canais — o meio de transmissão.
 - **Relações**: `fork!` submete Action a corrotina no scheduler cooperativo single-threaded. `select` multiplexa canais. Escape Analysis rastreia dados enviados por `<!` para alocação heap/`Arc<T>`.
 
 ### `select` combinado (Channels + Files + Sockets)

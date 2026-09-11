@@ -643,7 +643,7 @@ blocking no FD quando todos fibers estão blocked em IPC. 5 testes E2E em
 - Criação retorna tupla `(Sender::T, Receiver::T)` ou `(Sender::T, ReceiverFactory::T)`
 - `fork!()` (submete Action ao scheduler com args)
 - `select` com `timeout` (multiplexação de canais)
-- `<!` (envio), `!>` (recebimento) — operadores infixos
+- `<!` (envio), `!>` (recebimento) — operadores de transmissão
 - Yield cooperativo via `wasmtime-fiber::Suspend` com `YieldReason`
 - Yield points no codegen (back-edge checks em `Loop` e `ForIn`)
 - Structured concurrency (Action espera forks completarem)

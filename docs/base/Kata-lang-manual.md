@@ -2165,8 +2165,8 @@ original é acordada.
 ### 6.3. Topologias de Canais
 
 O *fork!* submete processos sequenciais isolados que comunicam por três vias:
-1.  `channel!`: Síncrono (Rendezvous). O envio `<!` bloqueia até o recetor `!>`
-    sincronizar.
+1.  `channel!`: Síncrono (Rendezvous). O operador de transmissão `<!` bloqueia
+    até o `!>` sincronizar.
 2.  `queue!(N)`: Fila com buffer de `N` espaços (Backpressure).
 3.  `broadcast!`: Difusão 1-para-N (Publish-Subscribe).
 

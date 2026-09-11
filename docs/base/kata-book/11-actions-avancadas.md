@@ -24,7 +24,7 @@ O `fork!` recebe a action e uma tupla com os argumentos. O fiber roda concorrent
 
 ## Canais — `channel!`
 
-`channel!` cria um canal síncrono (rendezvous). O envio `<!` bloqueia até o receptor `!>` sincronizar. Retorna um par `(Sender, Receiver)`:
+`channel!` cria um canal síncrono (rendezvous). O operador de transmissão `<!` bloqueia até o `!>` sincronizar. Retorna um par `(Sender, Receiver)`:
 
 ```kata
 action produtor (tx::Sender::Unit) => Unit
@@ -99,7 +99,7 @@ O produtor envia após 50ms — o `select` recebe antes do timeout de 100ms.
 
 ## `queue!` — canal bufferizado
 
-`channel!` é síncrono (rendezvous): o envio bloqueia até o receptor aparecer. `queue!(N)` cria um canal com buffer de capacidade N — o envio não bloqueia enquanto houver espaço no buffer:
+`channel!` é síncrono (rendezvous): o operador de transmissão `<!` bloqueia até o `!>` sincronizar. `queue!(N)` cria um canal com buffer de capacidade N — o `<!` não bloqueia enquanto houver espaço no buffer:
 
 ```kata
 action produtor (tx::Sender::Int) => Unit
