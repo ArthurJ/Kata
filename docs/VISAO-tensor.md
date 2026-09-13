@@ -1,6 +1,7 @@
-# Visão — Tensor no Kata5
+# Visão — Tensor no Kata
 
 **Data:** 2026-08-17 (unificado de TENSOR-VISAO.md e VISAO-tensor.md)
+**Revisão:** 2026-09-12 (sintaxe de literais e indexação refinadas)
 **Status:** Design (não implementado)
 **Motivação:** Kata foi concebida para computação numérica. Operações
 matriciais são a razão de existir da linguagem — não um recurso opcional.
@@ -29,13 +30,15 @@ Cada operação tem semântica matemática precisa, não convenção de bibliote
 
 ---
 
-## 2. Sintaxe
+## 2. Sintaxe de Literais
+
+### 2.1. Desambiguação List vs Tensor
 
 ```
 [1 2 3]          # List (Cons, persistente) — sem ;
-[1 2 3; 4 5 6]    # Tensor 2×3 — com ; separando dimensões
-[1 2 3;]          # Tensor 1×3 — ; terminal opcional
-[1; 2; 3]         # Tensor 3×1 — vetor coluna
+[1 2 3; 4 5 6]   # Tensor 2×3 — com ; separando linhas
+[1 2 3;]         # Tensor 1×3 — ; terminal opcional (vetor linha)
+[1; 2; 3]        # Tensor 3×1 — vetor coluna
 ```
 
 `;` dentro de `[]` é o discriminador: se há `;` em qualquer posição, é
@@ -44,30 +47,37 @@ Tensor. Sem `;`, é List.
 `{1 2 3}` continua sendo Array (contíguo, imutável, tamanho dinâmico).
 `{"k": v}` continua sendo Dict. `{|1 2 3|}` continua sendo Set.
 
-### Desambiguação List vs Tensor
+### 2.2. Vírgula como separador opcional
 
-`[1 2 3]` sem `;` é List (Cons, persistente). `[1 2 3; 4 5 6]` com `;` é
-Tensor. O `;` é o discriminador dentro de `[]`.
+Dentro de `[]`, a vírgula é um separador opcional — equivalente ao espaço.
+A semântica da vírgula é determinada pelo delimitador que a envolve, não
+globalmente: `(1, 2, 3)` é tupla dentro de `()`; `[1, 2, 3]` é tensor/lista
+dentro de `[]`. Não há ambiguidade — o parser de `[]` consome vírgulas como
+separador sintático entre elementos.
 
-| Propriedade | List `[1 2 3]` | Tensor `[1 2 3; 4 5 6]` |
-|---|---|---|
-| Sintaxe | `[]` sem `;` | `[]` com `;` |
-| Topologia | Encadeada (Cons, partilha estrutural) | Contíguo (row-major) |
-| Tamanho | Dinâmico (runtime) | Estático (compile-time) |
-| Dimensionalidade | 1-D | N-D |
-| Álgebra linear | ❌ | ✅ (`+`, `*`, `dot`) |
-| SIMD | ❌ | ✅ |
-| Tipo | `List::T` | `Tensor::T::(Int...)` |
+```kata
+[1 2 3; 4 5 6]       # Tensor 2×3 — espaços
+[1, 2, 3; 4, 5, 6]  # Mesmo tensor 2×3 — vírgulas (opcional)
+[1, 2, 3;]          # Tensor 1×3 — vírgula + ; terminal
+```
 
-Array `{1 2 3}` não tem ambiguidade com nenhum dos dois — usa `{}`.
-Lists são para processamento funcional (imutabilidade, partilha).
-Tensores são para cálculo matemático (rígido, acelerado).
+A vírgula é útil para legibilidade com expressões longas:
 
-### Aninhamento N-D
+```kata
+[+ x 1, * y 2; - z 3, / w 4]
+```
+
+### 2.3. `;` terminal
+
+`[1 2 3;]` com `;` terminal é tensor 1×N. Pela regra "se há `;` em qualquer
+posição dentro de `[]`, é tensor", sim. O `;` terminal é legal e opcional:
+`[1 2 3; 4 5 6]` e `[1 2 3; 4 5 6;]` são a mesma matriz 2×3.
+
+### 2.4. N-D via aninhamento
 
 Tensor 3-D exige aninhamento de `[]`:
 
-```
+```kata
 [
     [1 2; 3 4];
     [5 6; 7 8]
@@ -78,20 +88,41 @@ O parser recursivo: cada `[` inicia um novo nível. O `;` no nível externo
 separa fatias (slices) do eixo 0. O `;` no nível interno separa linhas
 dentro de cada fatia.
 
+Aninhamento é preferido a `;;` `;;;` (Julia) por três razões:
+- `;;` `;;;` não têm significado fora de tensores e poluem o lexer com
+  tokens novos para cada nível
+- Aninhamento de `[]` é recursivo — o parser já sabe lidar com `[]`
+- O leitor vê a estrutura visualmente, igual à notação matemática de blocos
+
+### 2.5. Desambiguação List vs Tensor — tabela
+
+| Propriedade | List `[1 2 3]` | Tensor `[1 2 3; 4 5 6]` |
+|---|---|---|
+| Sintaxe | `[]` sem `;` | `[]` com `;` |
+| Vírgula opcional | ✅ (equivalente a espaço) | ✅ (equivalente a espaço) |
+| Topologia | Encadeada (Cons, partilha estrutural) | Contíguo (row-major) |
+| Tamanho | Dinâmico (runtime) | Estático (compile-time, aspiracional) |
+| Dimensionalidade | 1-D | N-D |
+| Álgebra linear | ❌ | ✅ (`+`, `*`, `dot`) |
+| SIMD | ❌ | ✅ |
+| Tipo | `List::T` | `Tensor::T` |
+
+Array `{1 2 3}` não tem ambiguidade com nenhum dos dois — usa `{}`.
+Lists são para processamento funcional (imutabilidade, partilha).
+Tensores são para cálculo matemático (rígido, acelerado).
+
 ---
 
 ## 3. Tipo
 
 ```
-Tensor::T::(Int...)   # ex: Tensor::Int::(2 3) = matriz 2×3 de Int
+Tensor::T   # ex: Tensor::Int = matriz de Int, Tensor::Float = matriz de Float
 ```
 
 - `T` é o tipo do elemento (deve implementar NUM).
-- `(Int...)` é uma tupla de dimensões — cada elemento é o tamanho de uma
-  dimensão. Conhecida em compile-time (Const Generics).
-- Tensor 0-D (`Tensor::T::()`) representa um escalar — mas `()` é `Unit`
-  no Kata5, então a representação de 0-D precisa ser resolvida (ver
-  Questões Abertas).
+- Shape é metadata de inference (`ShapeInfo`), não parte do tipo na primeira
+  versão (ver §6 — Shape Inference).
+- Futuro: const generics para shape no tipo (`Tensor::Int::(2 3)`).
 
 ### Por que `Ty::Tensor` intrínseco, não `data`
 
@@ -111,7 +142,7 @@ Como `Ty::Tensor`, o compilador tem controle sobre sintaxe literal,
 restrição de elemento, dispatch de operadores, ABI de representação, e
 caminho futuro para const generics.
 
-### Const Generics
+### Const Generics (futuro)
 
 `Ty::Generic` existe para enums genéricos, mas Const Generics (inteiros
 como parâmetros de tipo) é uma extensão. Como representar `(Int...)` no
@@ -138,18 +169,89 @@ possam ser adicionados no futuro sem mudar a sintaxe da linguagem.
 
 ---
 
-## 4. Interface TENSOR
+## 4. Indexação
+
+### 4.1. Sintaxe `.(...)`
+
+A indexação N-D usa `.()` com uma tupla de índices. Cada posição na tupla
+corresponde a um eixo do tensor.
+
+```kata
+let m := [1 2 3; 4 5 6]       # Tensor 2×3
+
+m.(0 1)                        # elemento [0, 1] → Result::Int
+m.(0)                         # linha 0 inteira → Tensor 1×3
+m.(1)                         # linha 1 inteira → Tensor 1×3
+```
+
+- **Índice simples** (`m.(0)`): sub-tensor ao longo do eixo 0 (linha inteira).
+  Retorna `Tensor`, não `Result` — sempre válido se o eixo existe.
+- **Índices completos** (`m.(0 1)`): elemento específico. Retorna
+  `Result::T` — bounds check é runtime (shape pode ser desconhecido em
+  compile-time).
+
+### 4.2. Slicing com `..`
+
+Ranges (`..`) já existem na linguagem para List/Range. Dentro de `.()`,
+um range seleciona um sub-intervalo do eixo:
+
+```kata
+m.(0..2)                      # linhas 0 a 1 → Tensor 2×3
+m.(0..2 1..3)                 # sub-matriz: linhas 0-1, cols 1-2 → Tensor 2×2
+m.(0..=1 0..=2)               # inclusivo — mesmo resultado
+```
+
+### 4.3. Wildcard `_` para "todas as posições do eixo"
+
+`_` (hole/wildcard) já é parte da linguagem (pattern matching, currying).
+Dentro de `.()`, `_` significa "todas as posições deste eixo":
+
+```kata
+m.(0 _)                       # linha 0, todas as colunas → Tensor 1×3
+m.(_ 1)                       # todas as linhas, coluna 1 → Tensor 2×1
+m.(_ _)                       # matriz inteira → cópia → Tensor 2×3
+m.(_ 0..2)                    # todas as linhas, colunas 0-1 → Tensor 2×2
+```
+
+### 4.4. Indexação 1-D (flatten)
+
+```kata
+m.at(5)                       # elemento flatten no índice 5 → Result::T
+```
+
+Indexação 1-D via interface INDEXABLE (como Array/List). Útil para
+iteração e interop com coleções.
+
+### 4.5. Regras de tipo de retorno
+
+| Expressão | Eixo 0 | Eixo 1 | Retorno |
+|---|---|---|---|
+| `m.(0 1)` | índice 0 | índice 1 | `Result::T` (elemento) |
+| `m.(0)` | índice 0 | — | `Tensor` (sub-tensor 1×3) |
+| `m.(0..2 1)` | range 0..2 | índice 1 | `Tensor` (sub-tensor 2×1) |
+| `m.(_ 1)` | todas | índice 1 | `Tensor` (sub-tensor 2×1) |
+| `m.(_ _)` | todas | todas | `Tensor` (cópia 2×3) |
+| `m.at(5)` | flatten 5 | — | `Result::T` (elemento) |
+
+**Princípio:** índices completos (todas as posições especificadas como
+inteiros) → `Result::T` (pode estar out-of-bounds). Algum eixo sem índice
+completo (range, `_`, ou omitido) → `Tensor` (sempre produz um sub-tensor
+válido).
+
+---
+
+## 5. Interface TENSOR
 
 ```kata
 interface TENSOR::T
     shape :: Self => Tuple
     rank  :: Self => Int
     at    :: Self Int => Result::T        # indexação 1-D (flatten)
-    +     :: Self Self => Self            # element-wise + broadcast
-    *     :: Self Self => Self            # Hadamard (element-wise)
+    +     :: Self Self => Self             # element-wise + broadcast
+    *     :: Self Self => Self             # Hadamard (element-wise)
     dot   :: Self Self => Self            # contração
-    transpose :: Self => Self             # transposição (2D → swap axes)
-    scalar :: Self => T                   # extrair escalar de 0-D
+    transpose :: Self => Self              # transposição (2D → swap axes)
+    scalar :: Self => T                    # extrair escalar de 0-D
 ```
 
 | Operação | Matemática | Observações |
@@ -166,49 +268,6 @@ interface TENSOR::T
 A interface TENSOR não herda de NUM. `+` e `*` são redefinidos com semântica
 matricial, não escalar. O dispatch resolve pelo tipo: `+ Int Int` despacha
 para NUM, `+ Tensor Int` despacha para TENSOR (broadcast).
-
----
-
-## 5. Operações
-
-### Aritmética elemento-a-elemento
-
-```
-+ :: Tensor::T::(D...) Tensor::T::(D...) => Tensor::T::(D...)
-* :: Tensor::T::(D...) Tensor::T::(D...) => Tensor::T::(D...)
-```
-
-Requer mesmas dimensões (shape matching em compile-time). `+` é
-`@commutative`. Traduzido para SIMD no codegen.
-
-### Álgebra linear
-
-```
-dot :: Tensor::T::(D1...) Tensor::T::(D2...) => Tensor::T::(D3...)
-```
-
-Produto de matrizes/vetores. As dimensões devem ser compatíveis pela
-regra da álgebra linear (inner dimensions must match). O tipo de retorno
-tem as dimensões externas.
-
-### Introspecção
-
-```
-shape :: Tensor::T::(D...) => Tuple   # retorna (D1, D2, ...)
-scalar :: Tensor::T::() => T          # extrai escalar de tensor 0-D
-```
-
-### Coerção Array → Tensor (fronteira dinâmica)
-
-```kata
-let dados := ler_banco          # Array::Int (tamanho dinâmico)
-let tentativa := Tensor::Int::(3 3) dados   # Result — falha se shape não bater
-```
-
-A conversão de Array (tamanho dinâmico) para Tensor (tamanho estático) não
-é implícita. O construtor `Tensor::T::(dims)` recebe o Array e valida as
-dimensões em runtime. Retorna `Result` — falha se o número de elementos
-não corresponde ao esperado.
 
 ---
 
@@ -396,7 +455,7 @@ Ver §9 para análise completa. Recomendação provisória: shape inference + UB
 ### D3. Tensor 0-D e escalar
 
 `scalar :: Tensor::T::() => T` extrai escalar de tensor 0-D. Mas `()`
-é `Unit` no Kata5 — `(Int...)` com zero dimensões colide com `Unit`.
+é `Unit` no Kata — `(Int...)` com zero dimensões colide com `Unit`.
 Opções:
 - `Tensor::T` sem tupla de dimensões = 0-D por convenção
 - Proibir 0-D (todo tensor é pelo menos 1-D)
@@ -408,20 +467,7 @@ Tensor 3-D exige `[ [1 2; 3 4]; [5 6; 7 8] ]`. O parser precisa de recursão.
 Implementar desde o início ou começar com 2-D flat? O tipo `Ty::Tensor` já
 é N-D, mas o parser pode aceitar só 2-D inicialmente.
 
-### D5. Indexação N-D
-
-`t.0` hoje é indexação 1-D (Tuple/Array). Para tensor N-D, como acessar
-elementos? `t.(0 1)` (tupla de índices)? `t.0.1` (encadeado)? Precisa ser
-definido.
-
-### D6. `;` terminal
-
-`[1 2 3;]` com `;` terminal — é tensor 1×3? Pela regra "se há `;` em
-qualquer posição dentro de `[]`, é tensor", sim. Confirmar que o `;`
-terminal é legal e opcional: `[1 2 3; 4 5 6]` e `[1 2 3; 4 5 6;]` são a
-mesma matriz 2×3.
-
-### D7. Coerção Array → Tensor
+### D5. Coerção Array → Tensor
 
 ```kata
 let arr := {1 2 3 4}
@@ -430,20 +476,26 @@ let t := Tensor::Int::(2 2) arr     # construtor: shape + data → Result::Tenso
 
 O construtor valida que `len(data) == product(shape)`. Retorna `Result`.
 
-### D8. Tensor implementa ITERABLE?
+### D6. Tensor implementa ITERABLE?
 
 Se sim, `for x in tensor` itera sobre elementos flattened (row-major).
 Útil mas potencialmente confuso — iterar sobre linhas vs elementos?
 
 **Proposta:** Tensor implementa ITERABLE sobre elementos flattened.
-Para iterar sobre linhas, usar `slice` ou indexação explícita (futuro).
+Para iterar sobre linhas, usar indexação `.()` explícita.
 
-### D9. Rational como elemento de Tensor?
+### D7. Rational como elemento de Tensor?
 
 Rational é exato mas não tem SIMD. Tensor de Rational seria correto
 matematicamente mas lento. A interface NUM é implementada por Int, Float
 e Rational. Se Tensor exige NUM, Rational é automaticamente permitido.
 O custo é de runtime, não de correção.
+
+### D8. Broadcast — quais shapes são compatíveis?
+
+NumPy/Julia têm regras de broadcast bem estabelecidas (right-aligned, dims
+de tamanho 1 ou iguais). Kata pode adotar as mesmas regras, mas precisa
+documentar quais shapes são broadcastable para `+` e `*`.
 
 ---
 
@@ -455,6 +507,7 @@ O custo é de runtime, não de correção.
 2. **`kata-core`**: Adicionar `Ty::Tensor(Box<Ty>)`. Atualizar `extract_type_name`,
    `TypeShape`, display, hash.
 3. **`kata-parser`**: Implementar parsing de `[]` com `;` (recursão para N-D).
+   Vírgula como separador opcional equivalente a espaço.
 4. **`kata-resolution`**: `resolve_type_expr` reconhece `Tensor::(T)` →
    `Ty::Tensor(Box<Ty>)`.
 5. **`kata-rt`**: Implementar `kata_rt_tensor` struct e FFI functions básicas.
@@ -464,45 +517,47 @@ O custo é de runtime, não de correção.
 6. **`kata-inference`**: Inference de `TensorLit` — elementos devem implementar
    NUM, linhas da mesma dimensão devem ter mesmo comprimento.
 7. **`kata-inference`**: Coerção Array → Tensor via construtor.
+8. **`kata-inference`**: Indexação `.()` — desugar para FFI com bounds check.
 
 ### Fase 3: Interface TENSOR
 
-8. **`stdlib/core.kata`**: Declarar `interface TENSOR::T` com assinaturas.
-9. **`stdlib/core.kata`**: `Tensor::T implements TENSOR::T` com métodos `@ffi`.
-10. **`kata-inference`**: Dispatch de `+`, `*`, `dot` para TENSOR.
+9. **`stdlib/core.kata`**: Declarar `interface TENSOR::T` com assinaturas.
+10. **`stdlib/core.kata`**: `Tensor::T implements TENSOR::T` com métodos `@ffi`.
+11. **`kata-inference`**: Dispatch de `+`, `*`, `dot` para TENSOR.
 
 ### Fase 4: Codegen
 
-11. **`kata-codegen`**: Lowering de `TensorLit` → `kata_rt_tensor_new`.
-12. **`kata-codegen`**: Lowering de operações TENSOR → calls FFI.
+12. **`kata-codegen`**: Lowering de `TensorLit` → `kata_rt_tensor_new`.
+13. **`kata-codegen`**: Lowering de operações TENSOR → calls FFI.
+14. **`kata-codegen`**: Lowering de indexação `.()` → `kata_rt_tensor_at` ou slicing.
 
 ### Fase 5: Shape Inference
 
-13. **`kata-core`**: Adicionar `ShapeInfo` (sidecar ao `TypedExpr`).
-14. **`kata-inference`**: Propagação de shapes — literais produzem `Known`,
+15. **`kata-core`**: Adicionar `ShapeInfo` (sidecar ao `TypedExpr`).
+16. **`kata-inference`**: Propagação de shapes — literais produzem `Known`,
     operações derivam, parâmetros produzem `Unknown`.
-15. **`kata-inference`**: Verificação de compatibilidade em compile-time
+17. **`kata-inference`**: Verificação de compatibilidade em compile-time
     quando ambos os operandos de `dot` têm `Known` shapes.
 
 ### Fase 6: Backend de Álgebra Linear
 
-16. **`kata-rt/Cargo.toml`**: Adicionar `matrixmultiply = "0.3"`.
-17. **`kata-rt/src/tensor/`**: Implementar `dot` para Float via `matrixmultiply`.
-18. **`kata-rt/src/tensor/`**: Implementar `dot` para Int e Rational (loops próprios).
-19. **`kata-rt/src/tensor/`**: Implementar `+`, `*` (element-wise), `transpose`.
+18. **`kata-rt/Cargo.toml`**: Adicionar `matrixmultiply = "0.3"`.
+19. **`kata-rt/src/tensor/`**: Implementar `dot` para Float via `matrixmultiply`.
+20. **`kata-rt/src/tensor/`**: Implementar `dot` para Int e Rational (loops próprios).
+21. **`kata-rt/src/tensor/`**: Implementar `+`, `*` (element-wise), `transpose`.
 
 ### Fase 7: Monomorphização e Tree Shaking
 
-20. **`kata-monomorph`**: Instanciar `Tensor::(Int)`, `Tensor::(Float)`, etc.
-21. **`kata-tree-shaking`**: Marcar FFI symbols de tensor como reachable.
+22. **`kata-monomorph`**: Instanciar `Tensor::(Int)`, `Tensor::(Float)`, etc.
+23. **`kata-tree-shaking`**: Marcar FFI symbols de tensor como reachable.
 
 ### Fase 8: Testes
 
-22. **`examples/`**: Migrar `test_tensor_math.kata` do Kata4.
-23. **`kata-codegen/tests/`**: Testes E2E de tensor add, mul, dot, transpose.
-24. **`kata-rt/tests/`**: Testes de `dot` Float comparando `matrixmultiply`
+24. **`examples/`**: Migrar `test_tensor_math.kata` do Kata4.
+25. **`kata-codegen/tests/`**: Testes E2E de tensor add, mul, dot, transpose.
+26. **`kata-rt/tests/`**: Testes de `dot` Float comparando `matrixmultiply`
     vs loop de referência.
-25. **`kata-inference/tests/`**: Testes de shape inference — erros de shape
+27. **`kata-inference/tests/`**: Testes de shape inference — erros de shape
     em compile-time para literais, `Unknown` para parâmetros.
 
 ---
@@ -535,3 +590,10 @@ runtime, codegen, matrixmultiply, shape inference) e VISAO-tensor.md
 na sintaxe e no modelo de tipos; o conteúdo único do antigo (backend de
 álgebra linear, shape inference, representação runtime, plano de
 implementação) foi incorporado.
+
+Revisão de 2026-09-12 refinou:
+- Vírgula como separador opcional dentro de `[]` (equivalente a espaço)
+- Indexação `.()` com tupla de índices, slicing via `..`, wildcard `_` para
+  "todas as posições do eixo"
+- N-D via aninhamento de `[]` (confirmado, rejeitado `;;` `;;;`)
+- Operações removidas do escopo imediato (foco em literais + indexação)
