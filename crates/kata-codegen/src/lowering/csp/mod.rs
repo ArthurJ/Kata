@@ -15,7 +15,7 @@ mod fork_spawn;
 mod select;
 
 pub(crate) use channel::{
-    lower_channel_create, lower_transmission_op, lower_receiver_factory_call,
+    lower_channel_create, lower_receiver_factory_call, lower_transmission_op,
 };
 pub(crate) use fork_spawn::{lower_fork, lower_spawn};
 pub(crate) use select::lower_select;

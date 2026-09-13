@@ -4,7 +4,7 @@
 //! `channel!()`, `queue!()`, `broadcast!()`, `rxf!()`, `fork!()` são
 //! interceptados em `infer_apply` (não despacham para DispatchTable).
 
-use kata_ast::{TransmissionDir, Expr, ReadMode, SelectArm, Span, Spanned};
+use kata_ast::{Expr, ReadMode, SelectArm, Span, Spanned, TransmissionDir};
 use kata_core::escape::EscapeTarget;
 use kata_core::ty::{Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
@@ -26,6 +26,7 @@ use super::helpers::InferResult;
 /// tipo do canal é `Var(T0)`, `T0` é resolvido para o tipo concreto no
 /// `TypeEnv`. Isso resolve o bug onde variáveis recebidas via canal ficavam
 /// com tipo `Var` não-resolvido.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn infer_transmission_op(
     source: &Spanned<Expr>,
     direction: TransmissionDir,
@@ -44,7 +45,16 @@ pub(crate) fn infer_transmission_op(
     match &typed_source.ty {
         Ty::Sender(inner) => {
             let elem_ty = (**inner).clone();
-            infer_send(typed_source, Box::new(elem_ty), dest, direction, span, env, ctx, tail_pos)
+            infer_send(
+                typed_source,
+                Box::new(elem_ty),
+                dest,
+                direction,
+                span,
+                env,
+                ctx,
+                tail_pos,
+            )
         }
         Ty::Receiver(inner) => {
             let inner_ty = (**inner).clone();
@@ -124,13 +134,11 @@ pub(crate) fn infer_transmission_op(
                             hint,
                         )
                     }
-                    dest_ty => {
-                        Err(MiddleError::TypeMismatch {
-                            expected: "Sender::T ou Receiver::T (canal)".into(),
-                            found: format!("source={other:?}, dest={dest_ty:?}"),
-                            span: (*span).into(),
-                        })
-                    }
+                    dest_ty => Err(MiddleError::TypeMismatch {
+                        expected: "Sender::T ou Receiver::T (canal)".into(),
+                        found: format!("source={other:?}, dest={dest_ty:?}"),
+                        span: (*span).into(),
+                    }),
                 }
             }
         }
@@ -140,6 +148,7 @@ pub(crate) fn infer_transmission_op(
 /// Send flipped: o dest é o canal (Sender), o source é o valor.
 /// Usado quando `tx <! 42` é parseado como source=42, dest=tx.
 /// O `typed_channel` é o dest (já inferido como Sender), `typed_value` é o source.
+#[allow(clippy::too_many_arguments)]
 fn infer_send_flipped(
     typed_channel: TypedExpr,
     elem_ty: Box<Ty>,
@@ -157,7 +166,10 @@ fn infer_send_flipped(
     if let Ty::Action(..) = &typed_value.ty {
         return Err(MiddleError::TypeMismatch {
             expected: "valor serializável (não-Action)".into(),
-            found: format!("Action não é permitida em canal. Tipo: `{}`", typed_value.ty),
+            found: format!(
+                "Action não é permitida em canal. Tipo: `{}`",
+                typed_value.ty
+            ),
             span: value_span.into(),
         });
     }
@@ -187,7 +199,10 @@ fn infer_send_flipped(
 
     let escape = escape_for_channel_send(&typed_value.ty, tail_pos, ctx);
     let typed_value = if escape != typed_value.escape {
-        TypedExpr { escape, ..typed_value }
+        TypedExpr {
+            escape,
+            ..typed_value
+        }
     } else {
         typed_value
     };
@@ -211,6 +226,7 @@ fn infer_send_flipped(
 /// Recv flipped: o dest é o canal (Receiver), o source é o binding.
 /// Usado quando `a <! rx` é parseado como source=a, dest=rx — mas na verdade
 /// rx é o canal e a é o binding. O `typed_channel` é o dest (Receiver).
+#[allow(clippy::too_many_arguments, clippy::boxed_local)]
 fn infer_recv_flipped(
     typed_channel: TypedExpr,
     inner: Box<Ty>,
@@ -249,7 +265,11 @@ fn infer_recv_flipped(
     }
 
     let escape = if ctx.ret_ty.is_some() {
-        if tail_pos { EscapeTarget::Caller } else { EscapeTarget::Local }
+        if tail_pos {
+            EscapeTarget::Caller
+        } else {
+            EscapeTarget::Local
+        }
     } else {
         EscapeTarget::Caller
     };
@@ -272,6 +292,7 @@ fn infer_recv_flipped(
 
 /// Send: `canal <! valor` ou `valor !> canal`.
 /// O `typed_channel` já foi inferido. `elem_ty` é o tipo interno do Sender.
+#[allow(clippy::too_many_arguments)]
 fn infer_send(
     typed_channel: TypedExpr,
     elem_ty: Box<Ty>,
@@ -285,8 +306,14 @@ fn infer_send(
     let channel_span = typed_channel.span;
 
     // Inferir o valor com hint = elem_ty do canal.
-    let typed_value =
-        infer_expr_hinted(&value_expr.node, &value_expr.span, env, ctx, false, Some(&elem_ty))?;
+    let typed_value = infer_expr_hinted(
+        &value_expr.node,
+        &value_expr.span,
+        env,
+        ctx,
+        false,
+        Some(&elem_ty),
+    )?;
 
     // Proibe Ty::Action em canal — Actions são comportamento, não informação.
     if let Ty::Action(..) = &typed_value.ty {
@@ -379,6 +406,7 @@ fn infer_send(
 /// O `typed_channel` já foi inferido. `inner` é o tipo interno do Receiver.
 /// `hint` é o tipo esperado pelo contexto (return type, ascription, etc.).
 /// Se `inner` é `Var` e `hint` é concreto, `hint` resolve a variável de tipo.
+#[allow(clippy::too_many_arguments, clippy::boxed_local)]
 fn infer_recv(
     typed_channel: TypedExpr,
     inner: Box<Ty>,

@@ -564,10 +564,9 @@ pub(crate) fn infer_expr_hinted(
             let bind_ty = if let Some(ref target) = binding_target_ty {
                 if matches!(target, Ty::Interface(_)) {
                     return Err(MiddleError::TypeMismatch {
-                        expected: format!(
-                            "tipo concreto (Int, Float, Text, ...) — \
+                        expected: "tipo concreto (Int, Float, Text, ...) — \
                              `let` com interface não é permitido (use `var` para widening)"
-                        ),
+                            .to_string(),
                         found: format!("{target} (interface não pode ser tipo de `let`)"),
                         span: (*span).into(),
                     });
@@ -1190,7 +1189,11 @@ pub(crate) fn infer_expr_hinted(
         }
 
         // ── CSP — typeck em csp.rs ──
-        Expr::TransmissionOp { source, direction, dest } => {
+        Expr::TransmissionOp {
+            source,
+            direction,
+            dest,
+        } => {
             return super::csp::infer_transmission_op(
                 source, *direction, dest, span, env, ctx, tail_pos, hint,
             );

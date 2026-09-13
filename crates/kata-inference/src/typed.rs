@@ -6,7 +6,7 @@
 //! `TypedExprKind` espelha `Expr` mas com `Spanned<TypedExpr>` em vez de
 //! `Spanned<Expr>` — a recursão é sobre a TAST, não sobre a AST.
 
-use kata_ast::{TransmissionDir, Span, Spanned};
+use kata_ast::{Span, Spanned, TransmissionDir};
 use kata_core::escape::EscapeTarget;
 use kata_core::ty::Ty;
 

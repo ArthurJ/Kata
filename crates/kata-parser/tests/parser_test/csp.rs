@@ -2,7 +2,7 @@
 //! select with timeout, fork! as ActionCall.
 
 use super::helpers::{first_item, parse_src};
-use kata_ast::{TransmissionDir, Expr, Item, SelectArm};
+use kata_ast::{Expr, Item, SelectArm, TransmissionDir};
 
 // ── Token lexing: <! and !> ────────────────────────────────────────
 
@@ -13,7 +13,11 @@ fn lex_send_arrow() {
     let item = first_item(&m);
     match item {
         Item::EntryExpr(e) => match &e.node {
-            Expr::TransmissionOp { source, direction, dest } => {
+            Expr::TransmissionOp {
+                source,
+                direction,
+                dest,
+            } => {
                 assert_eq!(direction, &TransmissionDir::Left);
                 assert_eq!(dest.node, Expr::Ident { name: "tx".into() });
                 assert_eq!(source.node, Expr::IntLit { text: "42".into() });
@@ -31,7 +35,11 @@ fn lex_recv_arrow() {
     let item = first_item(&m);
     match item {
         Item::EntryExpr(e) => match &e.node {
-            Expr::TransmissionOp { source, direction, dest } => {
+            Expr::TransmissionOp {
+                source,
+                direction,
+                dest,
+            } => {
                 assert_eq!(direction, &TransmissionDir::Right);
                 assert_eq!(source.node, Expr::Ident { name: "rx".into() });
                 assert_eq!(dest.node, Expr::Ident { name: "msg".into() });
@@ -88,7 +96,11 @@ fn channel_send_complex_value() {
     let item = first_item(&m);
     match item {
         Item::EntryExpr(e) => match &e.node {
-            Expr::TransmissionOp { source, direction, dest } => {
+            Expr::TransmissionOp {
+                source,
+                direction,
+                dest,
+            } => {
                 assert_eq!(direction, &TransmissionDir::Left);
                 assert_eq!(dest.node, Expr::Ident { name: "tx".into() });
                 match &source.node {
@@ -260,7 +272,13 @@ fn channel_send_in_let() {
     match item {
         Item::ConstantDecl { name, value } => {
             assert_eq!(name, "x");
-            assert!(matches!(value.node, Expr::TransmissionOp { direction: TransmissionDir::Left, .. }));
+            assert!(matches!(
+                value.node,
+                Expr::TransmissionOp {
+                    direction: TransmissionDir::Left,
+                    ..
+                }
+            ));
         }
         other => panic!("expected ConstantDecl, got {other:?}"),
     }
@@ -277,7 +295,11 @@ fn send_arrow_left_assoc() {
     let item = first_item(&m);
     match item {
         Item::EntryExpr(e) => match &e.node {
-            Expr::TransmissionOp { source, direction, dest } => {
+            Expr::TransmissionOp {
+                source,
+                direction,
+                dest,
+            } => {
                 assert_eq!(direction, &TransmissionDir::Left);
                 // dest = (a <! b) → inner TransmissionOp
                 match &dest.node {

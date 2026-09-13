@@ -4,7 +4,7 @@
 //! Extraído de `expressions.rs` para separar a mecânica de precedência de
 //! operadores (`|>`, `|`, `?`, aplicação greedy) do parsing de átomos.
 
-use kata_ast::{TransmissionDir, Expr, Spanned, Token};
+use kata_ast::{Expr, Spanned, Token, TransmissionDir};
 use kata_diagnostics::FrontendError;
 
 use crate::MAX_EXPR_DEPTH;

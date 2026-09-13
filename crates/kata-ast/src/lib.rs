@@ -13,8 +13,8 @@ pub(crate) mod span;
 pub(crate) mod token;
 
 pub use expr::{
-    ActionStmt, TransmissionDir, DotIndex, Expr, GuardClause, LambdaClause, MatchArm, Module, Pattern,
-    ReadMode, SelectArm, TypeExpr, WithBinding,
+    ActionStmt, DotIndex, Expr, GuardClause, LambdaClause, MatchArm, Module, Pattern, ReadMode,
+    SelectArm, TransmissionDir, TypeExpr, WithBinding,
 };
 pub use item::*;
 pub use span::{Span, Spanned};

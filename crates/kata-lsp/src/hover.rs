@@ -112,7 +112,9 @@ fn children<'a>(
         TypeOf { expr } => Box::new(std::iter::once(expr.as_ref())),
         Return(expr) => Box::new(std::iter::once(expr.as_ref())),
         Reassign { value, .. } => Box::new(std::iter::once(value.as_ref())),
-        TransmissionOp { source, dest, .. } => Box::new([source.as_ref(), dest.as_ref()].into_iter()),
+        TransmissionOp { source, dest, .. } => {
+            Box::new([source.as_ref(), dest.as_ref()].into_iter())
+        }
         ReceiverFactoryCall { factory, .. } => Box::new(std::iter::once(factory.as_ref())),
 
         // Closure: callee + args

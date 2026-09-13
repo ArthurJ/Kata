@@ -20,7 +20,7 @@
 //! o `source` dentro do `TransmissionOp`: se for `ActionCall { callee: "read", ... }`,
 //! é um braço `IoRead`; caso contrário, é um braço `Channel`.
 
-use kata_ast::{TransmissionDir, Expr, ReadMode, SelectArm, Spanned, Token};
+use kata_ast::{Expr, ReadMode, SelectArm, Spanned, Token, TransmissionDir};
 use kata_diagnostics::FrontendError;
 
 use crate::Parser;

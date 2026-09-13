@@ -290,27 +290,28 @@ fn collect_concrete_channel_types(
     create_types: &mut HashMap<kata_ast::Span, Ty>,
 ) {
     walk::for_each_subexpr(expr, &mut |e| {
-        match &e.kind {
-            TypedExprKind::TransmissionOp { source, is_send, elem_ty, .. } => {
-                if let TypedExprKind::Ident { name } = &source.node.kind
-                    && let Some(span) = channel_bindings.get(name)
+        if let TypedExprKind::TransmissionOp {
+            source,
+            is_send,
+            elem_ty,
+            ..
+        } = &e.kind
+            && let TypedExprKind::Ident { name } = &source.node.kind
+            && let Some(span) = channel_bindings.get(name)
+        {
+            if *is_send {
+                if let Ty::Sender(inner) = &source.node.ty
+                    && !matches!(inner.as_ref(), Ty::Var(_))
                 {
-                    if *is_send {
-                        if let Ty::Sender(inner) = &source.node.ty
-                            && !matches!(inner.as_ref(), Ty::Var(_))
-                        {
-                            create_types
-                                .entry(*span)
-                                .or_insert_with(|| inner.as_ref().clone());
-                        }
-                    } else {
-                        if !matches!(elem_ty, Ty::Var(_)) {
-                            create_types.entry(*span).or_insert_with(|| elem_ty.clone());
-                        }
-                    }
+                    create_types
+                        .entry(*span)
+                        .or_insert_with(|| inner.as_ref().clone());
+                }
+            } else {
+                if !matches!(elem_ty, Ty::Var(_)) {
+                    create_types.entry(*span).or_insert_with(|| elem_ty.clone());
                 }
             }
-            _ => {}
         }
         true
     });

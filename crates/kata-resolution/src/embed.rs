@@ -580,7 +580,11 @@ fn walk_expr(expr: Spanned<Expr>, ctx: &mut EmbedCtx) -> Spanned<Expr> {
             collection: Box::new(walk_expr(*collection, ctx)),
         },
 
-        Expr::TransmissionOp { source, direction, dest } => Expr::TransmissionOp {
+        Expr::TransmissionOp {
+            source,
+            direction,
+            dest,
+        } => Expr::TransmissionOp {
             source: Box::new(walk_expr(*source, ctx)),
             direction,
             dest: Box::new(walk_expr(*dest, ctx)),
