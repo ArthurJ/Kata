@@ -173,7 +173,10 @@ pub(crate) fn synthesize_refined(
                     if decl.extension_impl.is_some()
                         && matches!(e, MiddleError::NoOverload { .. }) =>
                 {
-                    let (type_name, iface_name, impl_span) = decl.extension_impl.as_ref().unwrap();
+                    let (type_name, iface_name, impl_span) = decl
+                        .extension_impl
+                        .as_ref()
+                        .expect("extension_impl is Some — guard verified");
                     let method_map = interface_registry.method_to_ifaces();
                     // Extrai o nome do método que falhou no dispatch.
                     let method_name = match e {

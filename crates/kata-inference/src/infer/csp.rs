@@ -240,8 +240,11 @@ fn infer_recv_flipped(
 ) -> InferResult<TypedExpr> {
     let channel_span = typed_channel.span;
     let recv_ty = match &*inner {
-        Ty::Var(_) if hint.is_some() && !matches!(hint.unwrap(), Ty::Var(_)) => {
-            hint.unwrap().clone()
+        Ty::Var(_)
+            if hint.is_some()
+                && !matches!(hint.expect("hint is Some — guard verified"), Ty::Var(_)) =>
+        {
+            hint.expect("hint is Some — guard verified").clone()
         }
         _ => (*inner).clone(),
     };
@@ -421,8 +424,11 @@ fn infer_recv(
     let channel_span = typed_channel.span;
     // Se o tipo do canal é Var (não-resolvido), usar o hint se disponível.
     let recv_ty = match &*inner {
-        Ty::Var(_) if hint.is_some() && !matches!(hint.unwrap(), Ty::Var(_)) => {
-            hint.unwrap().clone()
+        Ty::Var(_)
+            if hint.is_some()
+                && !matches!(hint.expect("hint is Some — guard verified"), Ty::Var(_)) =>
+        {
+            hint.expect("hint is Some — guard verified").clone()
         }
         _ => (*inner).clone(),
     };
