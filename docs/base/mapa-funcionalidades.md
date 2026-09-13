@@ -158,8 +158,9 @@ seleciona `fdiv`.
 
 **Grouped como barreira de hint** (Fio 6): `Grouped(inner)` = strip
 (hint atravessa). `Grouped(Grouped(...))` = barrier (avalia sem hint,
-depois converte via `convert_typed_expr`). Permite `((/ 1 3))::Rational`
-quando `(/ 1 3)::Rational` falha.
+depois valida contra o tipo alvo). `((+ 1 3))::Int` confirma (Int == Int);
+`((+ 1 3))::Rational` é type error (Int ≠ Rational — resultados de dispatch
+não são literais, rebaixamento não se aplica).
 
 **Ascription vs construtor** (ver manual §4.2.8): quatro diferenças —
 identidade (nominal vs estrutural), first-class, validação de shape,

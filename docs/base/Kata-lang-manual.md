@@ -1364,17 +1364,23 @@ níveis de `Grouping` são barreira: o mais interno avalia **sem hint**, e o
 externo valida o resultado contra o tipo alvo:
 
 ```kata
-(/ 1 3)::Rational     # erro — hint Rational, nenhuma overload de / retorna Rational
-((/ 1 3))::Rational   # 1/3 — Grouped interno avalia sem hint → Int 0, depois rebaixa
+(+ 1 3)::Rational     # erro — hint Rational, nenhuma overload de + retorna Rational
+((+ 1 3))::Rational   # erro — grouped barrier: + despacha Int, Int ≠ Rational → TypeMismatch
+((+ 1 3))::Int        # OK — grouped barrier: + despacha Int, Int == Int → confirmação
 ```
 
-No primeiro caso, o hint `Rational` filtra overloads de `/` antes do scoring.
-Nenhuma overload de `/` com args `[Int, Int]` retorna `Rational` → erro.
+No primeiro caso, o hint `Rational` filtra overloads de `+` antes do scoring.
+Nenhuma overload de `+` com args `[Int, Int]` retorna `Rational` → erro.
 
-No segundo, o `Grouped` duplo força avaliação sem hint: `/ 1 3` despacha
-pela overload padrão (`idiv`, retorna `Int 0`). Depois o externo tenta
-rebaixar `Int 0` para `Rational` — como é literal, o rebaixamento compile-time
-produz `Rational "1/3"` a partir do texto bruto.
+No segundo, o `Grouped` duplo força avaliação sem hint: `+ 1 3` despacha
+pela overload padrão (`Int Int => Int`). O resultado é `Int` — não é um
+literal na TAST, é o resultado de uma chamada FFI (`kata_rt_bi_add`).
+O externo valida `Int ≠ Rational` → `TypeMismatch`. O rebaixamento de
+literal só se aplica quando o operando do `::` é um `IntLit`/`FloatLit`
+direto — resultados de dispatch não são literais.
+
+No terceiro caso, o `Grouped` duplo avalia `+ 1 3` sem hint → `Int`.
+O externo valida `Int == Int` → confirmação (no-op em runtime).
 
 Se o resultado do barrier não é literal e o tipo não bate com o alvo, é
 `TypeMismatch` — o Kata5 não faz conversão implícita via dispatch após o
@@ -2583,21 +2589,21 @@ mas `assert!` sobrevive (não é diretiva `@test`).
 | **Filosofia** | "Se falhar, aborto. Problema do chamador." | "Se falhar, contingência assume localmente." |
 | **Domínio** | Estritamente Actions. | Functions e Actions. |
 | **Fluxo** | Interrompe e retorna `Err(e)`. | Desempacota payload da variante não-cauda; se cauda, avalia rhs. |
-| **Compatível com** | `Result`, `Optional` (e futuros enums com variante de erro). | `Optional` e qualquer enum cuja última variante seja **unitária** (cauda sem payload). |
-| **Incompatível** | Funções puras. | `Result` (`Err` tem payload — não é cauda unitária). Enums sem cauda unitária. |
+| **Compatível com** | `Result`, `Optional` (e futuros enums com variante de erro). | `Optional`, `Result`, e qualquer enum cujas variantes não-cauda carreguem payload. |
+| **Incompatível** | Funções puras. | Enums onde variante não-cauda não tem payload. |
 
 **`|` (fallback local)** é um operador infixo que desempacota o payload de
 qualquer variante não-cauda. Se a expressão à esquerda é a cauda (última
-variante, unitária), avalia e retorna a direita. Foi generalizado via
-`EnumRegistry` no typeck — funciona com qualquer enum cujas variantes (exceto a
-última) carreguem payload e a última seja unitária:
+variante), avalia e retorna a direita — o payload da cauda, se houver, é
+descartado. Foi generalizado via `EnumRegistry` no typeck — funciona com
+qualquer enum cujas variantes não-cauda carreguem payload:
 
 - `Optional::Some(v) \| default` → desempacota `v`; `Optional::None \| default`
-  → avalia `default` (None é cauda unitária). ✅
-- `Result::Ok(v) \| 0` → **type error**: `Err(E)` tem payload, não é cauda
-  unitária. Use `?` para fail-fast. ❌
-- User enums com cauda unitária ganham `\|` automaticamente (ex: `enum Light
-  { On(bool), Off }` → `Light::On(true) \| Light::Off` desempacota `true`).
+  → avalia `default` (None é cauda sem payload). ✅
+- `Result::Ok(v) \| 0` → desempacota `v`; `Result::Err(e) \| 0` → descarta
+  `e`, avalia `0`. O payload da cauda é descartado via Wildcard. ✅
+- User enums com cauda ganham `\|` automaticamente (ex: `enum Light
+  { Red(Int), Green(Int), Off }` → `Light::Red 42 \| 0` desempacota `42`).
 
 O `|` é desugared para `Match` no typeck — a TAST nunca contém `PipeFallback`.
 
