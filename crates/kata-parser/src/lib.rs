@@ -220,7 +220,8 @@ pub fn parse_decls_only(tokens: Vec<TokenWithSpan>) -> Result<Module, FrontendEr
 ///
 /// When `repl_mode` is true, `let` at the top level is accepted as an
 /// `EntryExpr` (PRD §2.5 — the REPL is not module top-level).
-pub fn parse_repl(tokens: Vec<TokenWithSpan>) -> Result<Module, FrontendError> {
+#[allow(dead_code)]
+pub(crate) fn parse_repl(tokens: Vec<TokenWithSpan>) -> Result<Module, FrontendError> {
     let mut parser = Parser::new(tokens);
     parser.repl_mode = true;
     parser.parse_module()

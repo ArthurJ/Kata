@@ -14,7 +14,7 @@
 /// `expected` é `None` quando não há linhas de output esperado (ex:
 /// declarações `constant`, `let`, `Sig` que não produzem output).
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DocCase {
+pub(crate) struct DocCase {
     /// Input exato passado para `ReplSession::handle`.
     /// Pode conter múltiplas linhas (input multiline).
     pub input: String,
@@ -27,7 +27,7 @@ pub struct DocCase {
 
 /// Um bloco de doctest — sessão REPL isolada.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DocBlock {
+pub(crate) struct DocBlock {
     /// Casos: (input, expected_output)
     pub cases: Vec<DocCase>,
     /// Linha inicial no source (1-indexed, para diagnósticos).
@@ -43,7 +43,7 @@ pub struct DocBlock {
 /// 3. No conteúdo, procura linhas `>>> `
 /// 4. Se nenhuma `>>> ` → ignora (comentário normal)
 /// 5. Se há `>>> ` → processa como doctest
-pub fn scan_doctests(source: &str) -> Vec<DocBlock> {
+pub(crate) fn scan_doctests(source: &str) -> Vec<DocBlock> {
     let mut blocks: Vec<DocBlock> = Vec::new();
     let mut chars = source.char_indices().peekable();
 
@@ -253,7 +253,7 @@ fn is_input_incomplete(input: &str) -> bool {
 
 /// Normaliza output: trim de whitespace à direita em cada linha,
 /// concatenado com `\n`.
-pub fn normalize_output(s: &str) -> String {
+pub(crate) fn normalize_output(s: &str) -> String {
     s.lines()
         .map(|l| l.trim_end())
         .collect::<Vec<_>>()
@@ -271,7 +271,7 @@ pub fn normalize_output(s: &str) -> String {
 /// Unix-only — doctests são código de teste no kata-driver, não
 /// afetam `kata repl`, `kata run`, ou `kata build`.
 #[cfg(unix)]
-pub fn capture_stdout<F: FnOnce() -> R, R>(f: F) -> String {
+pub(crate) fn capture_stdout<F: FnOnce() -> R, R>(f: F) -> String {
     use std::os::fd::AsRawFd;
 
     let stdout_fd = std::io::stdout().as_raw_fd();
@@ -340,7 +340,7 @@ pub fn capture_stdout<F: FnOnce() -> R, R>(f: F) -> String {
 /// (não há captura de stdout portável sem `AllocConsole` + redirect).
 /// Casos sem `expected` (só verificam que não dá erro) ainda funcionam.
 #[cfg(not(unix))]
-pub fn capture_stdout<F: FnOnce() -> R, R>(f: F) -> String {
+pub(crate) fn capture_stdout<F: FnOnce() -> R, R>(f: F) -> String {
     f();
     String::new()
 }

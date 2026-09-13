@@ -49,7 +49,7 @@ use crate::ty::{PrimTy, Ty};
 /// (não empresta lifetime dos registries). O custo de alocação é pago
 /// uma vez na construção e compensado pelas consultas O(1).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct TypeId(pub String);
+pub(crate) struct TypeId(pub String);
 
 /// Classificação de um tipo conhecido pelo compilador.
 ///
@@ -105,8 +105,9 @@ pub enum TypeKind {
 
 /// Um nó do grafo de tipos.
 #[derive(Debug, Clone)]
-pub struct TypeNode {
-    pub id: TypeId,
+pub(crate) struct TypeNode {
+    #[allow(dead_code)]
+    pub(crate) id: TypeId,
     pub kind: TypeKind,
     /// Origem (módulo): `"core"` para prelude, `"__local__"` para user, etc.
     pub origin: String,

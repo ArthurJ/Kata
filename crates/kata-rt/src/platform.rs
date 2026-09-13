@@ -12,14 +12,14 @@
 // para evitar `#[cfg]` em cada site de uso.
 
 /// Eventos de poll — valores idênticos em POSIX e Winsock.
-pub const POLLIN: i16 = 0x001;
-pub const POLLOUT: i16 = 0x004;
-pub const POLLHUP: i16 = 0x010;
+pub(crate) const POLLIN: i16 = 0x001;
+pub(crate) const POLLOUT: i16 = 0x004;
+pub(crate) const POLLHUP: i16 = 0x010;
 
 /// Poll descriptor — layout compatível com `pollfd` e `WSAPOLLFD`.
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct PollFd {
+pub(crate) struct PollFd {
     pub fd: i32,
     pub events: i16,
     pub revents: i16,
@@ -123,7 +123,7 @@ pub(crate) fn ensure_winsock_init() {
 
 /// Configura FD como non-blocking.
 #[cfg(unix)]
-pub fn set_nonblocking(fd: i32) {
+pub(crate) fn set_nonblocking(fd: i32) {
     unsafe {
         let flags = libc::fcntl(fd, libc::F_GETFL, 0);
         if flags >= 0 {
@@ -133,7 +133,7 @@ pub fn set_nonblocking(fd: i32) {
 }
 
 #[cfg(windows)]
-pub fn set_nonblocking(fd: i32) {
+pub(crate) fn set_nonblocking(fd: i32) {
     unsafe {
         let mut mode: i32 = 1;
         winsock::ioctlsocket(fd as usize, winsock::FIONBIO, &mut mode);
@@ -144,14 +144,14 @@ pub fn set_nonblocking(fd: i32) {
 
 /// Fecha um FD/socket.
 #[cfg(unix)]
-pub fn close_fd(fd: i32) {
+pub(crate) fn close_fd(fd: i32) {
     unsafe {
         libc::close(fd);
     }
 }
 
 #[cfg(windows)]
-pub fn close_fd(fd: i32) {
+pub(crate) fn close_fd(fd: i32) {
     unsafe {
         winsock::closesocket(fd as usize);
     }
@@ -165,23 +165,23 @@ pub fn close_fd(fd: i32) {
 
 /// Lê bytes de um FD/socket. Retorna número de bytes lidos, 0 para EOF, <0 para erro.
 #[cfg(unix)]
-pub fn raw_read(fd: i32, buf: *mut u8, len: usize) -> isize {
+pub(crate) fn raw_read(fd: i32, buf: *mut u8, len: usize) -> isize {
     unsafe { libc::read(fd, buf as *mut libc::c_void, len) as isize }
 }
 
 #[cfg(windows)]
-pub fn raw_read(fd: i32, buf: *mut u8, len: usize) -> isize {
+pub(crate) fn raw_read(fd: i32, buf: *mut u8, len: usize) -> isize {
     unsafe { winsock::recv(fd as usize, buf, len as i32, 0) as isize }
 }
 
 /// Escreve bytes em um FD/socket. Retorna número de bytes escritos, <0 para erro.
 #[cfg(unix)]
-pub fn raw_write(fd: i32, buf: *const u8, len: usize) -> isize {
+pub(crate) fn raw_write(fd: i32, buf: *const u8, len: usize) -> isize {
     unsafe { libc::write(fd, buf as *const libc::c_void, len) as isize }
 }
 
 #[cfg(windows)]
-pub fn raw_write(fd: i32, buf: *const u8, len: usize) -> isize {
+pub(crate) fn raw_write(fd: i32, buf: *const u8, len: usize) -> isize {
     unsafe { winsock::send(fd as usize, buf, len as i32, 0) as isize }
 }
 
@@ -189,7 +189,7 @@ pub fn raw_write(fd: i32, buf: *const u8, len: usize) -> isize {
 
 /// Poll em múltiplos FDs. Retorna número de FDs prontos, 0 para timeout, <0 para erro.
 #[cfg(unix)]
-pub fn poll_fds(fds: &mut [PollFd], timeout_ms: i32) -> i32 {
+pub(crate) fn poll_fds(fds: &mut [PollFd], timeout_ms: i32) -> i32 {
     unsafe {
         libc::poll(
             fds.as_mut_ptr() as *mut libc::pollfd,
@@ -200,7 +200,7 @@ pub fn poll_fds(fds: &mut [PollFd], timeout_ms: i32) -> i32 {
 }
 
 #[cfg(windows)]
-pub fn poll_fds(fds: &mut [PollFd], timeout_ms: i32) -> i32 {
+pub(crate) fn poll_fds(fds: &mut [PollFd], timeout_ms: i32) -> i32 {
     unsafe { winsock::WSAPoll(fds.as_mut_ptr(), fds.len() as u32, timeout_ms) }
 }
 
@@ -208,7 +208,7 @@ pub fn poll_fds(fds: &mut [PollFd], timeout_ms: i32) -> i32 {
 
 /// Habilita SO_REUSEADDR no socket.
 #[cfg(unix)]
-pub fn set_reuseaddr(fd: i32) {
+pub(crate) fn set_reuseaddr(fd: i32) {
     let optval: i32 = 1;
     unsafe {
         libc::setsockopt(
@@ -222,7 +222,7 @@ pub fn set_reuseaddr(fd: i32) {
 }
 
 #[cfg(windows)]
-pub fn set_reuseaddr(fd: i32) {
+pub(crate) fn set_reuseaddr(fd: i32) {
     let optval: i32 = 1;
     unsafe {
         winsock::setsockopt(
@@ -242,53 +242,53 @@ pub fn set_reuseaddr(fd: i32) {
 // usa `as_raw_socket`/`into_raw_socket`.
 
 #[cfg(unix)]
-pub fn tcp_listener_fd(listener: &std::net::TcpListener) -> i32 {
+pub(crate) fn tcp_listener_fd(listener: &std::net::TcpListener) -> i32 {
     use std::os::unix::io::AsRawFd;
     listener.as_raw_fd()
 }
 
 #[cfg(unix)]
-pub fn tcp_listener_into_fd(listener: std::net::TcpListener) -> i32 {
+pub(crate) fn tcp_listener_into_fd(listener: std::net::TcpListener) -> i32 {
     use std::os::unix::io::IntoRawFd;
     listener.into_raw_fd()
 }
 
 #[cfg(unix)]
-pub fn tcp_stream_fd(stream: &std::net::TcpStream) -> i32 {
+pub(crate) fn tcp_stream_fd(stream: &std::net::TcpStream) -> i32 {
     use std::os::unix::io::AsRawFd;
     stream.as_raw_fd()
 }
 
 #[cfg(unix)]
-pub fn tcp_stream_into_fd(stream: std::net::TcpStream) -> i32 {
+pub(crate) fn tcp_stream_into_fd(stream: std::net::TcpStream) -> i32 {
     use std::os::unix::io::IntoRawFd;
     stream.into_raw_fd()
 }
 
 #[cfg(windows)]
 #[allow(dead_code)]
-pub fn tcp_listener_fd(listener: &std::net::TcpListener) -> i32 {
+pub(crate) fn tcp_listener_fd(listener: &std::net::TcpListener) -> i32 {
     use std::os::windows::io::AsRawSocket;
     listener.as_raw_socket() as i32
 }
 
 #[cfg(windows)]
 #[allow(dead_code)]
-pub fn tcp_listener_into_fd(listener: std::net::TcpListener) -> i32 {
+pub(crate) fn tcp_listener_into_fd(listener: std::net::TcpListener) -> i32 {
     use std::os::windows::io::IntoRawSocket;
     listener.into_raw_socket() as i32
 }
 
 #[cfg(windows)]
 #[allow(dead_code)]
-pub fn tcp_stream_fd(stream: &std::net::TcpStream) -> i32 {
+pub(crate) fn tcp_stream_fd(stream: &std::net::TcpStream) -> i32 {
     use std::os::windows::io::AsRawSocket;
     stream.as_raw_socket() as i32
 }
 
 #[cfg(windows)]
 #[allow(dead_code)]
-pub fn tcp_stream_into_fd(stream: std::net::TcpStream) -> i32 {
+pub(crate) fn tcp_stream_into_fd(stream: std::net::TcpStream) -> i32 {
     use std::os::windows::io::IntoRawSocket;
     stream.into_raw_socket() as i32
 }
@@ -299,13 +299,13 @@ pub fn tcp_stream_into_fd(stream: std::net::TcpStream) -> i32 {
 // `as_raw_fd`; no Windows usa `as_raw_socket`.
 
 #[cfg(unix)]
-pub fn file_raw_fd(file: &std::fs::File) -> i32 {
+pub(crate) fn file_raw_fd(file: &std::fs::File) -> i32 {
     use std::os::unix::io::AsRawFd;
     file.as_raw_fd()
 }
 
 #[cfg(windows)]
-pub fn file_raw_fd(file: &std::fs::File) -> i32 {
+pub(crate) fn file_raw_fd(file: &std::fs::File) -> i32 {
     use std::os::windows::io::AsRawHandle;
     file.as_raw_handle() as i32
 }
@@ -314,11 +314,11 @@ pub fn file_raw_fd(file: &std::fs::File) -> i32 {
 
 /// Verifica se o erro é "would block" (non-blocking, tentar novamente).
 #[cfg(unix)]
-pub fn is_would_block(errno: i32) -> bool {
+pub(crate) fn is_would_block(errno: i32) -> bool {
     errno == libc::EAGAIN || errno == libc::EWOULDBLOCK
 }
 
 #[cfg(windows)]
-pub fn is_would_block(errno: i32) -> bool {
+pub(crate) fn is_would_block(errno: i32) -> bool {
     errno == winsock::WSAEWOULDBLOCK
 }

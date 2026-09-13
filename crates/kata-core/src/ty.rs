@@ -237,7 +237,7 @@ impl Ty {
     }
 }
 
-pub use crate::type_env::{TypeBinding, TypeEnv};
+pub use crate::type_env::TypeEnv;
 
 // ---------------------------------------------------------------------------
 // Display — sintaxe que o usuário escreve, não Debug de Rust.
@@ -334,7 +334,7 @@ impl std::fmt::Display for Ty {
 /// Formata uma lista de tipos como `(T1, T2, T3)` — útil para mensagens
 /// de erro que mostram `Vec<Ty>` (ex: params de uma função, args de uma
 /// chamada). Usa `Display` em cada elemento.
-pub fn ty_list_to_string(tys: &[Ty]) -> String {
+pub(crate) fn ty_list_to_string(tys: &[Ty]) -> String {
     tys.iter()
         .map(|t| t.to_string())
         .collect::<Vec<_>>()

@@ -499,7 +499,7 @@ impl ModuleLoader {
 ///
 /// Export de tipo é transitivo: leva ImplEntry + interfaces + métodos
 /// + supertraits dessas interfaces (ver PRD §3.4.1).
-pub fn filter_exports(resolved: ResolvedModule, module: &Module) -> ResolvedModule {
+pub(crate) fn filter_exports(resolved: ResolvedModule, module: &Module) -> ResolvedModule {
     // Coletar nomes exportados: percorrer module.items por ExportDecl.
     let exported: HashSet<String> = module
         .items

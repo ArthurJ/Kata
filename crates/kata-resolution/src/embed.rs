@@ -73,7 +73,9 @@ pub fn resolve_embeds(
 }
 
 /// Variante para stdlib: rejeita embeds com erro explícito.
-pub fn resolve_embeds_stdlib(module: Module) -> Result<(Module, Vec<PathBuf>), Vec<EmbedError>> {
+pub(crate) fn resolve_embeds_stdlib(
+    module: Module,
+) -> Result<(Module, Vec<PathBuf>), Vec<EmbedError>> {
     let mut ctx = EmbedCtx {
         module_dir: Path::new("."),
         deps: Vec::new(),

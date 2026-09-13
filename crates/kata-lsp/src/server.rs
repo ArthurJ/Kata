@@ -20,7 +20,7 @@ use crate::diagnostics::to_diagnostics;
 use crate::hover::hover_at;
 use crate::state::{DEBOUNCE_MS, DebounceRx, DebounceTx, DocumentStore, debounce_channel};
 
-pub struct KataLsp {
+pub(crate) struct KataLsp {
     client: Client,
     docs: Arc<Mutex<DocumentStore>>,
     debounce_tx: DebounceTx,

@@ -33,7 +33,7 @@ fn repr_value(val: Value, ty: &Ty, ctx: &InterpCtx) -> Value {
 /// Formata um valor como Text (ponteiro C string), dado seu tipo.
 ///
 /// Retorna um `i64` que é um `*mut c_char` (Text ptr no runtime).
-pub fn show_value(val: Value, ty: &Ty, ctx: &InterpCtx) -> Value {
+pub(crate) fn show_value(val: Value, ty: &Ty, ctx: &InterpCtx) -> Value {
     match ty {
         // ── Primitivos ───────────────────────────────────────
         Ty::Prim(PrimTy::Int) => {

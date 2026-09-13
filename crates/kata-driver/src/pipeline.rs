@@ -81,7 +81,7 @@ fn load_stdlib() -> PipelineResult<ResolvedModule> {
 /// parse_decls_only → extract_arities → parse_with_arity_recovery). `Single`
 /// chama `parse_with_recovery` diretamente.
 #[derive(Clone, Copy)]
-pub enum ParseMode {
+pub(crate) enum ParseMode {
     TwoPass,
     Single,
 }
@@ -91,7 +91,7 @@ pub enum ParseMode {
 /// `Default` remove funções/actions não alcançadas. `PreserveTests`
 /// mantém `TypedTestSpec` para o test runner gerar wrappers.
 #[derive(Clone, Copy)]
-pub enum ShakeMode {
+pub(crate) enum ShakeMode {
     Default,
     PreserveTests,
 }
@@ -102,7 +102,7 @@ pub enum ShakeMode {
 ///
 /// Contém o `MonoModule` e os metadados necessários para qualquer
 /// backend de codegen (type_id_map, enum_registry, struct_registry).
-pub struct CompiledModule {
+pub(crate) struct CompiledModule {
     pub mono: MonoModule,
     pub type_id_map: HashMap<Ty, i64>,
     /// A2: TypeShapes para registrar no Runtime antes da execução.
@@ -174,7 +174,7 @@ impl CompiledModule {
 ///
 /// Contém o `TypedModule` e metadados para display. O interpretador
 /// consome isto diretamente via `kata_interp::interpret`.
-pub struct InterpModule {
+pub(crate) struct InterpModule {
     pub inner: kata_inference::TypedModule,
     /// Enum registry do módulo — para mapear tag → nome de variante em show.
     pub enum_registry: kata_core::EnumRegistry,
@@ -220,7 +220,7 @@ impl InterpModule {
 ///
 /// let result = compiled.jit_eval()?;
 /// ```
-pub struct Pipeline {
+pub(crate) struct Pipeline {
     source: String,
     /// Path do arquivo (para NamedSource no source context dos erros).
     /// `None` para eval/REPL.

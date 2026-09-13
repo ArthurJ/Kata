@@ -24,10 +24,9 @@ pub mod ty;
 pub mod type_env;
 pub mod type_graph;
 
-pub use caps::{CapsIndex, ConstVal, Repr, TypeCaps};
+pub use caps::{CapsIndex, ConstVal, Repr};
 pub use dispatch::{
-    DispatchError, DispatchOutcome, DispatchTable, OverloadInfo, PartialDispatchResult, Score,
-    match_score,
+    DispatchError, DispatchTable, OverloadInfo, PartialDispatchResult, Score, match_score,
 };
 pub use enum_registry::{EnumRegistry, VariantInfo};
 pub use escape::EscapeTarget;
@@ -39,4 +38,4 @@ pub use refines_registry::{RefinesEntry, RefinesRegistry};
 pub use snapshot::HeapSnapshotData;
 pub use struct_registry::{FieldInfo, StructInfo, StructKey, StructRegistry};
 pub use ty::{PrimTy, Ty, TypeEnv};
-pub use type_graph::{TypeEdge, TypeGraph, TypeGraphBuilder, TypeId, TypeKind, TypeNode};
+pub use type_graph::{TypeGraph, TypeGraphBuilder};

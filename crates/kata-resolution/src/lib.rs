@@ -14,12 +14,12 @@ mod pass0;
 mod type_resolve;
 mod types;
 
-pub use embed::{EmbedError, resolve_embeds, resolve_embeds_stdlib};
+pub use embed::{EmbedError, resolve_embeds};
 pub use type_resolve::{collect_type_params, resolve_type_expr};
 pub use types::*;
 
 pub use merge_imports::merge_imports;
-pub use module_loader::{ImportKind, ImportedModule, LoadError, ModuleLoader, filter_exports};
+pub use module_loader::{ImportedModule, LoadError, ModuleLoader};
 
 use directives::{extract_arg_keys, extract_site_when, extract_test_specs, extract_timer_spec};
 
@@ -78,7 +78,7 @@ pub fn resolve_with_origin(
 /// use `@log` quando `log` vem de um import.
 ///
 /// Se `imported_directives` está vazio, comporta-se como `resolve_with_origin`.
-pub fn resolve_with_imports(
+pub(crate) fn resolve_with_imports(
     module: &Module,
     origin: &str,
     imported_directives: DirectiveRegistry,

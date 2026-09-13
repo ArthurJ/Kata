@@ -6,7 +6,8 @@
 //!   `prefix.item` nas signatures/functions/actions.
 //! - `WholeModuleAliased { alias }`: mesmo que WholeModule mas com prefixo alias.
 
-use crate::{ImportKind, ImportedModule, ResolvedModule};
+use crate::module_loader::ImportKind;
+use crate::{ImportedModule, ResolvedModule};
 
 /// Mergeia módulos importados no ResolvedModule (prelude + user já mergeados).
 ///

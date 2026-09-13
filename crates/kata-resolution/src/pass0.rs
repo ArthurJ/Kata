@@ -52,7 +52,7 @@ fn extract_lazy_type_param(base_ty: &Ty) -> Option<String> {
 /// `expand_family_signatures` expande cegamente para TODAS as instâncias
 /// (Int, Float, Rational), criando overloads espúrias que causam
 /// `AmbiguousDispatch` no call-site.
-pub fn instantiate_family_for_concrete(
+pub(crate) fn instantiate_family_for_concrete(
     ty: &Ty,
     concrete_type: &str,
     struct_reg: &StructRegistry,

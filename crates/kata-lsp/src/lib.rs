@@ -5,8 +5,6 @@ pub mod server;
 mod state;
 mod unicode;
 
-pub use server::KataLsp;
-
 /// Runs the LSP server on stdio. Used by the `kata lsp` subcommand
 /// and by the standalone `kata-lsp` binary.
 pub fn run_stdio() {
@@ -15,7 +13,7 @@ pub fn run_stdio() {
 
     let rt = tokio::runtime::Runtime::new().expect("failed to create Tokio runtime");
     rt.block_on(async {
-        let (service, socket) = tower_lsp::LspService::new(KataLsp::new);
+        let (service, socket) = tower_lsp::LspService::new(server::KataLsp::new);
         tower_lsp::Server::new(stdin, stdout, socket)
             .serve(service)
             .await;
