@@ -40,21 +40,28 @@ pub(crate) fn infer_transmission_op(
     // Inferir o source (lado de onde o dado vem).
     let typed_source = infer_expr_hinted(&source.node, &source.span, env, ctx, false, None)?;
 
-    // Despachar pelo tipo do source: Sender → send, Receiver → recv.
-    // Clonar o tipo interno antes de mover typed_source (evita borrow conflict).
+    // Despachar pelo tipo do source.
+    //
+    // Sender como source é ERRO: a semântica do TransmissionOp diz que
+    // source é "de onde o dado vem". Sender é endpoint de escrita — dado
+    // vai PARA o Sender, nunca sai DELE. Os sends legítimos (tx <! 42,
+    // 42 !> tx) têm source como valor concreto e caem no braço `other`,
+    // que infere o dest como Sender e chama infer_send_flipped.
+    //
+    // Receiver como source é RECV: Receiver é endpoint de leitura — dado
+    // sai do Receiver. Isto é legítimo (rx !> a, a <! rx).
     match &typed_source.ty {
-        Ty::Sender(inner) => {
-            let elem_ty = (**inner).clone();
-            infer_send(
-                typed_source,
-                Box::new(elem_ty),
-                dest,
-                direction,
-                span,
-                env,
-                ctx,
-                tail_pos,
-            )
+        Ty::Sender(_) => {
+            // Sender como source = tentativa de recv de um endpoint de
+            // escrita. Erro de tipo, não UnboundName.
+            Err(MiddleError::TypeMismatch {
+                expected: "Receiver::T (endpoint de leitura) como source de !>".into(),
+                found: format!(
+                    "Sender::T — Sender é endpoint de escrita, não pode ser source de dados. \
+                     Para enviar, use `tx <! valor` ou `valor !> tx`"
+                ),
+                span: source.span.into(),
+            })
         }
         Ty::Receiver(inner) => {
             let inner_ty = (**inner).clone();
