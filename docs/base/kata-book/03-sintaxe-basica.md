@@ -110,13 +110,13 @@ True
 
 ## Converter Text em número
 
-As actions `int!` e `float!` convertem `Text` para `Int` e `Float` respectivamente. Como são actions (podem falhar se o texto não é um número válido), retornam `Result`. O operador `|` desempacota o `Ok` e fornece um fallback se falhar (visto no capítulo 2):
+As funções `int` e `float` convertem `Text` para `Int` e `Float` respectivamente. Como podem falhar (o texto pode não ser um número válido), retornam `Result` — a falha é um valor, não um efeito colateral. O operador `|` desempacota o `Ok` e fornece um fallback se falhar (visto no capítulo 2):
 
 ```kata
-echo!(int!("42") | 0)
-echo!(int!("0xFF") | 0)
-echo!(float!("3.14") | 0.0)
-echo!(+ (float!("1.5") | 0.0) (float!("2.5") | 0.0))
+echo!(int("42") | 0)
+echo!(int("0xFF") | 0)
+echo!(float("3.14") | 0.0)
+echo!(+ (float("1.5") | 0.0) (float("2.5") | 0.0))
 ```
 
 ```
@@ -126,7 +126,7 @@ echo!(+ (float!("1.5") | 0.0) (float!("2.5") | 0.0))
 4.0
 ```
 
-`int!` suporta decimal, hexadecimal (`0x`), octal (`0o`), binário (`0b`) e underscores (`1_000`). `float!` suporta notação decimal e exponencial (`1e10`).
+`int` e `float` são funções puras — não usam `!` porque não têm efeitos colaterais. A falha é representada como `Result::(Int, Text)`, não como action. `int` suporta decimal, hexadecimal (`0x`), octal (`0o`), binário (`0b`) e underscores (`1_000`). `float` suporta notação decimal e exponencial (`1e10`).
 
 ## Concatenar texto
 

@@ -54,12 +54,12 @@ Por que `input!` retorna `Text` direto, sem `Result`? Porque `input!` é açúca
 
 ## Convertendo texto em número
 
-O que lemos do stdin é `Text`. Para comparar com o número aleatório, precisamos converter para `Int`. Mas o usuário pode digitar qualquer coisa — não apenas números. `int!` retorna `Result`:
+O que lemos do stdin é `Text`. Para comparar com o número aleatório, precisamos converter para `Int`. Mas o usuário pode digitar qualquer coisa — não apenas números. `int` retorna `Result`:
 
 ```kata
 action main
     let linha := input!("Palpite: ")
-    let r := int!(linha)
+    let r := int(linha)
     match r
         Ok n: echo!(n)
         Err e: echo!("não é um número")
@@ -82,9 +82,9 @@ echo "abc" | kata run jogo.kata
 Palpite: não é um número
 ```
 
-- `int!(linha)` tenta converter `Text` para `Int`. Retorna `Result::(Int, Text)` — `Ok(n)` se a string é um número válido, `Err("número inválido")` se não é.
+- `int(linha)` tenta converter `Text` para `Int`. Retorna `Result::(Int, Text)` — `Ok(n)` se a string é um número válido, `Err("número inválido")` se não é.
 - `match r` examina o `Result`. Se for `Ok n`, o número está em `n`. Se for `Err e`, o erro está em `e`.
-- `int!` é uma action porque pode falhar — o usuário pode digitar qualquer coisa. O `!` sinaliza isso: "esta operação pode dar errado, trate o erro".
+- `int` é uma função pura — não tem efeitos colaterais. A falha é representada como valor (`Result`), não como efeito. O usuário pode digitar qualquer coisa; `int` devolve `Ok(n)` ou `Err("número inválido")`, e você decide o que fazer com `match` ou `|`.
 
 Por que tanto `Result`? Porque operações que podem falhar não deveriam crashar o programa. O usuário digitou "abc"? Tudo bem — você lida com o erro explicitamente via `match`. O capítulo 6 cobre `match` em detalhe.
 
@@ -95,7 +95,7 @@ O `match` acima é verboso quando você só quer um valor default. Kata tem o op
 ```kata
 action main
     let linha := input!("Palpite: ")
-    let n := int!(linha) | 0
+    let n := int(linha) | 0
     echo!(n)
 main!()
 ```
@@ -116,7 +116,7 @@ echo "abc" | kata run jogo.kata
 Palpite: 0
 ```
 
-`int!(linha) | 0` significa: "tente converter `linha` para Int; se falhar, use `0`". Muito mais direto que um `match` completo quando você só precisa de um fallback.
+`int(linha) | 0` significa: "tente converter `linha` para Int; se falhar, use `0`". Muito mais direto que um `match` completo quando você só precisa de um fallback.
 
 ## Primeira versão do jogo: simples
 
@@ -125,7 +125,7 @@ Já temos todas as peças para um jogo funcional. Kata não tem `if` — condici
 ```kata
 action jogar (alvo::Int) => Unit
     loop
-        let palpite := int!(input!("Palpite: ")) | 0
+        let palpite := int(input!("Palpite: ")) | 0
         match (> palpite alvo)
             True: echo!("muito alto")
             False:
@@ -153,7 +153,7 @@ Vamos destrinchar:
 
 - `action jogar (alvo::Int) => Unit` define uma action chamada `jogar` que recebe um `Int` e retorna `Unit` (nada).
 - `loop` é um laço infinito. `break` sai dele.
-- `int!(input!("Palpite: ")) | 0` compõe três operações: lê o input, converte para Int, e se falhar usa `0`. Tudo numa linha — sem `match` aninhado para o `Result`.
+- `int(input!("Palpite: ")) | 0` compõe três operações: lê o input, converte para Int, e se falhar usa `0`. Tudo numa linha — sem `match` aninhado para o `Result`.
 - `> palpite alvo` retorna `True` ou `False`. O `match` verifica qual e executa o braço correspondente. Se não for alto demais, verificamos se é baixo demais. Se não for nenhum dos dois, é porque acertou.
 
 O custo: se o usuário digita "abc", o palpite vira `0` silenciosamente. O jogo diz "muito baixo" em vez de "não é um número". Para um jogo rápido, tudo bem. Para algo robusto, você quer tratar o erro explicitamente — voltaremos a isso.
@@ -166,7 +166,7 @@ A versão com `|` é simples, mas engole erros — "abc" vira `0` e o jogo diz "
 action jogar (alvo::Int) => Unit
     loop
         let linha := input!("Palpite: ")
-        let r := int!(linha)
+        let r := int(linha)
         match r
             Ok palpite:
                 match (> palpite alvo)
@@ -222,7 +222,7 @@ Agora a parte que envolve I/O. Ler o input e converter para Int pode falhar — 
 ```kata
 action ler_palpite => Int
     loop
-        match int!(input!("Palpite: "))
+        match int(input!("Palpite: "))
             Ok n: return n
             Err e:
                 echo!("não é um número")
@@ -266,7 +266,7 @@ O código completo:
 ```kata
 action ler_palpite => Int
     loop
-        match int!(input!("Palpite: "))
+        match int(input!("Palpite: "))
             Ok n: return n
             Err e:
                 echo!("não é um número")
@@ -319,8 +319,8 @@ A versão aninhada (segunda) não é "errada" — é o ponto de chegada natural 
 
 Você construiu um jogo interativo completo. No caminho, tocou em:
 
-- **Actions** — funções impuras com `!` (`rand_int!`, `input!`, `int!`, `echo!`)
-- **Funções puras** — sem `!`, sem efeitos colaterais (`comparar`)
+- **Actions** — funções impuras com `!` (`rand_int!`, `input!`, `echo!`)
+- **Funções puras** — sem `!`, sem efeitos colaterais (`comparar`, `int`, `float`)
 - **`Result`** — success ou erro, sempre via `match`
 - **`Optional`** — presença ou ausência de valor (`Some` / `None`)
 - **`|`** — operador de fallback: desempacota `Ok`, usa o lado direito se `Err`
