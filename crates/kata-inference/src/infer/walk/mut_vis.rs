@@ -98,6 +98,13 @@ where
                 for_each_subexpr_mut(&mut el.node, f);
             }
         }
+        TypedExprKind::TensorLit { rows, .. } => {
+            for r in rows.iter_mut() {
+                for el in r {
+                    for_each_subexpr_mut(&mut el.node, f);
+                }
+            }
+        }
         TypedExprKind::RangeLit {
             start, step, end, ..
         } => {
@@ -209,6 +216,9 @@ where
         }
         TypedExprKind::ConstantBinding { value, .. } => {
             for_each_subexpr_mut(&mut value.node, f);
+        }
+        TypedExprKind::TensorIndex { expr, .. } => {
+            for_each_subexpr_mut(&mut expr.node, f);
         }
         TypedExprKind::HeapSnapshot { .. }
         | TypedExprKind::ChannelCreate { .. }

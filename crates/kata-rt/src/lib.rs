@@ -37,6 +37,9 @@ pub(crate) mod slice;
 pub(crate) mod snapshot;
 pub(crate) mod socket;
 pub(crate) mod sum;
+pub mod tensor;
+#[cfg(test)]
+mod tensor_tests;
 pub(crate) mod text;
 pub(crate) mod timer;
 

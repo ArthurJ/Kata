@@ -28,6 +28,7 @@ fn concrete_type_name(ty: &Ty) -> Option<String> {
         Ty::Range(_) => Some("Range".into()),
         Ty::Dict(_, _) => Some("Dict".into()),
         Ty::Set(_) => Some("Set".into()),
+        Ty::Tensor(_) => Some("Tensor".into()),
         Ty::Prim(kata_core::ty::PrimTy::Int) => Some("Int".into()),
         Ty::Prim(kata_core::ty::PrimTy::Float) => Some("Float".into()),
         Ty::Prim(kata_core::ty::PrimTy::Text) => Some("Text".into()),
@@ -554,6 +555,131 @@ pub(crate) fn infer_in(
         kind: TypedExprKind::In {
             item: Box::new(Spanned::new(typed_item, item.span)),
             collection: Box::new(Spanned::new(typed_collection, collection.span)),
+        },
+    })
+}
+
+// ── TensorLit ─────────────────────────────────────────────────────────
+
+/// `[1 2 3; 4 5 6]` → Ty::Tensor(elem_ty).
+///
+/// Inferência:
+/// 1. Recursivamente infere cada elemento de cada linha.
+/// 2. Unifica o tipo de todos os elementos → `elem_ty`.
+/// 3. Valida que `elem_ty` implementa NUM.
+/// 4. Valida shape consistency: todas as rows do mesmo nível têm o
+///    mesmo número de colunas (verificado em compile-time para literais).
+/// 5. Para N-D (rows contendo TensorLit aninhado), valida que todas as
+///    rows têm o mesmo shape aninhado.
+///
+/// Retorna `TypedExprKind::TensorLit { rows, trailing_semi, elem_ty }`.
+pub(crate) fn infer_tensor_lit(
+    rows: &[Vec<Spanned<Expr>>],
+    trailing_semi: bool,
+    span: &Span,
+    env: &mut TypeEnv,
+    ctx: &InferCtx,
+    tail_pos: bool,
+) -> InferResult<TypedExpr> {
+    if rows.is_empty() {
+        return Err(MiddleError::TypeMismatch {
+            expected: "tensor com pelo menos uma linha".into(),
+            found: "tensor vazio".into(),
+            span: (*span).into(),
+        });
+    }
+
+    let mut typed_rows: Vec<Vec<Spanned<TypedExpr>>> = Vec::with_capacity(rows.len());
+    let mut elem_ty: Option<Ty> = None;
+    let mut row_width: Option<usize> = None;
+
+    for (row_idx, row) in rows.iter().enumerate() {
+        if row.is_empty() {
+            return Err(MiddleError::TypeMismatch {
+                expected: "linha com pelo menos um elemento".into(),
+                found: format!("linha {} vazia", row_idx),
+                span: (*span).into(),
+            });
+        }
+
+        let mut typed_row = Vec::with_capacity(row.len());
+        for elem in row {
+            let typed = infer_expr(&elem.node, &elem.span, env, ctx, false)?;
+
+            // Unifica tipo do elemento
+            match &elem_ty {
+                None => elem_ty = Some(typed.ty.clone()),
+                Some(existing) => {
+                    if &typed.ty != existing {
+                        return Err(MiddleError::TypeMismatch {
+                            expected: format!("{existing}"),
+                            found: format!("{}", typed.ty),
+                            span: elem.span.into(),
+                        });
+                    }
+                }
+            }
+            typed_row.push(Spanned::new(typed, elem.span));
+        }
+
+        // Valida que todas as rows têm o mesmo número de colunas
+        let width = typed_row.len();
+        match &row_width {
+            None => row_width = Some(width),
+            Some(expected) => {
+                if &width != expected {
+                    return Err(MiddleError::TypeMismatch {
+                        expected: format!("{} colunas (como na primeira linha)", expected),
+                        found: format!("{} colunas na linha {}", width, row_idx + 1),
+                        span: (*span).into(),
+                    });
+                }
+            }
+        }
+
+        typed_rows.push(typed_row);
+    }
+
+    let elem_ty = elem_ty.expect("tensor com pelo menos uma linha tem elem_ty");
+
+    // Valida que elem_ty implementa NUM
+    let type_name = concrete_type_name(&elem_ty).ok_or_else(|| MiddleError::TypeMismatch {
+        expected: "tipo que implementa NUM".into(),
+        found: format!("{elem_ty}"),
+        span: (*span).into(),
+    })?;
+    if !ctx
+        .interface_registry
+        .type_implements(&type_name, "NUM")
+    {
+        return Err(MiddleError::TypeMismatch {
+            expected: format!("tipo que implementa NUM ({type_name} não implementa)"),
+            found: format!("{elem_ty}"),
+            span: (*span).into(),
+        });
+    }
+
+    let tensor_ty = Ty::Tensor(Box::new(elem_ty.clone()));
+
+    let escape = if ctx.ret_ty.is_some() {
+        if tail_pos {
+            EscapeTarget::Caller
+        } else {
+            EscapeTarget::Local
+        }
+    } else {
+        EscapeTarget::Caller
+    };
+
+    Ok(TypedExpr {
+        span: *span,
+        ty: tensor_ty,
+        tail_pos,
+        escape,
+        kind: TypedExprKind::TensorLit {
+            rows: typed_rows,
+            trailing_semi,
+            elem_ty,
         },
     })
 }

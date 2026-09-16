@@ -445,6 +445,13 @@ fn rewrite_typed_expr(expr_span: &mut Spanned<TypedExpr>, ctx: &MonoCtx, acc: &m
                 rewrite_typed_expr(el, ctx, acc);
             }
         }
+        TypedExprKind::TensorLit { rows, .. } => {
+            for r in rows.iter_mut() {
+                for el in r {
+                    rewrite_typed_expr(el, ctx, acc);
+                }
+            }
+        }
         TypedExprKind::RangeLit {
             start, step, end, ..
         } => {
@@ -569,6 +576,10 @@ fn rewrite_typed_expr(expr_span: &mut Spanned<TypedExpr>, ctx: &MonoCtx, acc: &m
         // ConstantBinding — recursão no value.
         TypedExprKind::ConstantBinding { value, .. } => {
             rewrite_typed_expr(value, ctx, acc);
+        }
+        // TensorIndex — recursão no expr (tensor receptor).
+        TypedExprKind::TensorIndex { expr, .. } => {
+            rewrite_typed_expr(expr, ctx, acc);
         }
     }
 

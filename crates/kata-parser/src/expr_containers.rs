@@ -90,9 +90,26 @@ impl Parser {
             ));
         }
 
-        // Caso contrário, é ListLit — coleta elementos restantes
+        // Se vê `;` imediatamente após first, é TensorLit: `[1; 2; 3]`.
+        if matches!(self.peek(), Token::Semicolon) {
+            return self.parse_tensor_rest(vec![first], start);
+        }
+
+        // Caso contrário, coleta elementos restantes.
+        // Pode descobrir `;` no meio (TensorLit) ou vírgulas (equivalentes a espaço).
         let mut elements = vec![first];
-        while !matches!(self.peek(), Token::RBracket) {
+        loop {
+            // Vírgula = separador equivalente a espaço dentro de `[]`
+            while matches!(self.peek(), Token::Comma) {
+                self.advance();
+            }
+            if matches!(self.peek(), Token::RBracket) {
+                break;
+            }
+            // `;` no meio da coleta → é TensorLit, não ListLit
+            if matches!(self.peek(), Token::Semicolon) {
+                return self.parse_tensor_rest(elements, start);
+            }
             if matches!(self.peek(), Token::Eof) {
                 return Err(self.error("`]` para fechar lista"));
             }
@@ -101,6 +118,63 @@ impl Parser {
         self.expect(&Token::RBracket, "`]`")?;
         let span = start.cover(self.tokens[self.pos - 1].span);
         Ok(Spanned::new(Expr::ListLit { elements }, span))
+    }
+
+    /// Parseia o resto de um TensorLit após a primeira linha (ou primeiro elemento).
+    /// `first_row` contém os elementos já parseados da primeira linha.
+    /// Está posicionado em `;` (ou em `]` se só uma linha foi dada sem `;`).
+    ///
+    /// `;` separa linhas. `;` terminal (`[1 2 3;]`) marca `trailing_semi`.
+    /// N-D via aninhamento: elementos que são `[` são parseados recursivamente.
+    /// Vírgulas dentro de `[]` são equivalentes a espaço.
+    pub(crate) fn parse_tensor_rest(
+        &mut self,
+        first_row: Vec<Spanned<Expr>>,
+        bracket_span: kata_ast::Span,
+    ) -> Result<Spanned<Expr>, FrontendError> {
+        let mut rows = vec![first_row];
+        let mut trailing_semi = false;
+
+        // Linhas subsequentes separadas por `;`
+        while matches!(self.peek(), Token::Semicolon) {
+            self.advance(); // consome `;`
+
+            // `;` terminal: `[1 2 3;]` → trailing_semi = true
+            if matches!(self.peek(), Token::RBracket) {
+                trailing_semi = true;
+                break;
+            }
+
+            // Coleta elementos desta linha até próximo `;` ou `]`
+            let mut row = Vec::new();
+            loop {
+                // Vírgula = separador equivalente a espaço dentro de `[]`
+                while matches!(self.peek(), Token::Comma) {
+                    self.advance();
+                }
+                if matches!(self.peek(), Token::Semicolon | Token::RBracket) {
+                    break;
+                }
+                if matches!(self.peek(), Token::Eof) {
+                    return Err(self.error("`]` para fechar tensor"));
+                }
+                row.push(parse_expr(self)?);
+            }
+            if row.is_empty() {
+                return Err(self.error("elemento após `;` em tensor"));
+            }
+            rows.push(row);
+        }
+
+        self.expect(&Token::RBracket, "`]` para fechar tensor")?;
+        let span = bracket_span.cover(self.tokens[self.pos - 1].span);
+        Ok(Spanned::new(
+            Expr::TensorLit {
+                rows,
+                trailing_semi,
+            },
+            span,
+        ))
     }
 
     /// Parseia o resto de um RangeLit após `start ..` ou `start ..=`.

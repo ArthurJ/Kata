@@ -269,6 +269,16 @@ pub(crate) fn desugar_holes(expr: &Spanned<Expr>) -> Spanned<Expr> {
             },
             expr.span,
         ),
+        Expr::TensorLit { rows, trailing_semi } => Spanned::new(
+            Expr::TensorLit {
+                rows: rows
+                    .iter()
+                    .map(|r| r.iter().map(desugar_holes).collect())
+                    .collect(),
+                trailing_semi: *trailing_semi,
+            },
+            expr.span,
+        ),
         Expr::RangeLit {
             start,
             step,

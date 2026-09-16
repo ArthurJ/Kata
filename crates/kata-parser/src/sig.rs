@@ -353,6 +353,10 @@ fn expr_uses_name(expr: &Spanned<Expr>, name: &str) -> bool {
             .iter()
             .any(|(k, v)| expr_uses_name(k, name) || expr_uses_name(v, name)),
         Expr::SetLit { elements } => elements.iter().any(|e| expr_uses_name(e, name)),
+        Expr::TensorLit { rows, .. } => rows
+            .iter()
+            .flat_map(|r| r.iter())
+            .any(|e| expr_uses_name(e, name)),
         Expr::RangeLit {
             start, step, end, ..
         } => expr_uses_name(start, name) || expr_uses_name(step, name) || expr_uses_name(end, name),

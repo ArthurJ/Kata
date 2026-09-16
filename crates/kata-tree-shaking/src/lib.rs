@@ -356,6 +356,13 @@ fn collect_refs(
                 collect_refs(&el.node, reached_fns, reached_actions, fn_names);
             }
         }
+        TypedExprKind::TensorLit { rows, .. } => {
+            for r in rows {
+                for el in r {
+                    collect_refs(&el.node, reached_fns, reached_actions, fn_names);
+                }
+            }
+        }
         TypedExprKind::DictLit { entries, .. } => {
             for (key, val) in entries {
                 collect_refs(&key.node, reached_fns, reached_actions, fn_names);
@@ -532,6 +539,10 @@ fn collect_refs(
         // ConstantBinding — recursão no value.
         TypedExprKind::ConstantBinding { value, .. } => {
             collect_refs(&value.node, reached_fns, reached_actions, fn_names);
+        }
+        // TensorIndex — recursão no expr (tensor receptor).
+        TypedExprKind::TensorIndex { expr, .. } => {
+            collect_refs(&expr.node, reached_fns, reached_actions, fn_names);
         }
     }
 }

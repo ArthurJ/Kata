@@ -281,6 +281,7 @@ fn contains_channel_type(ty: &Ty) -> bool {
         Ty::List(inner) | Ty::Array(inner) | Ty::Range(inner) | Ty::Set(inner) => {
             contains_channel_type(inner)
         }
+        Ty::Tensor(inner) => contains_channel_type(inner),
         Ty::Dict(k, v) => contains_channel_type(k) || contains_channel_type(v),
         Ty::Function(params, ret) => {
             params.iter().any(contains_channel_type) || contains_channel_type(ret)

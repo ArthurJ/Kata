@@ -117,6 +117,10 @@ impl Ty {
                 name: "Set".into(),
                 fields: Vec::new(),
             },
+            Ty::Tensor(_) => TypeShape::Struct {
+                name: "Tensor".into(),
+                fields: Vec::new(),
+            },
             // Sender/Receiver/ReceiverFactory: handles de canal — heap types
             // (ponteiro na arena). Mapeados como Struct para reflexão runtime.
             Ty::Sender(_) => TypeShape::Struct {

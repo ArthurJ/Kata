@@ -63,6 +63,7 @@ fn substitute_self(ty: &Ty, replacement: &Ty) -> Ty {
             Box::new(substitute_self(v, replacement)),
         ),
         Ty::Set(elem) => Ty::Set(Box::new(substitute_self(elem, replacement))),
+        Ty::Tensor(elem) => Ty::Tensor(Box::new(substitute_self(elem, replacement))),
         Ty::Sender(elem) => Ty::Sender(Box::new(substitute_self(elem, replacement))),
         Ty::Receiver(elem) => Ty::Receiver(Box::new(substitute_self(elem, replacement))),
         Ty::ReceiverFactory(elem) => {

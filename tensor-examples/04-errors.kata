@@ -1,0 +1,39 @@
+# Tensor — tratamento de falha e ergonomia
+# Shape incompatível gera Err. Demonstra |, match, e _+/_*.
+# Subtração element-wise via composição: _+ d (scale e -1).
+
+# Action que retorna Result — pode usar ? para propagar
+action somar_shapes (a::Tensor::Int, b::Tensor::Int) => Result::(Tensor::Int, Text)
+    let c := + a b ?
+    Result::Ok c
+
+action main
+    let a := [1 2; 3 4]          # 2×2
+    let b := [1 2 3; 4 5 6]      # 2×3 — shape diferente de a
+
+    echo!("--- propagação com ? (action que retorna Result) ---")
+    match somar_shapes a b
+        Result::Ok r: echo!(r)
+        Result::Err msg: echo!("shapes incompatíveis")
+
+    echo!("--- fallback com |: shapes não casam → matriz de zeros ---")
+    let z := [0 0; 0 0]
+    let c2 := + a b | z
+    echo!(c2)
+
+    echo!("--- match explícito no Result ---")
+    match + a b
+        Result::Ok r: echo!(r)
+        Result::Err msg: echo!("shapes incompatíveis")
+
+    echo!("--- variante pânica: mesmo shape → ok ---")
+    let c3 := _+ a a
+    echo!(c3)
+
+    echo!("--- subtração element-wise: _+ d (scale e -1) ---")
+    let d := [0 1; 2 3]
+    let e := [1 1; 1 1]
+    let diff := _+ d (scale e -1)
+    echo!(diff)
+
+main!()

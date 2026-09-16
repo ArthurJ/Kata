@@ -52,7 +52,10 @@ refere-se a, permitindo remover overloads não-usadas antes do codegen.
 
 ## Futuro
 
-- **Tensor/SIMD** — design a definir.
+- **Tensor/SIMD** — design pronto (PRD-tensor-size-params.md). Size parameters
+  no type system + Z3 para shapes parcialmente conhecidos + refined pair
+  (DotCompatible) na fronteira. Não exige novo runtime — trabalho de compilador
+  (size params + Ty::Generic("Tensor") + parser + codegen) + FFI em kata-rt.
 - **Sistema de supressão de diagnóstico** — braço de match redundante
   agora é erro (decisão 8 do PRD-exaustividade-aninhada); `otherwise`
   inútil é isento, mas patterns não-otherwise redundantes com intenção

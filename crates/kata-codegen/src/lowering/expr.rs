@@ -629,12 +629,13 @@ pub(crate) fn lower_expr(
         | TypedExprKind::ForIn { .. }
         | TypedExprKind::In { .. }
         | TypedExprKind::DictLit { .. }
-        | TypedExprKind::SetLit { .. } => {
+        | TypedExprKind::SetLit { .. }
+        | TypedExprKind::TensorLit { .. } => {
             if let Some(val) = lower_collections_literal(expr, ctx)? {
                 return Ok(val);
             }
             unreachable!(
-                "lower_collections_literal should handle ListLit/ArrayLit/RangeLit/ForIn/In/DictLit/SetLit"
+                "lower_collections_literal should handle ListLit/ArrayLit/RangeLit/ForIn/In/DictLit/SetLit/TensorLit"
             )
         }
 
@@ -814,5 +815,88 @@ pub(crate) fn lower_expr(
         // ConstantBinding — não deveria chegar ao codegen (comptime pass
         // avalia e substitui). Fallback defensivo: lowerar o value.
         TypedExprKind::ConstantBinding { value, .. } => lower_expr(&value.node, ctx),
+
+        // ── TensorIndex — indexação N-D em Tensor ──
+        TypedExprKind::TensorIndex {
+            expr: tensor_expr,
+            is_scalar,
+            int_indices,
+            starts,
+            ends,
+            collapse_mask,
+            n_axes,
+            ..
+        } => {
+            use cranelift_codegen::ir::MemFlagsData;
+
+            // Avalia o receptor (ponteiro do tensor)
+            let tensor_ptr = lower_expr(&tensor_expr.node, ctx)?;
+
+            let rt_val = ctx.rt.unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
+            let arena_handle = ctx.builder.ins().iconst(I64, 0); // arena local
+            let alloc_ref = ctx.ffi_refs.get("kata_rt_arena_alloc").ok_or_else(|| {
+                super::CodegenError::FfiSymbolNotFound {
+                    symbol: "kata_rt_arena_alloc".into(),
+                }
+            })?;
+
+            if *is_scalar {
+                // Caso escalar: chama kata_rt_tensor_at_nd(ptr, indices_ptr, n)
+                let n = *n_axes;
+                let buf_size = ctx.builder.ins().iconst(I64, n * 8);
+                let alloc_call = ctx.builder.ins().call(*alloc_ref, &[rt_val, arena_handle, buf_size]);
+                let indices_ptr = ctx.builder.inst_results(alloc_call)[0];
+
+                // Store cada índice (SMI-tagged) no array
+                let flags = MemFlagsData::new();
+                for (i, &idx) in int_indices.iter().enumerate() {
+                    let smi_val = ctx.builder.ins().iconst(I64, encode_smi(idx));
+                    let offset = (i as i32) * 8;
+                    ctx.builder.ins().store(flags, smi_val, indices_ptr, offset);
+                }
+
+                let n_val = ctx.builder.ins().iconst(I64, n);
+                let ffi_ref = ctx.ffi_refs.get("kata_rt_tensor_at_nd").ok_or_else(|| {
+                    super::CodegenError::FfiSymbolNotFound {
+                        symbol: "kata_rt_tensor_at_nd".into(),
+                    }
+                })?;
+                let call = ctx.builder.ins().call(*ffi_ref, &[tensor_ptr, indices_ptr, n_val]);
+                Ok(ctx.builder.inst_results(call)[0])
+            } else {
+                // Caso sub-tensor: chama kata_rt_tensor_sub(ptr, starts, ends, n, mask)
+                let n = *n_axes;
+                let buf_size = ctx.builder.ins().iconst(I64, n * 8);
+
+                // Aloca starts array
+                let starts_alloc = ctx.builder.ins().call(*alloc_ref, &[rt_val, arena_handle, buf_size]);
+                let starts_ptr = ctx.builder.inst_results(starts_alloc)[0];
+
+                // Aloca ends array
+                let ends_alloc = ctx.builder.ins().call(*alloc_ref, &[rt_val, arena_handle, buf_size]);
+                let ends_ptr = ctx.builder.inst_results(ends_alloc)[0];
+
+                // Store starts e ends (SMI-tagged)
+                let flags = MemFlagsData::new();
+                for (i, &s) in starts.iter().enumerate() {
+                    let smi_val = ctx.builder.ins().iconst(I64, encode_smi(s));
+                    ctx.builder.ins().store(flags, smi_val, starts_ptr, (i as i32) * 8);
+                }
+                for (i, &e) in ends.iter().enumerate() {
+                    let smi_val = ctx.builder.ins().iconst(I64, encode_smi(e));
+                    ctx.builder.ins().store(flags, smi_val, ends_ptr, (i as i32) * 8);
+                }
+
+                let n_val = ctx.builder.ins().iconst(I64, n);
+                let mask_val = ctx.builder.ins().iconst(I64, *collapse_mask);
+                let ffi_ref = ctx.ffi_refs.get("kata_rt_tensor_sub").ok_or_else(|| {
+                    super::CodegenError::FfiSymbolNotFound {
+                        symbol: "kata_rt_tensor_sub".into(),
+                    }
+                })?;
+                let call = ctx.builder.ins().call(*ffi_ref, &[tensor_ptr, starts_ptr, ends_ptr, n_val, mask_val]);
+                Ok(ctx.builder.inst_results(call)[0])
+            }
+        }
     }
 }

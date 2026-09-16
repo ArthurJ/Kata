@@ -49,6 +49,7 @@ cranelift-object = "0.133"
 
 # ── Runtime ──────────────────────────────────────────────
 bumpalo = "3"
+matrixmultiply = "0.3"
 num-bigint = "0.4"
 num-rational = "0.4"
 num-traits = "0.2"

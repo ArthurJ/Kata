@@ -105,6 +105,7 @@ fn children<'a>(
         | ChannelCreate { .. }
         | HeapSnapshot { .. } => Box::new(std::iter::empty()),
         ConstantBinding { value, .. } => Box::new(std::iter::once(value.as_ref())),
+        TensorIndex { expr, .. } => Box::new(std::iter::once(expr.as_ref())),
 
         // Um filho Box<Spanned<TypedExpr>>
         Grouping { inner } => Box::new(std::iter::once(inner.as_ref())),
@@ -138,6 +139,7 @@ fn children<'a>(
             values: elements, ..
         }
         | SetLit { elements, .. } => Box::new(elements.iter()),
+        | TensorLit { rows, .. } => Box::new(rows.iter().flat_map(|r| r.iter())),
 
         // FieldAccess / IndexAccess
         FieldAccess { expr, .. } | IndexAccess { expr, .. } => {

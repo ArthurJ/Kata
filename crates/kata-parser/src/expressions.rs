@@ -1,6 +1,6 @@
 //! Expressions — atoms, application, let, paren, type ascription.
 
-use kata_ast::{DotIndex, Expr, Spanned, Token};
+use kata_ast::{DotIndex, Expr, Spanned, TensorAxis, Token};
 use kata_diagnostics::FrontendError;
 
 use crate::Parser;
@@ -421,34 +421,128 @@ impl Parser {
                     DotIndex::Int(n)
                 }
                 // `t.(-1)` — índice negativo entre parênteses.
+                // `t.(0 1)` — indexação N-D em Tensor (DotIndex::Tuple).
                 // `(` após `.` pode conter:
-                //   - `[-] IntLit` → DotIndex::Int (indexing numérico)
+                //   - `[-] IntLit` → DotIndex::Int (indexing numérico, compat tupla)
+                //   - Múltiplos índices/Ranges/Wildcard → DotIndex::Tuple (N-D Tensor)
                 Token::LParen => {
                     self.advance(); // consume `(`
-                    match self.peek().clone() {
-                        Token::IntLit(text) => {
+
+                    // Recoleta todos os eixos dentro dos parênteses.
+                    // Cada eixo pode ser: Int, -Int, Range (start..end / start..=end),
+                    // ou _ (Wildcard). Separados por espaço ou vírgula.
+                    let mut axes: Vec<TensorAxis> = Vec::new();
+
+                    loop {
+                        // Pula vírgulas (separador equivalente a espaço)
+                        while matches!(self.peek(), Token::Comma) {
                             self.advance();
-                            let n: i64 = text
-                                .parse()
-                                .map_err(|_| self.error("inteiro dentro de `.()`"))?;
-                            self.expect(&Token::RParen, "`)`")?;
-                            DotIndex::Int(n)
                         }
-                        Token::Ident(s) if s == "-" => {
-                            self.advance();
-                            match self.peek().clone() {
-                                Token::IntLit(text) => {
-                                    self.advance();
-                                    let n = -(text
-                                        .parse::<i64>()
-                                        .map_err(|_| self.error("inteiro após `-`"))?);
-                                    self.expect(&Token::RParen, "`)`")?;
-                                    DotIndex::Int(n)
+
+                        match self.peek().clone() {
+                            Token::IntLit(text) => {
+                                self.advance();
+                                let n: i64 = text
+                                    .parse()
+                                    .map_err(|_| self.error("inteiro dentro de `.()`"))?;
+                                // Verifica se é seguido por `..` ou `..=` (range)
+                                match self.peek() {
+                                    Token::DotDot | Token::DotDotEq => {
+                                        let inclusive = matches!(self.peek(), Token::DotDotEq);
+                                        self.advance(); // consume .. or ..=
+                                        let end = self.parse_expr_atom()?;
+                                        axes.push(TensorAxis::Range {
+                                            start: Box::new(Spanned::new(
+                                                Expr::IntLit { text: n.to_string() },
+                                                self.peek_span(),
+                                            )),
+                                            end: Box::new(end),
+                                            inclusive,
+                                        });
+                                    }
+                                    _ => {
+                                        axes.push(TensorAxis::Int(n));
+                                    }
                                 }
-                                _ => return Err(self.error("inteiro após `-`")),
+                            }
+                            Token::Ident(s) if s == "-" => {
+                                self.advance();
+                                match self.peek().clone() {
+                                    Token::IntLit(text) => {
+                                        self.advance();
+                                        let n = -(text
+                                            .parse::<i64>()
+                                            .map_err(|_| self.error("inteiro após `-`"))?);
+                                        axes.push(TensorAxis::Int(n));
+                                    }
+                                    _ => return Err(self.error("inteiro após `-`")),
+                                }
+                            }
+                            Token::Ident(s) if s == "_" => {
+                                self.advance();
+                                axes.push(TensorAxis::Wildcard);
+                            }
+                            Token::DotDot | Token::DotDotEq => {
+                                // Range sem start explícito: `..end` — start implícito é 0
+                                let inclusive = matches!(self.peek(), Token::DotDotEq);
+                                self.advance(); // consume .. or ..=
+                                let end = self.parse_expr_atom()?;
+                                axes.push(TensorAxis::Range {
+                                    start: Box::new(Spanned::new(
+                                        Expr::IntLit { text: "0".to_string() },
+                                        self.peek_span(),
+                                    )),
+                                    end: Box::new(end),
+                                    inclusive,
+                                });
+                            }
+                            Token::RParen => break,
+                            _ => {
+                                // Tenta parsear como expressão (range com start variável)
+                                let start = self.parse_expr_atom()?;
+                                match self.peek() {
+                                    Token::DotDot | Token::DotDotEq => {
+                                        let inclusive = matches!(self.peek(), Token::DotDotEq);
+                                        self.advance();
+                                        let end = self.parse_expr_atom()?;
+                                        axes.push(TensorAxis::Range {
+                                            start: Box::new(start),
+                                            end: Box::new(end),
+                                            inclusive,
+                                        });
+                                    }
+                                    _ => return Err(self.error(
+                                        "esperado `..` ou `..=` após expressão em `.()`"
+                                    )),
+                                }
                             }
                         }
-                        _ => return Err(self.error("inteiro ou `-inteiro` dentro de `.()`")),
+
+                        // Verifica se há mais elementos (vírgula ou RParen)
+                        match self.peek() {
+                            Token::RParen => break,
+                            Token::Comma => continue,
+                            _ => {
+                                // Espaço separa elementos — continua se não for RParen
+                                // mas também para se encontrar RParen
+                                continue;
+                            }
+                        }
+                    }
+
+                    self.expect(&Token::RParen, "`)`")?;
+
+                    // Se há um único eixo Int, manter compatibilidade com DotIndex::Int
+                    // (permite `t.(-1)` em tuplas continuar funcionando).
+                    // Caso contrário, usar DotIndex::Tuple para N-D.
+                    if axes.len() == 1 {
+                        if let TensorAxis::Int(n) = axes[0] {
+                            DotIndex::Int(n)
+                        } else {
+                            DotIndex::Tuple(axes)
+                        }
+                    } else {
+                        DotIndex::Tuple(axes)
                     }
                 }
                 // `expr.[start..end]` — slice access (DotIndex::Range).

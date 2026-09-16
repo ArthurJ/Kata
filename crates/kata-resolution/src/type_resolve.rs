@@ -208,6 +208,13 @@ pub fn resolve_type_expr(
                         .expect("Set::(A) exige exatamente 1 param");
                     Ty::Set(Box::new(elem))
                 }
+                "Tensor" => {
+                    let elem = resolved_params
+                        .into_iter()
+                        .next()
+                        .expect("Tensor::(T) exige exatamente 1 param");
+                    Ty::Tensor(Box::new(elem))
+                }
                 // Tuple::(Int, Text) → Ty::Tuple([Int, Text]).
                 // Permite anotar tuplas em posições de tipo (ex: Sender::Tuple::(Int, Int)).
                 "Tuple" => Ty::Tuple(resolved_params),
@@ -362,7 +369,8 @@ pub fn collect_type_params(param_types: &[Ty], return_type: &Ty) -> Vec<String> 
                 }
             }
             // Coleções intrínsecas: recursar no tipo do elemento.
-            Ty::List(inner) | Ty::Array(inner) | Ty::Range(inner) | Ty::Set(inner) => {
+            Ty::List(inner) | Ty::Array(inner) | Ty::Range(inner) | Ty::Set(inner)
+            | Ty::Tensor(inner) => {
                 collect_into(inner, result);
             }
             Ty::Dict(key, val) => {

@@ -10,6 +10,7 @@ crate-type = ["staticlib", "rlib", "cdylib"]
 
 [dependencies]
 bumpalo.workspace = true
+matrixmultiply.workspace = true
 num-bigint.workspace = true
 num-rational.workspace = true
 num-traits.workspace = true

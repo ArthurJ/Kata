@@ -14,7 +14,7 @@ pub(crate) mod token;
 
 pub use expr::{
     ActionStmt, DotIndex, Expr, GuardClause, LambdaClause, MatchArm, Module, Pattern, ReadMode,
-    SelectArm, TransmissionDir, TypeExpr, WithBinding,
+    SelectArm, TensorAxis, TransmissionDir, TypeExpr, WithBinding,
 };
 pub use item::*;
 pub use span::{Span, Spanned};

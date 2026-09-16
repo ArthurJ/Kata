@@ -555,6 +555,17 @@ fn walk_expr(expr: Spanned<Expr>, ctx: &mut EmbedCtx) -> Spanned<Expr> {
             elements: elements.into_iter().map(|e| walk_expr(e, ctx)).collect(),
         },
 
+        Expr::TensorLit {
+            rows,
+            trailing_semi,
+        } => Expr::TensorLit {
+            rows: rows
+                .into_iter()
+                .map(|r| r.into_iter().map(|e| walk_expr(e, ctx)).collect())
+                .collect(),
+            trailing_semi,
+        },
+
         Expr::RangeLit {
             start,
             step,

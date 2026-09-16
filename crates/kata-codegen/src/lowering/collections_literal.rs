@@ -316,6 +316,99 @@ pub(crate) fn lower_collections_literal(
             Ok(Some(val))
         }
 
+        // ── TensorLit — aloca buffer de dados + chama kata_rt_tensor_new ──
+        TypedExprKind::TensorLit {
+            rows,
+            trailing_semi: _,
+            elem_ty,
+        } => {
+            // Flatten rows em uma lista de elementos.
+            // Para 2-D: rows[i][j] → flat[i * cols + j]
+            // Para N-D (rows contendo TensorLit): cada elemento é um sub-tensor.
+            //   Por ora, suportamos apenas 1-D e 2-D (elementos escalares).
+            let n_rows = rows.len() as i64;
+            let n_cols = if n_rows > 0 { rows[0].len() as i64 } else { 0 };
+            let n_elems = n_rows * n_cols;
+            let rank = if n_rows == 1 { 1 } else { 2 };
+
+            // Determina elem_type: 0 = Int, 1 = Float
+            let elem_type = match elem_ty {
+                Ty::Prim(kata_core::ty::PrimTy::Float) => 1i64,
+                _ => 0i64,
+            };
+
+            let arena_handle =
+                crate::lowering::escape_arena::arena_handle_for_escape(expr.escape, ctx);
+
+            // Aloca buffer de dados na arena: n_elems * 8 bytes
+            let alloc_ref = ctx.ffi_refs.get("kata_rt_arena_alloc").ok_or_else(|| {
+                super::CodegenError::FfiSymbolNotFound {
+                    symbol: "kata_rt_arena_alloc".into(),
+                }
+            })?;
+            let rt_val = ctx.rt.unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
+            let buf_size = ctx.builder.ins().iconst(I64, n_elems * 8);
+            let alloc_call = ctx
+                .builder
+                .ins()
+                .call(*alloc_ref, &[rt_val, arena_handle, buf_size]);
+            let data_ptr = ctx.builder.inst_results(alloc_call)[0];
+
+            // Store cada elemento no buffer
+            let flags = MemFlagsData::new();
+            for (i, row) in rows.iter().enumerate() {
+                for (j, elem) in row.iter().enumerate() {
+                    let flat_idx = (i * n_cols as usize + j) as i64;
+                    let val = lower_expr(&elem.node, ctx)?;
+                    // Bitcast F64→I64 se Float, senão usar valor SMI-tagged diretamente
+                    let val = {
+                        let val_ty = ctx.builder.func.dfg.value_type(val);
+                        if val_ty == cranelift_codegen::ir::types::F64 {
+                            ctx.builder.ins().bitcast(I64, MemFlagsData::new(), val)
+                        } else {
+                            val
+                        }
+                    };
+                    let offset = (flat_idx * 8) as i32;
+                    ctx.builder.ins().store(flags, val, data_ptr, offset);
+                }
+            }
+
+            // Aloca shape array na arena: rank * 8 bytes
+            let shape_size = ctx.builder.ins().iconst(I64, rank * 8);
+            let shape_alloc = ctx
+                .builder
+                .ins()
+                .call(*alloc_ref, &[rt_val, arena_handle, shape_size]);
+            let shape_ptr = ctx.builder.inst_results(shape_alloc)[0];
+
+            // Store shape values
+            if rank == 1 {
+                let dim0 = ctx.builder.ins().iconst(I64, n_cols);
+                ctx.builder.ins().store(flags, dim0, shape_ptr, 0);
+            } else {
+                let dim0 = ctx.builder.ins().iconst(I64, n_rows);
+                let dim1 = ctx.builder.ins().iconst(I64, n_cols);
+                ctx.builder.ins().store(flags, dim0, shape_ptr, 0);
+                ctx.builder.ins().store(flags, dim1, shape_ptr, 8);
+            }
+
+            // Chama kata_rt_tensor_new(data, rank, shape, elem_type)
+            let tensor_new_ref = ctx.ffi_refs.get("kata_rt_tensor_new").ok_or_else(|| {
+                super::CodegenError::FfiSymbolNotFound {
+                    symbol: "kata_rt_tensor_new".into(),
+                }
+            })?;
+            let rank_val = ctx.builder.ins().iconst(I64, rank);
+            let elem_type_val = ctx.builder.ins().iconst(I64, elem_type);
+            let tensor_call = ctx.builder.ins().call(
+                *tensor_new_ref,
+                &[data_ptr, rank_val, shape_ptr, elem_type_val],
+            );
+            let tensor_ptr = ctx.builder.inst_results(tensor_call)[0];
+            Ok(Some(tensor_ptr))
+        }
+
         _ => Ok(None),
     }
 }

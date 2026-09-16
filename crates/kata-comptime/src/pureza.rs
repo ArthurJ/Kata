@@ -168,6 +168,14 @@ fn check_purity_inner(expr: &TypedExpr) -> Result<(), ComptimeError> {
             }
             Ok(())
         }
+        TypedExprKind::TensorLit { rows, .. } => {
+            for r in rows {
+                for el in r {
+                    check_purity_inner(&el.node)?;
+                }
+            }
+            Ok(())
+        }
         TypedExprKind::RangeLit {
             start, step, end, ..
         } => {
@@ -225,5 +233,7 @@ fn check_purity_inner(expr: &TypedExpr) -> Result<(), ComptimeError> {
         }
         // ConstantBinding — verificar pureza do value.
         TypedExprKind::ConstantBinding { value, .. } => check_purity_inner(&value.node),
+        // TensorIndex — puro (apenas acesso de leitura ao tensor).
+        TypedExprKind::TensorIndex { expr, .. } => check_purity_inner(&expr.node),
     }
 }

@@ -1164,6 +1164,11 @@ pub(crate) fn infer_expr_hinted(
         Expr::SetLit { elements } => {
             return super::dict_set::infer_set_lit(elements, span, env, ctx, tail_pos);
         }
+        Expr::TensorLit { rows, trailing_semi } => {
+            return super::collections::infer_tensor_lit(
+                rows, *trailing_semi, span, env, ctx, tail_pos,
+            );
+        }
         Expr::RangeLit {
             start,
             step,

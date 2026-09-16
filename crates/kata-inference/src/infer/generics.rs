@@ -70,6 +70,7 @@ pub(crate) fn ty_name_for_iface_check(ty: &Ty) -> Option<String> {
         Ty::Range(_) => Some("Range".into()),
         Ty::Dict(_, _) => Some("Dict".into()),
         Ty::Set(_) => Some("Set".into()),
+        Ty::Tensor(_) => Some("Tensor".into()),
         _ => None,
     }
 }
@@ -209,6 +210,10 @@ fn unify_one(
         }
         // Set — unifica recursivamente o elem_ty.
         (Ty::Set(p), Ty::Set(a)) => {
+            unify_one(p, a, type_params, subs, refines_registry, iface_registry)
+        }
+        // Tensor — unifica recursivamente o elem_ty.
+        (Ty::Tensor(p), Ty::Tensor(a)) => {
             unify_one(p, a, type_params, subs, refines_registry, iface_registry)
         }
         // Sender/Receiver/ReceiverFactory — unifica o tipo do canal.
@@ -398,6 +403,7 @@ pub fn apply_subs(ty: &Ty, subs: &Substitutions) -> Ty {
         Ty::Dict(k, v) => Ty::Dict(Box::new(apply_subs(k, subs)), Box::new(apply_subs(v, subs))),
         // Set — substitui no elem_ty.
         Ty::Set(elem) => Ty::Set(Box::new(apply_subs(elem, subs))),
+        Ty::Tensor(elem) => Ty::Tensor(Box::new(apply_subs(elem, subs))),
         // Sender/Receiver/ReceiverFactory — substitui no tipo do canal.
         Ty::Sender(elem) => Ty::Sender(Box::new(apply_subs(elem, subs))),
         Ty::Receiver(elem) => Ty::Receiver(Box::new(apply_subs(elem, subs))),

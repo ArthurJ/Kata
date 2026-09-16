@@ -252,6 +252,14 @@ pub enum TypedExprKind {
         elem_ty: Ty,
     },
 
+    /// `[1 2 3; 4 5 6]` — literal de Tensor.
+    /// `rows` são as linhas separadas por `;`. `elem_ty` é o tipo unificado.
+    TensorLit {
+        rows: Vec<Vec<Spanned<TypedExpr>>>,
+        trailing_semi: bool,
+        elem_ty: Ty,
+    },
+
     /// `[a..s..b]` ou `[a..s..=b]` — range lazy.
     /// `elem_ty` é o tipo do elemento (start/step/end mesmo tipo A).
     /// `inclusive` = true para `..=`, false para `..`.
@@ -435,6 +443,27 @@ pub enum TypedExprKind {
     ConstantBinding {
         name: String,
         value: Box<Spanned<TypedExpr>>,
+    },
+
+    /// `tensor.(idx0 idx1 ...)` — indexação N-D em Tensor.
+    /// O typeck separa em dois caminhos:
+    /// - `is_scalar = true`: todos os eixos são `Int` → retorna `Result::T`
+    ///   (codegen chama `kata_rt_tensor_at_nd`)
+    /// - `is_scalar = false`: algum eixo é `Range`/`Wildcard` → retorna `Tensor`
+    ///   (codegen chama `kata_rt_tensor_sub`)
+    ///
+    /// `int_indices` contém os índices resolvidos (SMI-tagged) para o caso escalar.
+    /// `starts`/`ends` contêm os limites por eixo para o caso sub-tensor.
+    /// `collapse_mask` é bitmask: bit i = 1 se eixo i colapsa (Int).
+    TensorIndex {
+        expr: Box<Spanned<TypedExpr>>,
+        elem_ty: Ty,
+        is_scalar: bool,
+        int_indices: Vec<i64>,
+        starts: Vec<i64>,
+        ends: Vec<i64>,
+        collapse_mask: i64,
+        n_axes: i64,
     },
 }
 

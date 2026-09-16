@@ -133,6 +133,8 @@ pub(crate) fn ty_to_marshal_shape(
         ]),
         // Set — HAMT de chaves. Marshal como Struct com 1 field (elem_type).
         Ty::Set(elem) => TypeShape::Struct(vec![ty_to_marshal_shape(elem, structs, enums)]),
+        // Tensor — buffer N-D contíguo. Marshal como Struct com 1 field (elem_type).
+        Ty::Tensor(elem) => TypeShape::Struct(vec![ty_to_marshal_shape(elem, structs, enums)]),
         // Range — start, step, end. Marshal como Struct com 3 fields.
         Ty::Range(elem) => TypeShape::Struct(vec![
             ty_to_marshal_shape(elem, structs, enums),
@@ -172,6 +174,7 @@ fn apply_subst(ty: &Ty, subst: &HashMap<String, Ty>) -> Ty {
         Ty::Array(elem) => Ty::Array(Box::new(apply_subst(elem, subst))),
         Ty::Range(elem) => Ty::Range(Box::new(apply_subst(elem, subst))),
         Ty::Set(elem) => Ty::Set(Box::new(apply_subst(elem, subst))),
+        Ty::Tensor(elem) => Ty::Tensor(Box::new(apply_subst(elem, subst))),
         Ty::Dict(k, v) => Ty::Dict(
             Box::new(apply_subst(k, subst)),
             Box::new(apply_subst(v, subst)),
@@ -215,7 +218,7 @@ pub(crate) fn collect_module_types(mono: &MonoModule) -> Vec<Ty> {
             Ty::Sender(inner) | Ty::Receiver(inner) | Ty::ReceiverFactory(inner) => {
                 insert_recursive(seen, inner);
             }
-            Ty::List(elem) | Ty::Array(elem) | Ty::Range(elem) | Ty::Set(elem) => {
+            Ty::List(elem) | Ty::Array(elem) | Ty::Range(elem) | Ty::Set(elem) | Ty::Tensor(elem) => {
                 insert_recursive(seen, elem);
             }
             Ty::Tuple(elems) => {

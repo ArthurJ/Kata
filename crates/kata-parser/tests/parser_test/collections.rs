@@ -177,6 +177,99 @@ fn list_lit_empty() {
     }
 }
 
+// ── TensorLit tests ──────────────────────────────────────────────
+
+#[test]
+fn tensor_lit_2x3() {
+    // `[1 2 3; 4 5 6]` → TensorLit com 2 rows de 3 elementos
+    let m = parse_src("[1 2 3; 4 5 6]");
+    let item = first_item(&m);
+    match item {
+        Item::EntryExpr(e) => match &e.node {
+            Expr::TensorLit { rows, trailing_semi } => {
+                assert_eq!(rows.len(), 2);
+                assert_eq!(rows[0].len(), 3);
+                assert_eq!(rows[1].len(), 3);
+                assert!(!*trailing_semi);
+            }
+            other => panic!("expected TensorLit, got {other:?}"),
+        },
+        other => panic!("expected EntryExpr, got {other:?}"),
+    }
+}
+
+#[test]
+fn tensor_lit_trailing_semi() {
+    // `[1 2 3;]` → TensorLit 1×3 com trailing_semi = true
+    let m = parse_src("[1 2 3;]");
+    let item = first_item(&m);
+    match item {
+        Item::EntryExpr(e) => match &e.node {
+            Expr::TensorLit { rows, trailing_semi } => {
+                assert_eq!(rows.len(), 1);
+                assert_eq!(rows[0].len(), 3);
+                assert!(*trailing_semi);
+            }
+            other => panic!("expected TensorLit, got {other:?}"),
+        },
+        other => panic!("expected EntryExpr, got {other:?}"),
+    }
+}
+
+#[test]
+fn tensor_lit_column_vector() {
+    // `[1; 2; 3]` → TensorLit 3×1 (vetor coluna)
+    let m = parse_src("[1; 2; 3]");
+    let item = first_item(&m);
+    match item {
+        Item::EntryExpr(e) => match &e.node {
+            Expr::TensorLit { rows, trailing_semi } => {
+                assert_eq!(rows.len(), 3);
+                assert_eq!(rows[0].len(), 1);
+                assert_eq!(rows[1].len(), 1);
+                assert_eq!(rows[2].len(), 1);
+                assert!(!*trailing_semi);
+            }
+            other => panic!("expected TensorLit, got {other:?}"),
+        },
+        other => panic!("expected EntryExpr, got {other:?}"),
+    }
+}
+
+#[test]
+fn tensor_lit_with_commas() {
+    // `[1, 2, 3; 4, 5, 6]` → mesmo tensor que `[1 2 3; 4 5 6]`
+    let m = parse_src("[1, 2, 3; 4, 5, 6]");
+    let item = first_item(&m);
+    match item {
+        Item::EntryExpr(e) => match &e.node {
+            Expr::TensorLit { rows, .. } => {
+                assert_eq!(rows.len(), 2);
+                assert_eq!(rows[0].len(), 3);
+                assert_eq!(rows[1].len(), 3);
+            }
+            other => panic!("expected TensorLit, got {other:?}"),
+        },
+        other => panic!("expected EntryExpr, got {other:?}"),
+    }
+}
+
+#[test]
+fn list_lit_no_semicolon_stays_list() {
+    // `[1 2 3]` sem `;` continua sendo ListLit
+    let m = parse_src("[1 2 3]");
+    let item = first_item(&m);
+    match item {
+        Item::EntryExpr(e) => match &e.node {
+            Expr::ListLit { elements } => {
+                assert_eq!(elements.len(), 3);
+            }
+            other => panic!("expected ListLit, got {other:?}"),
+        },
+        other => panic!("expected EntryExpr, got {other:?}"),
+    }
+}
+
 #[test]
 fn array_lit_empty() {
     // Extra: `{}` → ArrayLit com 0 elementos

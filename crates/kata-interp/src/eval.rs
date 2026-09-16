@@ -763,6 +763,13 @@ pub fn eval(
             Ok(0)
         }
 
+        // ── TensorIndex — indexação N-D (interp não suporta tensores ainda) ──
+        TypedExprKind::TensorIndex { .. } => {
+            Err(InterpError::Runtime(
+                "tensor indexação N-D não suportada no interpretador".into(),
+            ))
+        }
+
         // ── ForIn ────────────────────────────────────────────
         TypedExprKind::ForIn {
             var_name,
@@ -1074,6 +1081,12 @@ pub fn eval(
                 set = rt::kata_rt_set_insert(set, v, hash, eq_fn, ctx.arena);
             }
             Ok(set)
+        }
+        TypedExprKind::TensorLit { .. } => {
+            // Fase 4: interpretador para TensorLit
+            Err(InterpError::Runtime(
+                "TensorLit ainda não implementado no interpretador (Fase 4)".into(),
+            ))
         }
     }
 }

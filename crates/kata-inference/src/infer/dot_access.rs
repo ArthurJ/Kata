@@ -10,7 +10,7 @@
 //! SLICEABLE dispatch. Se `inclusive=true` (`..=`), o typeck envolve
 //! `end` em `end + 1` antes de despachar (runtime espera exclusive).
 
-use kata_ast::{DotIndex, Expr, Span, Spanned};
+use kata_ast::{DotIndex, Expr, Span, Spanned, TensorAxis};
 use kata_core::escape::EscapeTarget;
 use kata_core::ty::{PrimTy, Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
@@ -20,6 +20,28 @@ use crate::typed::{TypedExpr, TypedExprKind};
 use super::expr::{InferCtx, infer_expr};
 use super::generics::{apply_subs, unify};
 use super::helpers::InferResult;
+
+/// Avalia uma expressão como literal inteiro em compile-time.
+/// Usado para índices de range em `tensor.(0..2 1)`.
+/// Suporta apenas `Expr::IntLit` — variáveis e expressões complexas
+/// retornam erro (primeira implementação: apenas literais).
+fn eval_int_literal(expr: &Expr) -> Result<i64, MiddleError> {
+    match expr {
+        Expr::IntLit { text } => {
+            text.parse::<i64>()
+                .map_err(|_| MiddleError::TypeMismatch {
+                    expected: "literal inteiro".into(),
+                    found: format!("não-integer literal: {}", text),
+                    span: Span::zero().into(),
+                })
+        }
+        _ => Err(MiddleError::TypeMismatch {
+            expected: "literal inteiro em índice de range de tensor".into(),
+            found: "expressão não-literal".into(),
+            span: Span::zero().into(),
+        }),
+    }
+}
 
 /// Infere `expr.nome` (field access) ou `expr.N` (index access).
 ///
@@ -142,11 +164,11 @@ pub(crate) fn infer_dot_access(
         (Ty::Tuple(_), DotIndex::Field(_)) => Err(MiddleError::FieldAccessOnTuple {
             span: (*span).into(),
         }),
-        // .N em List/Array/Bytes/Text → desugar para `at receptor N` via INDEXABLE.
+        // .N em List/Array/Bytes/Text/Tensor → desugar para `at receptor N` via INDEXABLE.
         // O dispatch retorna Result::(A, Err) — access checked.
         // `at` tem type_params (A é genérico), então precisa do caminho
         // genérico: percorrer overloads e fazer unify.
-        (Ty::List(_) | Ty::Array(_) | Ty::Bytes | Ty::Prim(PrimTy::Text), DotIndex::Int(n)) => {
+        (Ty::List(_) | Ty::Array(_) | Ty::Bytes | Ty::Prim(PrimTy::Text) | Ty::Tensor(_), DotIndex::Int(n)) => {
             let arg_types = vec![inner.ty.clone(), Ty::int()];
             // Tenta caminho não-genérico primeiro.
             let overload = ctx.table.resolve("at", &arg_types, ctx.interface_registry);
@@ -415,9 +437,105 @@ pub(crate) fn infer_dot_access(
         }),
         // Field access em coleção não faz sentido.
         (
-            Ty::List(_) | Ty::Array(_) | Ty::Range(_) | Ty::Bytes | Ty::Prim(PrimTy::Text),
+            Ty::List(_) | Ty::Array(_) | Ty::Range(_) | Ty::Bytes | Ty::Prim(PrimTy::Text)
+            | Ty::Tensor(_),
             DotIndex::Field(_),
         ) => Err(MiddleError::FieldAccessOnTuple {
+            span: (*span).into(),
+        }),
+        // `tensor.(idx0 idx1 ...)` — indexação N-D em Tensor.
+        (Ty::Tensor(inner_ty), DotIndex::Tuple(axes)) => {
+            // Verifica se todos os eixos são Int (caso escalar) ou se há
+            // Range/Wildcard (caso sub-tensor).
+            let all_int = axes.iter().all(|a| matches!(a, TensorAxis::Int(_)));
+
+            if all_int {
+                // Caso escalar: todos os eixos são Int → Result::T
+                let int_indices: Vec<i64> = axes
+                    .iter()
+                    .map(|a| {
+                        if let TensorAxis::Int(n) = a {
+                            *n
+                        } else {
+                            unreachable!("all_int verificado acima")
+                        }
+                    })
+                    .collect();
+
+                let result_ty = Ty::Generic(
+                    "Result".to_string(),
+                    vec![(**inner_ty).clone(), Ty::Prim(PrimTy::Text)],
+                );
+
+                Ok(TypedExpr {
+                    span: *span,
+                    ty: result_ty,
+                    tail_pos,
+                    escape: inner.escape,
+                    kind: TypedExprKind::TensorIndex {
+                        expr: inner_box,
+                        elem_ty: (**inner_ty).clone(),
+                        is_scalar: true,
+                        int_indices,
+                        starts: Vec::new(),
+                        ends: Vec::new(),
+                        collapse_mask: 0,
+                        n_axes: axes.len() as i64,
+                    },
+                })
+            } else {
+                // Caso sub-tensor: algum eixo é Range/Wildcard → Tensor
+                let mut starts: Vec<i64> = Vec::new();
+                let mut ends: Vec<i64> = Vec::new();
+                let mut collapse_mask: i64 = 0;
+
+                for (i, axis) in axes.iter().enumerate() {
+                    match axis {
+                        TensorAxis::Int(n) => {
+                            starts.push(*n);
+                            ends.push(*n + 1);
+                            collapse_mask |= 1 << i;
+                        }
+                        TensorAxis::Wildcard => {
+                            starts.push(0);
+                            ends.push(-1); // sentinela: runtime usa shape[axis]
+                        }
+                        TensorAxis::Range {
+                            start,
+                            end,
+                            inclusive,
+                        } => {
+                            let start_val = eval_int_literal(&start.node)?;
+                            let end_val = eval_int_literal(&end.node)?;
+                            starts.push(start_val);
+                            ends.push(if *inclusive { end_val + 1 } else { end_val });
+                        }
+                    }
+                }
+
+                let result_ty = Ty::Tensor(inner_ty.clone());
+
+                Ok(TypedExpr {
+                    span: *span,
+                    ty: result_ty,
+                    tail_pos,
+                    escape: inner.escape,
+                    kind: TypedExprKind::TensorIndex {
+                        expr: inner_box,
+                        elem_ty: (**inner_ty).clone(),
+                        is_scalar: false,
+                        int_indices: Vec::new(),
+                        starts,
+                        ends,
+                        collapse_mask,
+                        n_axes: axes.len() as i64,
+                    },
+                })
+            }
+        }
+        // DotIndex::Tuple em tipo não-Tensor é erro.
+        (_, DotIndex::Tuple(_)) => Err(MiddleError::NotIndexable {
+            ty: format!("{}", inner.ty),
             span: (*span).into(),
         }),
         (other_ty, _) => Err(MiddleError::NotIndexable {

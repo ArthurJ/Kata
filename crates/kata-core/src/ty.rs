@@ -57,6 +57,9 @@ pub enum Ty {
     Dict(Box<Ty>, Box<Ty>),
     /// Set persistente: `Set::T` — HAMT de chaves (sem values).
     Set(Box<Ty>),
+    /// Tensor N-D: `Tensor::T` — buffer contíguo row-major com álgebra linear.
+    /// `T` deve implementar NUM. Shape em runtime, não no tipo.
+    Tensor(Box<Ty>),
     /// Sender de canal — `Sender::T`. Pode fazer `<!`.
     /// Funciona para Channel (rendezvous), Queue (buffered), Broadcast.
     Sender(Box<Ty>),
@@ -318,6 +321,7 @@ impl std::fmt::Display for Ty {
             Ty::Range(inner) => write!(f, "[..{inner}]"),
             Ty::Dict(k, v) => write!(f, "Dict::({k}, {v})"),
             Ty::Set(t) => write!(f, "Set::{t}"),
+            Ty::Tensor(t) => write!(f, "Tensor::{t}"),
             Ty::Sender(inner) => write!(f, "Sender::{inner}"),
             Ty::Receiver(inner) => write!(f, "Receiver::{inner}"),
             Ty::ReceiverFactory(inner) => write!(f, "ReceiverFactory::{inner}"),
@@ -409,6 +413,7 @@ impl Ty {
             Ty::Range(_) => "[a..s..b]".into(),
             Ty::Dict(k, v) => format!("Dict::({}, {})", k.display(), v.display()),
             Ty::Set(t) => format!("Set::{}", t.display()),
+            Ty::Tensor(t) => format!("Tensor::{}", t.display()),
             Ty::Sender(t) => format!("Sender::{}", t.display()),
             Ty::Receiver(t) => format!("Receiver::{}", t.display()),
             Ty::ReceiverFactory(t) => format!("ReceiverFactory::{}", t.display()),

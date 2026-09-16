@@ -442,6 +442,40 @@ pub enum FfiSymbol {
     DepthGetLimit,
     /// `kata_rt_reset_depth(rt) -> ()` — reseta depth e overflow.
     ResetDepth,
+
+    // ── Tensor ───────────────────────────────────────────
+    /// `kata_rt_tensor_new(data, rank, shape, elem_type) -> i64` — cria tensor.
+    TensorNew,
+    /// `kata_rt_tensor_rank(ptr) -> i64` — retorna rank do tensor.
+    TensorRank,
+    /// `kata_rt_tensor_shape(ptr) -> i64` — retorna shape do tensor.
+    TensorShape,
+    /// `kata_rt_tensor_at(ptr, idx) -> i64` — elemento na posição idx (flatten).
+    TensorAt,
+    /// `kata_rt_tensor_at_nd(ptr, indices_ptr, n) -> i64` — elemento N-D (todos eixos Int, Result).
+    TensorAtNd,
+    /// `kata_rt_tensor_sub(ptr, starts, ends, n, mask) -> i64` — sub-tensor N-D (eixos Range/Wildcard).
+    TensorSub,
+    /// `kata_rt_tensor_add(a, b) -> i64` — adição elemento-a-elemento (Result box).
+    TensorAdd,
+    /// `kata_rt_tensor_mul(a, b) -> i64` — multiplicação elemento-a-elemento (Result box).
+    TensorMul,
+    /// `kata_rt_tensor_panic_add(a, b) -> i64` — adição que panica em shape mismatch.
+    TensorPanicAdd,
+    /// `kata_rt_tensor_panic_mul(a, b) -> i64` — multiplicação que panica em shape mismatch.
+    TensorPanicMul,
+    /// `kata_rt_tensor_dot(a, b) -> i64` — produto escalar (Result box).
+    TensorDot,
+    /// `kata_rt_tensor_transpose(ptr) -> i64` — transposta (Result box).
+    TensorTranspose,
+    /// `kata_rt_tensor_scale(ptr, scalar) -> i64` — escala por escalar (Result box).
+    TensorScale,
+    /// `kata_rt_tensor_shift(ptr, scalar) -> i64` — desloca por escalar (Result box).
+    TensorShift,
+    /// `kata_rt_tensor_free(ptr) -> ()` — libera tensor.
+    TensorFree,
+    /// `kata_rt_tensor_show(ptr) -> i64` — mostra tensor como Text.
+    TensorShow,
 }
 
 impl FfiSymbol {
@@ -694,6 +728,23 @@ impl FfiSymbol {
             FfiSymbol::Overflowed => "kata_rt_overflowed",
             FfiSymbol::DepthGetLimit => "kata_rt_depth_get_limit",
             FfiSymbol::ResetDepth => "kata_rt_reset_depth",
+            // Tensor
+            FfiSymbol::TensorNew => "kata_rt_tensor_new",
+            FfiSymbol::TensorRank => "kata_rt_tensor_rank",
+            FfiSymbol::TensorShape => "kata_rt_tensor_shape",
+            FfiSymbol::TensorAt => "kata_rt_tensor_at",
+            FfiSymbol::TensorAtNd => "kata_rt_tensor_at_nd",
+            FfiSymbol::TensorSub => "kata_rt_tensor_sub",
+            FfiSymbol::TensorAdd => "kata_rt_tensor_add",
+            FfiSymbol::TensorMul => "kata_rt_tensor_mul",
+            FfiSymbol::TensorPanicAdd => "kata_rt_tensor_panic_add",
+            FfiSymbol::TensorPanicMul => "kata_rt_tensor_panic_mul",
+            FfiSymbol::TensorDot => "kata_rt_tensor_dot",
+            FfiSymbol::TensorTranspose => "kata_rt_tensor_transpose",
+            FfiSymbol::TensorScale => "kata_rt_tensor_scale",
+            FfiSymbol::TensorShift => "kata_rt_tensor_shift",
+            FfiSymbol::TensorFree => "kata_rt_tensor_free",
+            FfiSymbol::TensorShow => "kata_rt_tensor_show",
         }
     }
 
@@ -929,6 +980,23 @@ impl FfiSymbol {
             | FfiSymbol::DepthSetLimit
             | FfiSymbol::SetOverflowed
             | FfiSymbol::ResetDepth => Ty::Unit,
+            // Tensor — todas retornam i64 exceto TensorFree (Unit)
+            FfiSymbol::TensorNew
+            | FfiSymbol::TensorRank
+            | FfiSymbol::TensorShape
+            | FfiSymbol::TensorAt
+            | FfiSymbol::TensorAtNd
+            | FfiSymbol::TensorSub
+            | FfiSymbol::TensorAdd
+            | FfiSymbol::TensorMul
+            | FfiSymbol::TensorPanicAdd
+            | FfiSymbol::TensorPanicMul
+            | FfiSymbol::TensorDot
+            | FfiSymbol::TensorTranspose
+            | FfiSymbol::TensorScale
+            | FfiSymbol::TensorShift
+            | FfiSymbol::TensorShow => Ty::int(),
+            FfiSymbol::TensorFree => Ty::Unit,
         }
     }
 
@@ -1181,6 +1249,23 @@ impl FfiSymbol {
             FfiSymbol::Overflowed,
             FfiSymbol::DepthGetLimit,
             FfiSymbol::ResetDepth,
+            // Tensor
+            FfiSymbol::TensorNew,
+            FfiSymbol::TensorRank,
+            FfiSymbol::TensorShape,
+            FfiSymbol::TensorAt,
+            FfiSymbol::TensorAtNd,
+            FfiSymbol::TensorSub,
+            FfiSymbol::TensorAdd,
+            FfiSymbol::TensorMul,
+            FfiSymbol::TensorPanicAdd,
+            FfiSymbol::TensorPanicMul,
+            FfiSymbol::TensorDot,
+            FfiSymbol::TensorTranspose,
+            FfiSymbol::TensorScale,
+            FfiSymbol::TensorShift,
+            FfiSymbol::TensorFree,
+            FfiSymbol::TensorShow,
         ];
         all.iter().copied().find(|s| s.symbol_name() == name)
     }

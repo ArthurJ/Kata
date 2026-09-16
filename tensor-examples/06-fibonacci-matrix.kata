@@ -1,0 +1,49 @@
+# Fibonacci via exponenciação de matriz
+# [[1 1; 1 0]]^n = [[F(n+1) F(n); F(n) F(n-1)]]
+# Exponenciação rápida (binary exponentiation): O(log n) multiplicações.
+# action porque precisa de loop e var (estado mutável).
+# Retorna Result porque dot e .() podem falhar (shape/índice) — ? propaga.
+
+action fib_matrix (n::Int) => Result::(Int, Text)
+    var base := [1 1; 1 0]       # Q
+    var acc := [1 0; 0 1]        # I (identidade)
+    var exp := n
+
+    loop
+        # exp == 0 → resultado pronto
+        match (= exp 0)
+            Boolean::True: break
+            Boolean::False: ()
+
+        # exp ímpar: acc = acc · base
+        match (= (mod exp (2::NonZero)) 1)
+            Boolean::True: acc := dot acc base ?
+            Boolean::False: ()
+
+        # base = base · base (quadrado)
+        base := dot base base ?
+
+        # exp = exp // 2
+        exp := // exp (2::NonZero)
+
+    # Q^n = [[F(n+1) F(n); F(n) F(n-1)]]
+    # F(n) = acc.(0 1) — ? desempacota e propaga Err se out-of-bounds
+    Result::Ok (acc.(0 1)?)
+
+action main
+    echo!("Fibonacci(0):")
+    echo!(fib_matrix 0)
+
+    echo!("Fibonacci(1):")
+    echo!(fib_matrix 1)
+
+    echo!("Fibonacci(10):")
+    echo!(fib_matrix 10)
+
+    echo!("Fibonacci(20):")
+    echo!(fib_matrix 20)
+
+    echo!("Fibonacci(50):")
+    echo!(fib_matrix 50)
+
+main!()

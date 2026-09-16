@@ -646,6 +646,71 @@ List::A implements SLICEABLE::A
     @ffi("kata_rt_list_slice")
     slice :: (List::A) Int Int => (List::A)
 
+# ── Tensor (PRD-tensor) ───────────────────────────────────────────
+# Tensores são buffers N-D contíguos com álgebra linear.
+# Tensor::T parametriza o tipo do elemento (deve implementar NUM).
+
+interface TENSOR::T
+    shape :: Self => Tuple
+
+    rank :: Self => Int
+
+    at :: Self Int => Result::T
+
+    + :: Self Self => Result::Self
+
+    * :: Self Self => Result::Self
+
+    dot :: Self Self => Result::Self
+
+    transpose :: Self => Self
+
+    scale :: Self T => Self
+
+    shift :: Self T => Self
+
+# Operações standalone para Tensor (não despacham por interface —
+# o DispatchTable resolve por tipo concreto dos argumentos).
+
+@ffi("kata_rt_tensor_shape")
+shape :: Tensor::T => Tuple
+
+@ffi("kata_rt_tensor_rank")
+rank :: Tensor::T => Int
+
+@ffi("kata_rt_tensor_at")
+at :: Tensor::T Int => Result::T
+
+@ffi("kata_rt_tensor_add")
++ :: Tensor::T Tensor::T => Result::(Tensor::T)
+
+@ffi("kata_rt_tensor_mul")
+* :: Tensor::T Tensor::T => Result::(Tensor::T)
+
+@ffi("kata_rt_tensor_dot")
+dot :: Tensor::T Tensor::T => Result::(Tensor::T)
+
+@ffi("kata_rt_tensor_transpose")
+transpose :: Tensor::T => Tensor::T
+
+@ffi("kata_rt_tensor_scale")
+scale :: Tensor::T T => Tensor::T
+
+@ffi("kata_rt_tensor_shift")
+shift :: Tensor::T T => Tensor::T
+
+# Variantes pânicas (_+, _*)
+@ffi("kata_rt_tensor_panic_add")
+_+ :: Tensor::T Tensor::T => Tensor::T
+
+@ffi("kata_rt_tensor_panic_mul")
+_* :: Tensor::T Tensor::T => Tensor::T
+
+# Tensor implementa SHOW — display tabular
+Tensor::T implements SHOW
+    @ffi("kata_rt_tensor_show")
+    show :: Tensor::T => Text
+
 # ── Dict (Fio 13) ───────────────────────────────────────────────
 
 Dict::(K, V) implements COUNTABLE

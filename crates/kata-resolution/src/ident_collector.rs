@@ -112,6 +112,13 @@ fn collect_idents(expr: &Spanned<Expr>, out: &mut HashSet<String>) {
                 collect_idents(el, out);
             }
         }
+        Expr::TensorLit { rows, .. } => {
+            for r in rows {
+                for el in r {
+                    collect_idents(el, out);
+                }
+            }
+        }
         Expr::RangeLit {
             start, step, end, ..
         } => {

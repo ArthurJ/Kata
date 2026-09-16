@@ -98,6 +98,13 @@ where
                 for_each_subexpr(&el.node, f);
             }
         }
+        TypedExprKind::TensorLit { rows, .. } => {
+            for r in rows {
+                for el in r {
+                    for_each_subexpr(&el.node, f);
+                }
+            }
+        }
         TypedExprKind::RangeLit {
             start, step, end, ..
         } => {
@@ -209,6 +216,9 @@ where
         }
         TypedExprKind::ConstantBinding { value, .. } => {
             for_each_subexpr(&value.node, f);
+        }
+        TypedExprKind::TensorIndex { expr, .. } => {
+            for_each_subexpr(&expr.node, f);
         }
         TypedExprKind::HeapSnapshot { .. }
         | TypedExprKind::ChannelCreate { .. }

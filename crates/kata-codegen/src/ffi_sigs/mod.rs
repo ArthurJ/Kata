@@ -24,6 +24,7 @@ mod comptime;
 mod file_io;
 mod io;
 mod scheduler;
+mod tensor;
 
 use cranelift_codegen::ir::types::{F64, I64};
 use kata_core::ffi::FfiSymbol;
@@ -51,6 +52,7 @@ pub(crate) fn ty_to_clif(ty: &Ty) -> cranelift_codegen::ir::Type {
         | Ty::Range(_)
         | Ty::Dict(_, _)
         | Ty::Set(_)
+        | Ty::Tensor(_)
         | Ty::Sender(_)
         | Ty::Receiver(_)
         | Ty::ReceiverFactory(_)
@@ -93,6 +95,7 @@ pub(crate) fn ffi_signature(sym: FfiSymbol) -> cranelift_codegen::ir::Signature 
         .or_else(|| comptime::sig_for(sym))
         .or_else(|| bytes::sig_for(sym))
         .or_else(|| file_io::sig_for(sym))
+        .or_else(|| tensor::sig_for(sym))
         .unwrap_or_else(|| {
             unreachable!(
                 "FfiSymbol::{sym:?} sem assinatura FFI — adicione-a ao submódulo apropriado"

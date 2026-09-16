@@ -1,0 +1,35 @@
+# Tensor — sintaxe de literais e display
+# Exercita todas as formas sintáticas: 1-D, 2-D, 3-D, vírgula opcional, ; terminal.
+# Mostra como `show` formata cada rank.
+
+action main
+    # 1-D: vetor linha e vetor coluna
+    let row := [1 2 3;]           # Tensor 1×3
+    let col := [1; 2; 3]          # Tensor 3×1
+
+    # 2-D: espaços vs vírgulas (mesmo tensor)
+    let m  := [1 2 3; 4 5 6]      # Tensor 2×3
+    let m2 := [1, 2, 3; 4, 5, 6]  # Tensor 2×3 — vírgula = espaço
+
+    # 3-D: aninhamento de []
+    let t := [
+        [1 2; 3 4];
+        [5 6; 7 8]
+    ]
+
+    echo!("--- vetor linha 1×3 ---")
+    echo!(row)
+
+    echo!("--- vetor coluna 3×1 ---")
+    echo!(col)
+
+    echo!("--- matriz 2×3 ---")
+    echo!(m)
+
+    echo!("--- matriz com vírgulas (igual à anterior) ---")
+    echo!(m2)
+
+    echo!("--- tensor 3-D (2 fatias 2×2) ---")
+    echo!(t)
+
+main!()

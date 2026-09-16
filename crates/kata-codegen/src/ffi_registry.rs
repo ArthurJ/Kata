@@ -519,6 +519,32 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
         "kata_rt_overflow_panic",
         rt::kata_rt_overflow_panic as *const u8,
     );
+    // Tensor — FFIs de álgebra linear
+    builder.symbol("kata_rt_tensor_new", rt::tensor::kata_rt_tensor_new as *const u8);
+    builder.symbol("kata_rt_tensor_rank", rt::tensor::kata_rt_tensor_rank as *const u8);
+    builder.symbol("kata_rt_tensor_shape", rt::tensor::kata_rt_tensor_shape as *const u8);
+    builder.symbol("kata_rt_tensor_at", rt::tensor::kata_rt_tensor_at as *const u8);
+    builder.symbol("kata_rt_tensor_at_nd", rt::tensor::kata_rt_tensor_at_nd as *const u8);
+    builder.symbol("kata_rt_tensor_sub", rt::tensor::kata_rt_tensor_sub as *const u8);
+    builder.symbol("kata_rt_tensor_add", rt::tensor::kata_rt_tensor_add as *const u8);
+    builder.symbol("kata_rt_tensor_mul", rt::tensor::kata_rt_tensor_mul as *const u8);
+    builder.symbol(
+        "kata_rt_tensor_panic_add",
+        rt::tensor::kata_rt_tensor_panic_add as *const u8,
+    );
+    builder.symbol(
+        "kata_rt_tensor_panic_mul",
+        rt::tensor::kata_rt_tensor_panic_mul as *const u8,
+    );
+    builder.symbol("kata_rt_tensor_dot", rt::tensor::kata_rt_tensor_dot as *const u8);
+    builder.symbol(
+        "kata_rt_tensor_transpose",
+        rt::tensor::kata_rt_tensor_transpose as *const u8,
+    );
+    builder.symbol("kata_rt_tensor_scale", rt::tensor::kata_rt_tensor_scale as *const u8);
+    builder.symbol("kata_rt_tensor_shift", rt::tensor::kata_rt_tensor_shift as *const u8);
+    builder.symbol("kata_rt_tensor_free", rt::tensor::kata_rt_tensor_free as *const u8);
+    builder.symbol("kata_rt_tensor_show", rt::tensor::kata_rt_tensor_show as *const u8);
 }
 
 /// Declara todos os símbolos FFI no module e retorna o mapa nome → FuncId.
@@ -830,5 +856,22 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         Overflowed,
         DepthGetLimit,
         ResetDepth,
+        // Tensor
+        TensorNew,
+        TensorRank,
+        TensorShape,
+        TensorAt,
+        TensorAtNd,
+        TensorSub,
+        TensorAdd,
+        TensorMul,
+        TensorPanicAdd,
+        TensorPanicMul,
+        TensorDot,
+        TensorTranspose,
+        TensorScale,
+        TensorShift,
+        TensorFree,
+        TensorShow,
     ]
 }

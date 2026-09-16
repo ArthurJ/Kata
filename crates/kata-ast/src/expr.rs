@@ -218,6 +218,15 @@ pub enum Expr {
     /// `{|1 2 3|}` — literal de Set.
     SetLit { elements: Vec<Spanned<Expr>> },
 
+    /// `[1 2 3; 4 5 6]` — literal de Tensor.
+    /// `rows` são as linhas separadas por `;`. Cada linha é um Vec de elementos.
+    /// N-D via aninhamento: elementos de uma linha podem ser `TensorLit` aninhados.
+    /// `trailing_semi`: true quando há `;` terminal (`[1 2 3;]`).
+    TensorLit {
+        rows: Vec<Vec<Spanned<Expr>>>,
+        trailing_semi: bool,
+    },
+
     /// `[a..s..b]` ou `[a..s..=b]` — range lazy.
     /// Step é sempre explícito na sintaxe.
     RangeLit {
@@ -280,7 +289,7 @@ pub enum Expr {
     EmbedBytes { path: String },
 }
 
-/// Índice de DotAccess — field nomeado, inteiro, ou range (slice).
+/// Índice de DotAccess — field nomeado, inteiro, range (slice), ou tupla N-D.
 #[derive(Debug, Clone, PartialEq)]
 pub enum DotIndex {
     /// `expr.nome` — field access em struct.
@@ -296,6 +305,29 @@ pub enum DotIndex {
         end: Box<Spanned<Expr>>,
         inclusive: bool,
     },
+    /// `expr.(idx0 idx1 ...)` — indexação N-D em Tensor.
+    /// Cada posição corresponde a um eixo. Um único eixo como `Int`
+    /// colapsa aquele eixo; `Range` preserva como sub-tensor;
+    /// `Wildcard` (`_`) seleciona todas as posições do eixo.
+    /// Princípio de retorno: todos os eixos como `Int` → `Result::T`
+    /// (pode estar out-of-bounds); algum eixo como `Range`/`Wildcard`
+    /// → `Tensor` (sempre válido, sub-tensor).
+    Tuple(Vec<TensorAxis>),
+}
+
+/// Eixo de indexação N-D em Tensor — usado por `DotIndex::Tuple`.
+#[derive(Debug, Clone, PartialEq)]
+pub enum TensorAxis {
+    /// Índice escalar — colapsa o eixo (reduz rank em 1).
+    Int(i64),
+    /// Range — preserva o eixo como sub-tensor.
+    Range {
+        start: Box<Spanned<Expr>>,
+        end: Box<Spanned<Expr>>,
+        inclusive: bool,
+    },
+    /// `_` — todas as posições do eixo (equivale a `0..dim`).
+    Wildcard,
 }
 
 /// Pattern — usado em match arms e cláusulas lambda.

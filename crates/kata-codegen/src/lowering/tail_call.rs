@@ -86,6 +86,9 @@ fn expr_has_tail_call(expr: &TypedExpr) -> bool {
         TypedExprKind::SetLit { elements, .. } => {
             elements.iter().any(|e| expr_has_tail_call(&e.node))
         }
+        TypedExprKind::TensorLit { rows, .. } => {
+            rows.iter().flat_map(|r| r.iter()).any(|e| expr_has_tail_call(&e.node))
+        }
         TypedExprKind::RangeLit {
             start, step, end, ..
         } => {
@@ -187,6 +190,8 @@ fn expr_has_tail_call(expr: &TypedExpr) -> bool {
         | TypedExprKind::HeapSnapshot { .. } => false,
         // ConstantBinding — não tem tail call (comptime avalia).
         TypedExprKind::ConstantBinding { value, .. } => expr_has_tail_call(&value.node),
+        // TensorIndex — recursão no expr (tensor receptor).
+        TypedExprKind::TensorIndex { expr, .. } => expr_has_tail_call(&expr.node),
         // Lambda — não desce em corpos de lambdas internos (escopo diferente).
         TypedExprKind::Lambda { .. } => false,
     }

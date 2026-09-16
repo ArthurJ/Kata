@@ -378,7 +378,10 @@ impl Pipeline {
             kata_resolution::resolve_embeds(module.clone(), module_dir)
                 .map_err(|errors| errors.into_iter().map(|e| e.into()).collect::<Vec<_>>())?;
         self.module = Some(resolved_module);
-        let module = self.module.as_ref().unwrap();
+        let module = self
+            .module
+            .as_ref()
+            .expect("module acabou de ser atribuído na linha anterior");
         self.embed_deps = embed_deps;
 
         let prelude = load_stdlib()?;

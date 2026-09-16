@@ -166,6 +166,13 @@ fn fallback_in_expr(expr_span: &mut Spanned<TypedExpr>) {
                 fallback_in_expr(el);
             }
         }
+        TypedExprKind::TensorLit { rows, .. } => {
+            for r in rows.iter_mut() {
+                for el in r {
+                    fallback_in_expr(el);
+                }
+            }
+        }
         TypedExprKind::RangeLit {
             start, step, end, ..
         } => {
@@ -291,6 +298,10 @@ fn fallback_in_expr(expr_span: &mut Spanned<TypedExpr>) {
         // ConstantBinding — recursão no value.
         TypedExprKind::ConstantBinding { value, .. } => {
             fallback_in_expr(value);
+        }
+        // TensorIndex — recursão no expr (tensor receptor).
+        TypedExprKind::TensorIndex { expr, .. } => {
+            fallback_in_expr(expr);
         }
     }
 }

@@ -625,6 +625,26 @@ fn ty_var_compatible(a: &Ty, b: &Ty) -> bool {
     }
 }
 
+/// Verifica se dois tipos intrínsecos parametrizados são compatíveis
+/// quando o parâmetro tem `Ty::Var` como type param.
+///
+/// `Tensor::(Int)` vs `Tensor::(Var("T"))` → true
+/// `List::(Int)` vs `List::(Var("A"))` → true
+/// `Array::(Float)` vs `Array::(Var("A"))` → true
+#[allow(dead_code)]
+fn intrinsic_var_compatible(arg: &Ty, param: &Ty) -> bool {
+    match (arg, param) {
+        (Ty::List(a), Ty::List(p)) => ty_var_compatible(a, p),
+        (Ty::Array(a), Ty::Array(p)) => ty_var_compatible(a, p),
+        (Ty::Set(a), Ty::Set(p)) => ty_var_compatible(a, p),
+        (Ty::Tensor(a), Ty::Tensor(p)) => ty_var_compatible(a, p),
+        (Ty::Range(a), Ty::Range(p)) => ty_var_compatible(a, p),
+        (Ty::Sender(a), Ty::Sender(p)) => ty_var_compatible(a, p),
+        (Ty::Receiver(a), Ty::Receiver(p)) => ty_var_compatible(a, p),
+        _ => false,
+    }
+}
+
 /// Extrai o nome de interface de um `Ty` se for `Ty::Interface` ou
 /// `Ty::Generic` cujo nome é uma interface registrada.
 /// `Ty::Interface("NUM")` → `"NUM"`
@@ -659,6 +679,7 @@ fn extract_type_name(ty: &Ty) -> Option<String> {
         Ty::Range(_) => Some("Range".into()),
         Ty::Dict(_, _) => Some("Dict".into()),
         Ty::Set(_) => Some("Set".into()),
+        Ty::Tensor(_) => Some("Tensor".into()),
         Ty::Bytes => Some("Bytes".into()),
         Ty::Byte => Some("Byte".into()),
         Ty::Unit => Some("Unit".into()),
