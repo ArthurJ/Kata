@@ -64,13 +64,13 @@ fn result_lines(output: &str) -> Vec<&str> {
 
 #[test]
 fn repl_constant_in_action() {
-    // constant scale := 2 → action foo (x::Int) => Int / * x scale → foo!(5) → 10
+    // constant fator := 2 → action foo (x::Int) => Int / * x fator → foo!(5) → 10
     // `foo 5` (sem `!`) é rejeitado pelo inference: action chamada sem `!`
     // é erro semântico, não bug de codegen. Usa `foo!(5)` para chamar actions.
     let out = run_repl(&[
-        "constant scale := 2",
+        "constant fator := 2",
         "action foo (x::Int) => Int",
-        "    * x scale",
+        "    * x fator",
         "",
         "foo!(5)",
         ":quit",
@@ -80,20 +80,20 @@ fn repl_constant_in_action() {
         lines.iter().any(|l| l.trim() == "10"),
         "esperava 10 (constant em action com foo!), got: {out}"
     );
-    // Verifica que constant_fold substituiu scale (não há unbound ident).
+    // Verifica que constant_fold substituiu fator (não há unbound ident).
     assert!(
-        !out.contains("unbound ident: scale"),
-        "constant_fold deveria substituir scale, got: {out}"
+        !out.contains("unbound ident: fator"),
+        "constant_fold deveria substituir fator, got: {out}"
     );
 }
 
 #[test]
 fn repl_constant_in_named_function() {
-    // constant scale := 2 → double :: Int => Int / lambda x: * x scale → echo!(double 5) → 10
+    // constant fator := 2 → double :: Int => Int / lambda x: * x fator → echo!(double 5) → 10
     let out = run_repl(&[
-        "constant scale := 2",
+        "constant fator := 2",
         "double :: Int => Int",
-        "lambda x: * x scale",
+        "lambda x: * x fator",
         "",
         "echo!(double 5)",
         ":quit",
@@ -150,17 +150,17 @@ fn repl_constant_shadowing() {
 
 #[test]
 fn repl_constant_and_let_in_function() {
-    // constant scale := 2 → let n := 5 → func :: Int => Int / lambda x: + (* x scale) n
+    // constant fator := 2 → constant n := 5 → func :: Int => Int / lambda x: + (* x fator) n
     // → echo!(func 10) → 25 (10*2 + 5)
     // NOTE: `let` no prompt NÃO é visível em functions (let é pre_entry,
     // function tem FunctionBuilder separado). Apenas `constant` é visível
     // via constant_fold. Para que `n` seja visível na function, deve ser
     // `constant n := 5`.
     let out = run_repl(&[
-        "constant scale := 2",
+        "constant fator := 2",
         "constant n := 5",
         "func :: Int => Int",
-        "lambda x: + (* x scale) n",
+        "lambda x: + (* x fator) n",
         "",
         "echo!(func 10)",
         ":quit",

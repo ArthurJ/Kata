@@ -4,7 +4,7 @@
 //! binding de módulo (constant). O comptime pass substitui `Ident(name)`
 //! pelo literal/snapshot nos corpos de functions e actions após o fixpoint.
 //!
-//! DoD: `constant scale := 2` + `dobro :: Int => Int` + `lambda x: * x scale`
+//! DoD: `constant fator := 2` + `dobro :: Int => Int` + `lambda x: * x fator`
 //! + `echo!(dobro 21)` imprime `42`.
 
 use std::process::Command;
@@ -39,18 +39,18 @@ fn run_kata_run(source: &str) -> (String, String, i32) {
 
 // ── DoD: constant + function acesso ─────────────────────────
 
-/// `constant scale := 2` + `dobro :: Int => Int` + `lambda x: * x scale`
+/// `constant fator := 2` + `dobro :: Int => Int` + `lambda x: * x fator`
 /// deve imprimir `42` quando chamado com `dobro 21`.
 #[test]
 fn constant_acessada_por_function() {
     let source =
-        "constant scale := 2\ndobro :: Int => Int\nlambda x: * x scale\n\necho!(dobro 21)\n";
+        "constant fator := 2\ndobro :: Int => Int\nlambda x: * x fator\n\necho!(dobro 21)\n";
     let (stdout, stderr, code) = run_kata_run(source);
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
     let first = stdout.lines().next().unwrap_or("");
     assert_eq!(
         first, "42",
-        "dobro 21 com scale=2 deve imprimir 42 — stdout: {stdout}"
+        "dobro 21 com fator=2 deve imprimir 42 — stdout: {stdout}"
     );
 }
 
@@ -97,7 +97,7 @@ fn constant_float_em_function() {
 /// Shadowing: parâmetro com mesmo nome de constant não deve ser substituído.
 #[test]
 fn constant_shadowed_por_parametro() {
-    let source = "constant scale := 2\nid :: Int => Int\nlambda scale: scale\n\necho!(id 42)\n";
+    let source = "constant fator := 2\nid :: Int => Int\nlambda fator: fator\n\necho!(id 42)\n";
     let (stdout, stderr, code) = run_kata_run(source);
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
     let first = stdout.lines().next().unwrap_or("");
