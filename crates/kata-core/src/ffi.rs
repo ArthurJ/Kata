@@ -476,6 +476,14 @@ pub enum FfiSymbol {
     TensorFree,
     /// `kata_rt_tensor_show(ptr) -> i64` — mostra tensor como Text.
     TensorShow,
+    /// `kata_rt_tensor_eye_int(n) -> i64` — matriz identidade n×n (Tensor::Int).
+    TensorEyeInt,
+    /// `kata_rt_tensor_eye_float(n) -> i64` — matriz identidade n×n (Tensor::Float).
+    TensorEyeFloat,
+    /// `kata_rt_tensor_zeros_int(shape_ptr) -> i64` — tensor N-D de zeros (Tensor::Int).
+    TensorZerosInt,
+    /// `kata_rt_tensor_zeros_float(shape_ptr) -> i64` — tensor N-D de zeros (Tensor::Float).
+    TensorZerosFloat,
 }
 
 impl FfiSymbol {
@@ -745,6 +753,10 @@ impl FfiSymbol {
             FfiSymbol::TensorShift => "kata_rt_tensor_shift",
             FfiSymbol::TensorFree => "kata_rt_tensor_free",
             FfiSymbol::TensorShow => "kata_rt_tensor_show",
+            FfiSymbol::TensorEyeInt => "kata_rt_tensor_eye_int",
+            FfiSymbol::TensorEyeFloat => "kata_rt_tensor_eye_float",
+            FfiSymbol::TensorZerosInt => "kata_rt_tensor_zeros_int",
+            FfiSymbol::TensorZerosFloat => "kata_rt_tensor_zeros_float",
         }
     }
 
@@ -995,7 +1007,11 @@ impl FfiSymbol {
             | FfiSymbol::TensorTranspose
             | FfiSymbol::TensorScale
             | FfiSymbol::TensorShift
-            | FfiSymbol::TensorShow => Ty::int(),
+            | FfiSymbol::TensorShow
+            | FfiSymbol::TensorEyeInt
+            | FfiSymbol::TensorEyeFloat
+            | FfiSymbol::TensorZerosInt
+            | FfiSymbol::TensorZerosFloat => Ty::int(),
             FfiSymbol::TensorFree => Ty::Unit,
         }
     }
@@ -1266,6 +1282,10 @@ impl FfiSymbol {
             FfiSymbol::TensorShift,
             FfiSymbol::TensorFree,
             FfiSymbol::TensorShow,
+            FfiSymbol::TensorEyeInt,
+            FfiSymbol::TensorEyeFloat,
+            FfiSymbol::TensorZerosInt,
+            FfiSymbol::TensorZerosFloat,
         ];
         all.iter().copied().find(|s| s.symbol_name() == name)
     }

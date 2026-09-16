@@ -369,7 +369,10 @@ pub fn collect_type_params(param_types: &[Ty], return_type: &Ty) -> Vec<String> 
                 }
             }
             // Coleções intrínsecas: recursar no tipo do elemento.
-            Ty::List(inner) | Ty::Array(inner) | Ty::Range(inner) | Ty::Set(inner)
+            Ty::List(inner)
+            | Ty::Array(inner)
+            | Ty::Range(inner)
+            | Ty::Set(inner)
             | Ty::Tensor(inner) => {
                 collect_into(inner, result);
             }

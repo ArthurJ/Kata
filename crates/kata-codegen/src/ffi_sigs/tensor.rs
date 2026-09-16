@@ -106,6 +106,26 @@ pub(crate) fn sig_for(sym: FfiSymbol) -> Option<Signature> {
             sig.params.push(AbiParam::new(I64)); // ptr
             sig.returns.push(AbiParam::new(I64)); // Text ptr
         }
+        // tensor_eye_int: (n) -> i64 (tensor ptr)
+        FfiSymbol::TensorEyeInt => {
+            sig.params.push(AbiParam::new(I64)); // n (SMI-tagged)
+            sig.returns.push(AbiParam::new(I64)); // tensor ptr
+        }
+        // tensor_eye_float: (n) -> i64 (tensor ptr)
+        FfiSymbol::TensorEyeFloat => {
+            sig.params.push(AbiParam::new(I64)); // n (SMI-tagged)
+            sig.returns.push(AbiParam::new(I64)); // tensor ptr
+        }
+        // tensor_zeros_int: (shape_ptr) -> i64 (tensor ptr)
+        FfiSymbol::TensorZerosInt => {
+            sig.params.push(AbiParam::new(I64)); // shape_ptr (Array)
+            sig.returns.push(AbiParam::new(I64)); // tensor ptr
+        }
+        // tensor_zeros_float: (shape_ptr) -> i64 (tensor ptr)
+        FfiSymbol::TensorZerosFloat => {
+            sig.params.push(AbiParam::new(I64)); // shape_ptr (Array)
+            sig.returns.push(AbiParam::new(I64)); // tensor ptr
+        }
         _ => return None,
     }
     Some(sig)

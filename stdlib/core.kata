@@ -711,6 +711,15 @@ Tensor::T implements SHOW
     @ffi("kata_rt_tensor_show")
     show :: Tensor::T => Text
 
+# Construtores de tensor
+# eye(n) → matriz identidade n×n (Tensor::Float, default para álgebra linear)
+@ffi("kata_rt_tensor_eye_float")
+eye :: Int => Tensor::Float
+
+# zeros(shape) → tensor N-D de zeros (Tensor::Float)
+@ffi("kata_rt_tensor_zeros_float")
+zeros :: Array::Int => Tensor::Float
+
 # ── Dict (Fio 13) ───────────────────────────────────────────────
 
 Dict::(K, V) implements COUNTABLE

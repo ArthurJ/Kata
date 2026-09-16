@@ -844,7 +844,10 @@ pub(crate) fn lower_expr(
                 // Caso escalar: chama kata_rt_tensor_at_nd(ptr, indices_ptr, n)
                 let n = *n_axes;
                 let buf_size = ctx.builder.ins().iconst(I64, n * 8);
-                let alloc_call = ctx.builder.ins().call(*alloc_ref, &[rt_val, arena_handle, buf_size]);
+                let alloc_call = ctx
+                    .builder
+                    .ins()
+                    .call(*alloc_ref, &[rt_val, arena_handle, buf_size]);
                 let indices_ptr = ctx.builder.inst_results(alloc_call)[0];
 
                 // Store cada índice (SMI-tagged) no array
@@ -861,7 +864,10 @@ pub(crate) fn lower_expr(
                         symbol: "kata_rt_tensor_at_nd".into(),
                     }
                 })?;
-                let call = ctx.builder.ins().call(*ffi_ref, &[tensor_ptr, indices_ptr, n_val]);
+                let call = ctx
+                    .builder
+                    .ins()
+                    .call(*ffi_ref, &[tensor_ptr, indices_ptr, n_val]);
                 Ok(ctx.builder.inst_results(call)[0])
             } else {
                 // Caso sub-tensor: chama kata_rt_tensor_sub(ptr, starts, ends, n, mask)
@@ -869,22 +875,32 @@ pub(crate) fn lower_expr(
                 let buf_size = ctx.builder.ins().iconst(I64, n * 8);
 
                 // Aloca starts array
-                let starts_alloc = ctx.builder.ins().call(*alloc_ref, &[rt_val, arena_handle, buf_size]);
+                let starts_alloc = ctx
+                    .builder
+                    .ins()
+                    .call(*alloc_ref, &[rt_val, arena_handle, buf_size]);
                 let starts_ptr = ctx.builder.inst_results(starts_alloc)[0];
 
                 // Aloca ends array
-                let ends_alloc = ctx.builder.ins().call(*alloc_ref, &[rt_val, arena_handle, buf_size]);
+                let ends_alloc = ctx
+                    .builder
+                    .ins()
+                    .call(*alloc_ref, &[rt_val, arena_handle, buf_size]);
                 let ends_ptr = ctx.builder.inst_results(ends_alloc)[0];
 
                 // Store starts e ends (SMI-tagged)
                 let flags = MemFlagsData::new();
                 for (i, &s) in starts.iter().enumerate() {
                     let smi_val = ctx.builder.ins().iconst(I64, encode_smi(s));
-                    ctx.builder.ins().store(flags, smi_val, starts_ptr, (i as i32) * 8);
+                    ctx.builder
+                        .ins()
+                        .store(flags, smi_val, starts_ptr, (i as i32) * 8);
                 }
                 for (i, &e) in ends.iter().enumerate() {
                     let smi_val = ctx.builder.ins().iconst(I64, encode_smi(e));
-                    ctx.builder.ins().store(flags, smi_val, ends_ptr, (i as i32) * 8);
+                    ctx.builder
+                        .ins()
+                        .store(flags, smi_val, ends_ptr, (i as i32) * 8);
                 }
 
                 let n_val = ctx.builder.ins().iconst(I64, n);
@@ -894,7 +910,10 @@ pub(crate) fn lower_expr(
                         symbol: "kata_rt_tensor_sub".into(),
                     }
                 })?;
-                let call = ctx.builder.ins().call(*ffi_ref, &[tensor_ptr, starts_ptr, ends_ptr, n_val, mask_val]);
+                let call = ctx.builder.ins().call(
+                    *ffi_ref,
+                    &[tensor_ptr, starts_ptr, ends_ptr, n_val, mask_val],
+                );
                 Ok(ctx.builder.inst_results(call)[0])
             }
         }

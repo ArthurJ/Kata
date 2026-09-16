@@ -139,7 +139,7 @@ fn children<'a>(
             values: elements, ..
         }
         | SetLit { elements, .. } => Box::new(elements.iter()),
-        | TensorLit { rows, .. } => Box::new(rows.iter().flat_map(|r| r.iter())),
+        TensorLit { rows, .. } => Box::new(rows.iter().flat_map(|r| r.iter())),
 
         // FieldAccess / IndexAccess
         FieldAccess { expr, .. } | IndexAccess { expr, .. } => {

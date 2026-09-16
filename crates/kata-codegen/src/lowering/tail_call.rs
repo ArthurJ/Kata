@@ -86,9 +86,10 @@ fn expr_has_tail_call(expr: &TypedExpr) -> bool {
         TypedExprKind::SetLit { elements, .. } => {
             elements.iter().any(|e| expr_has_tail_call(&e.node))
         }
-        TypedExprKind::TensorLit { rows, .. } => {
-            rows.iter().flat_map(|r| r.iter()).any(|e| expr_has_tail_call(&e.node))
-        }
+        TypedExprKind::TensorLit { rows, .. } => rows
+            .iter()
+            .flat_map(|r| r.iter())
+            .any(|e| expr_has_tail_call(&e.node)),
         TypedExprKind::RangeLit {
             start, step, end, ..
         } => {

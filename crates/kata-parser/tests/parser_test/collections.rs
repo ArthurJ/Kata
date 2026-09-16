@@ -186,7 +186,10 @@ fn tensor_lit_2x3() {
     let item = first_item(&m);
     match item {
         Item::EntryExpr(e) => match &e.node {
-            Expr::TensorLit { rows, trailing_semi } => {
+            Expr::TensorLit {
+                rows,
+                trailing_semi,
+            } => {
                 assert_eq!(rows.len(), 2);
                 assert_eq!(rows[0].len(), 3);
                 assert_eq!(rows[1].len(), 3);
@@ -205,7 +208,10 @@ fn tensor_lit_trailing_semi() {
     let item = first_item(&m);
     match item {
         Item::EntryExpr(e) => match &e.node {
-            Expr::TensorLit { rows, trailing_semi } => {
+            Expr::TensorLit {
+                rows,
+                trailing_semi,
+            } => {
                 assert_eq!(rows.len(), 1);
                 assert_eq!(rows[0].len(), 3);
                 assert!(*trailing_semi);
@@ -223,7 +229,10 @@ fn tensor_lit_column_vector() {
     let item = first_item(&m);
     match item {
         Item::EntryExpr(e) => match &e.node {
-            Expr::TensorLit { rows, trailing_semi } => {
+            Expr::TensorLit {
+                rows,
+                trailing_semi,
+            } => {
                 assert_eq!(rows.len(), 3);
                 assert_eq!(rows[0].len(), 1);
                 assert_eq!(rows[1].len(), 1);

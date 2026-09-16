@@ -882,6 +882,78 @@ pub extern "C" fn kata_rt_tensor_free(_ptr: i64) {
     // Tracked arena: não rastreamos tensors individualmente ainda.
 }
 
+/// Constrói uma matriz identidade n×n.
+/// `n` é SMI-tagged. `elem_type` é ELEM_INT (0) ou ELEM_FLOAT (1).
+fn tensor_eye_impl(n: i64, elem_type: i64) -> i64 {
+    if n < 1 {
+        return 0;
+    }
+    let shape = [n, n];
+    let result = tensor_alloc(2, &shape, elem_type, std::ptr::null());
+    if result == 0 {
+        return 0;
+    }
+    // Preenche: 1 na diagonal, 0 fora (buffer já zerado por tensor_alloc)
+    unsafe {
+        let data = get_data_ptr(result);
+        let elem_size = get_elem_size(result) as usize;
+        for i in 0..n as usize {
+            let offset = i * (n as usize + 1) * elem_size;
+            if elem_type == ELEM_INT {
+                std::ptr::write_unaligned(data.add(offset) as *mut i64, tag_smi(1));
+            } else {
+                std::ptr::write_unaligned(data.add(offset) as *mut f64, 1.0);
+            }
+        }
+    }
+    result
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_tensor_eye_int(n: i64) -> i64 {
+    tensor_eye_impl(untag_smi(n), ELEM_INT)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_tensor_eye_float(n: i64) -> i64 {
+    // n é SMI-tagged Int (o tamanho da matriz é sempre inteiro)
+    tensor_eye_impl(untag_smi(n), ELEM_FLOAT)
+}
+
+/// Constrói um tensor N-D de zeros com a shape dada.
+/// `shape_ptr` aponta para um Array (layout: len no offset 0 como
+/// i64 cru, elementos a partir do offset 8, cada um SMI-tagged).
+fn tensor_zeros_impl(shape_ptr: i64, elem_type: i64) -> i64 {
+    if shape_ptr == 0 {
+        return 0;
+    }
+    let len = unsafe { std::ptr::read_unaligned(shape_ptr as *const i64) };
+    if len < 1 {
+        return 0;
+    }
+    let mut shape: Vec<i64> = Vec::with_capacity(len as usize);
+    for i in 0..len as usize {
+        let raw = untag_smi(unsafe {
+            std::ptr::read_unaligned((shape_ptr as *const u8).add(8 + i * 8) as *const i64)
+        });
+        if raw < 1 {
+            return 0;
+        }
+        shape.push(raw);
+    }
+    tensor_alloc(len, &shape, elem_type, std::ptr::null())
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_tensor_zeros_int(shape_ptr: i64) -> i64 {
+    tensor_zeros_impl(shape_ptr, ELEM_INT)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_tensor_zeros_float(shape_ptr: i64) -> i64 {
+    tensor_zeros_impl(shape_ptr, ELEM_FLOAT)
+}
+
 /// Constrói um Text (C string) com a representação de display do tensor.
 /// Retorna ponteiro para CString (owned, via into_raw).
 #[unsafe(no_mangle)]

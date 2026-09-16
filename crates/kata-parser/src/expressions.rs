@@ -453,7 +453,9 @@ impl Parser {
                                         let end = self.parse_expr_atom()?;
                                         axes.push(TensorAxis::Range {
                                             start: Box::new(Spanned::new(
-                                                Expr::IntLit { text: n.to_string() },
+                                                Expr::IntLit {
+                                                    text: n.to_string(),
+                                                },
                                                 self.peek_span(),
                                             )),
                                             end: Box::new(end),
@@ -489,7 +491,9 @@ impl Parser {
                                 let end = self.parse_expr_atom()?;
                                 axes.push(TensorAxis::Range {
                                     start: Box::new(Spanned::new(
-                                        Expr::IntLit { text: "0".to_string() },
+                                        Expr::IntLit {
+                                            text: "0".to_string(),
+                                        },
                                         self.peek_span(),
                                     )),
                                     end: Box::new(end),
@@ -511,9 +515,11 @@ impl Parser {
                                             inclusive,
                                         });
                                     }
-                                    _ => return Err(self.error(
-                                        "esperado `..` ou `..=` após expressão em `.()`"
-                                    )),
+                                    _ => {
+                                        return Err(self.error(
+                                            "esperado `..` ou `..=` após expressão em `.()`",
+                                        ));
+                                    }
                                 }
                             }
                         }

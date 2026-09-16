@@ -175,6 +175,50 @@ fn tensor_sub_wildcard_all_columns() {
     assert_eq!(stdout.trim_end(), "1  2  3\n4  5  6");
 }
 
+// ── Construtores: eye e zeros ──────────────────────────────────
+
+#[test]
+fn tensor_eye_3() {
+    let (code, stdout, _) = run_kata("echo!(show (eye 3))");
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim_end(), "1  0  0\n0  1  0\n0  0  1");
+}
+
+#[test]
+fn tensor_eye_1() {
+    let (code, stdout, _) = run_kata("echo!(show (eye 1))");
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim_end(), "1");
+}
+
+#[test]
+fn tensor_zeros_2d() {
+    let (code, stdout, _) = run_kata("echo!(show (zeros {2 3}))");
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim_end(), "0  0  0\n0  0  0");
+}
+
+#[test]
+fn tensor_zeros_1d() {
+    let (code, stdout, _) = run_kata("echo!(show (zeros {4}))");
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim_end(), "0  0  0  0");
+}
+
+#[test]
+fn tensor_eye_add_zeros() {
+    // eye(3) + zeros({3 3}) = eye(3) — identidade é neutra para +
+    // Usa _+ (panic variant) entre tensores Int
+    let src = r#"action main
+    let i := eye 3
+    let z := zeros {3 3}
+    echo!(show (_+ i z))
+main!()"#;
+    let (code, stdout, _) = run_kata(src);
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim_end(), "1  0  0\n0  1  0\n0  0  1");
+}
+
 // ── Programa completo (operações que funcionam corretamente) ───
 
 #[test]

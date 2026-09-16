@@ -764,11 +764,9 @@ pub fn eval(
         }
 
         // ── TensorIndex — indexação N-D (interp não suporta tensores ainda) ──
-        TypedExprKind::TensorIndex { .. } => {
-            Err(InterpError::Runtime(
-                "tensor indexação N-D não suportada no interpretador".into(),
-            ))
-        }
+        TypedExprKind::TensorIndex { .. } => Err(InterpError::Runtime(
+            "tensor indexação N-D não suportada no interpretador".into(),
+        )),
 
         // ── ForIn ────────────────────────────────────────────
         TypedExprKind::ForIn {

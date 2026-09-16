@@ -218,7 +218,11 @@ pub(crate) fn collect_module_types(mono: &MonoModule) -> Vec<Ty> {
             Ty::Sender(inner) | Ty::Receiver(inner) | Ty::ReceiverFactory(inner) => {
                 insert_recursive(seen, inner);
             }
-            Ty::List(elem) | Ty::Array(elem) | Ty::Range(elem) | Ty::Set(elem) | Ty::Tensor(elem) => {
+            Ty::List(elem)
+            | Ty::Array(elem)
+            | Ty::Range(elem)
+            | Ty::Set(elem)
+            | Ty::Tensor(elem) => {
                 insert_recursive(seen, elem);
             }
             Ty::Tuple(elems) => {
