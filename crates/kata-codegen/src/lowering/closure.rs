@@ -3,6 +3,7 @@
 //! Extraído de `expr.rs` para reduzir o tamanho do dispatch central.
 
 use cranelift_codegen::ir::types::I64;
+use cranelift_codegen::ir::types::F64;
 use cranelift_codegen::ir::{AbiParam, InstBuilder, MemFlagsData, Signature};
 use cranelift_codegen::isa::CallConv;
 use kata_core::ty::Ty;
@@ -226,7 +227,13 @@ pub(crate) fn lower_closure(
         if results.is_empty() {
             Ok(ctx.builder.ins().iconst(I64, 0))
         } else {
-            Ok(results[0])
+            // FFI retorna I64. Se o tipo esperado é Float, bitcast I64 → F64.
+            let ret = results[0];
+            if expr.ty == Ty::float() {
+                Ok(ctx.builder.ins().bitcast(F64, MemFlagsData::new(), ret))
+            } else {
+                Ok(ret)
+            }
         }
     } else {
         // ffi_symbol = None: função Kata nomeada ou lambda como valor.

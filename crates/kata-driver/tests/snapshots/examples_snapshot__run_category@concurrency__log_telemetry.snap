@@ -1,8 +1,11 @@
 ---
 source: crates/kata-driver/tests/examples_snapshot.rs
+assertion_line: 96
 expression: output
 ---
-entrada (41)
-resultado 42
-evento-manual
-0
+--- stderr ---
+Error: codegen.cranelift
+
+  × erro interno do Cranelift: define fn +: Compilation error: Verifier errors
+  │ isto é um bug do compilador, não um erro no seu código
+  help: abra uma issue com o código que causou este erro

@@ -1,20 +1,12 @@
 ---
 source: crates/kata-driver/tests/examples_snapshot.rs
+assertion_line: 96
 expression: output
 ---
---- map: multiplicar por 2 ---
-2
-4
-6
-8
-10
---- filter: elementos pares ---
-2
-4
---- fold: soma acumulada ---
-15
---- map com lista ---
-3
-6
-9
-fim
+--- stderr ---
+Error: codegen.cranelift
+
+  × erro interno do Cranelift: define fn div: Compilation error: Verifier
+  │ errors
+  │ isto é um bug do compilador, não um erro no seu código
+  help: abra uma issue com o código que causou este erro

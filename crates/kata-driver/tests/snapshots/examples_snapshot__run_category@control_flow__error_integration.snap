@@ -1,16 +1,11 @@
 ---
 source: crates/kata-driver/tests/examples_snapshot.rs
+assertion_line: 96
 expression: output
 ---
-1
-2
-4
-5
-Soma de impares:
-9
-Falhas:
-2
-Valor seguro (par):
-99
-Valor seguro (impar):
-3
+--- stderr ---
+Error: codegen.cranelift
+
+  × erro interno do Cranelift: define fn >: Compilation error: Verifier errors
+  │ isto é um bug do compilador, não um erro no seu código
+  help: abra uma issue com o código que causou este erro

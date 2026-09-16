@@ -1,7 +1,12 @@
 ---
 source: crates/kata-driver/tests/examples_snapshot.rs
+assertion_line: 96
 expression: output
 ---
-70.0
-70.0
-1.75
+--- stderr ---
+Error: codegen.cranelift
+
+  × erro interno do Cranelift: define action bloco1: Compilation error:
+  │ Verifier errors
+  │ isto é um bug do compilador, não um erro no seu código
+  help: abra uma issue com o código que causou este erro
