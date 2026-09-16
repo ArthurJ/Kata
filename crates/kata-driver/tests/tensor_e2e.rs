@@ -136,6 +136,45 @@ fn tensor_nd_range_submatrix() {
     assert_eq!(stdout.trim(), "1  2\n4  5");
 }
 
+// ── Transpose display (strides-aware) ──────────────────────────
+
+#[test]
+fn tensor_transpose_display() {
+    // [1 2 3; 4 5 6] transposto deve mostrar [1 4; 2 5; 3 6]
+    // Antes do fix de format_tensor, display ignorava strides e mostrava
+    // os dados na ordem original (row-major), produzindo output errado.
+    let (code, stdout, _) = run_kata("echo!(show (transpose [1 2 3; 4 5 6]))");
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim_end(), "1  4\n2  5\n3  6");
+}
+
+#[test]
+fn tensor_transpose_square_display() {
+    // Transposta de matriz quadrada
+    let (code, stdout, _) = run_kata("echo!(show (transpose [1 2; 3 4]))");
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim_end(), "1  3\n2  4");
+}
+
+// ── Sub-tensor display ─────────────────────────────────────────
+
+#[test]
+fn tensor_sub_wildcard_column() {
+    // m.(_ 1) de [1 2 3; 4 5 6] → 1-D tensor shape [2] (Wildcard keep, Int collapse)
+    // Valores: elemento [0,1]=2 e [1,1]=5
+    let (code, stdout, _) = run_kata("echo!(show ([1 2 3; 4 5 6].(_ 1)))");
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim_end(), "2  5");
+}
+
+#[test]
+fn tensor_sub_wildcard_all_columns() {
+    // m.(_ _) de [1 2 3; 4 5 6] → 2-D tensor shape 2×3 (ambos Wildcard)
+    let (code, stdout, _) = run_kata("echo!(show ([1 2 3; 4 5 6].(_ _)))");
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim_end(), "1  2  3\n4  5  6");
+}
+
 // ── Programa completo (operações que funcionam corretamente) ───
 
 #[test]
