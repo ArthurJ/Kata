@@ -207,6 +207,11 @@ fn parse_apply_impl(parser: &mut Parser, as_arg: bool) -> Result<Spanned<Expr>, 
 
     // Literais, construções de statement e keywords de controle de fluxo
     // não são callee — não consomem argumentos.
+    // Lambda também não consome args greedy: seus parâmetros são definidos
+    // na sua própria sintaxe (`lambda x: ...`), não pela aplicação que o
+    // cerca. Sem isso, `let f := lambda x:\n > x 0: x\n echo!(f 5)` seria
+    // parseado como `Apply(Lambda, [echo!(f 5)])` — o lambda consumiria
+    // a próxima expressão como argumento.
     if matches!(
         &callee.node,
         Expr::IntLit { .. }
@@ -230,6 +235,7 @@ fn parse_apply_impl(parser: &mut Parser, as_arg: bool) -> Result<Spanned<Expr>, 
             | Expr::Break
             | Expr::Continue
             | Expr::Return(..)
+            | Expr::Lambda { .. }
     ) {
         return Ok(callee);
     }

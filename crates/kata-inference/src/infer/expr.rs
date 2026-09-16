@@ -848,7 +848,7 @@ pub(crate) fn infer_expr_hinted(
             (result.ty, result.kind)
         }
 
-        // ── Lambda ──────────────────────────────
+        // ── Lambda ──────────────────────────────────────────
         Expr::Lambda {
             patterns,
             body,
