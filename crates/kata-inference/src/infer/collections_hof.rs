@@ -93,7 +93,9 @@ fn resolve_operator_callback(
 /// `List(A)` → A, `Array(A)` → A, `Range(A)` → A.
 fn extract_elem_ty(coll_ty: &Ty) -> Option<Ty> {
     match coll_ty {
-        Ty::List(elem) | Ty::Array(elem) | Ty::Range(elem) => Some((**elem).clone()),
+        Ty::List(elem) | Ty::Array(elem) | Ty::Range(elem) | Ty::Tensor(elem) => {
+            Some((**elem).clone())
+        }
         _ => None,
     }
 }
@@ -182,7 +184,11 @@ pub(crate) fn infer_map(
                                 Ty::Function(_, ret) => (**ret).clone(),
                                 _ => unreachable!("infer_lambda com hint deve produzir Function"),
                             };
-                            let map_ret = Ty::List(Box::new(cb_ret.clone()));
+                            let map_ret = if matches!(coll_ty, Ty::Tensor(_)) {
+                                Ty::Tensor(Box::new(cb_ret.clone()))
+                            } else {
+                                Ty::List(Box::new(cb_ret.clone()))
+                            };
                             let kind = TypedExprKind::Map {
                                 callback: Box::new(Spanned::new(cb_typed, args[0].span)),
                                 collection: Box::new(Spanned::new(coll_typed, args[1].span)),
@@ -259,8 +265,12 @@ pub(crate) fn infer_map(
         }
     };
 
-    // 5. ret_ty do Map = List(B) — sempre List.
-    let map_ret = Ty::List(Box::new(cb_ret.clone()));
+    // 5. ret_ty do Map = List(B) para coleções, Tensor(B) para tensores.
+    let map_ret = if matches!(coll_ty, Ty::Tensor(_)) {
+        Ty::Tensor(Box::new(cb_ret.clone()))
+    } else {
+        Ty::List(Box::new(cb_ret.clone()))
+    };
 
     let kind = TypedExprKind::Map {
         callback: Box::new(Spanned::new(callback_typed, args[0].span)),
