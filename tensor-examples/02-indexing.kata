@@ -25,8 +25,8 @@ action main
     let s2 := m.(_ 0..2)
     echo!(s2)
 
-    echo!("--- flatten: m.at(5) → Result ---")
-    let f := m.at(5)
+    echo!("--- flatten: at m 5 → Result ---")
+    let f := at m 5
     echo!(f)
 
 main!()

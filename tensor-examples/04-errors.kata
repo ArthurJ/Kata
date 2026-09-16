@@ -12,7 +12,7 @@ action main
     let b := [1 2 3; 4 5 6]      # 2×3 — shape diferente de a
 
     echo!("--- propagação com ? (action que retorna Result) ---")
-    match somar_shapes a b
+    match somar_shapes!(a, b)
         Result::Ok r: echo!(r)
         Result::Err msg: echo!("shapes incompatíveis")
 
@@ -33,7 +33,7 @@ action main
     echo!("--- subtração element-wise: _+ d (scale e -1) ---")
     let d := [0 1; 2 3]
     let e := [1 1; 1 1]
-    let diff := _+ d (scale e -1)
+    let diff := _+ d (scale e (- 0 1))
     echo!(diff)
 
 main!()

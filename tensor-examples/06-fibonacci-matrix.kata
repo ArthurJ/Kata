@@ -28,22 +28,23 @@ action fib_matrix (n::Int) => Result::(Int, Text)
 
     # Q^n = [[F(n+1) F(n); F(n) F(n-1)]]
     # F(n) = acc.(0 1) — ? desempacota e propaga Err se out-of-bounds
-    Result::Ok (acc.(0 1)?)
+    let val := acc.(0 1) ?
+    Result::Ok val
 
 action main
     echo!("Fibonacci(0):")
-    echo!(fib_matrix 0)
+    echo!(fib_matrix!(0))
 
     echo!("Fibonacci(1):")
-    echo!(fib_matrix 1)
+    echo!(fib_matrix!(1))
 
     echo!("Fibonacci(10):")
-    echo!(fib_matrix 10)
+    echo!(fib_matrix!(10))
 
     echo!("Fibonacci(20):")
-    echo!(fib_matrix 20)
+    echo!(fib_matrix!(20))
 
     echo!("Fibonacci(50):")
-    echo!(fib_matrix 50)
+    echo!(fib_matrix!(50))
 
 main!()

@@ -1,34 +1,30 @@
 # Tensor — map (aplicação element-wise de função)
 # map preserva shape e pode mudar o tipo do elemento (Int → Float).
 # Condicionais dentro de lambda usam match (Kata não tem if).
-# Funções escalares (exp, sqrt) vêm de `import math`.
-
-import math
 
 action main
     let m := [1 2 3; 4 5 6]       # Tensor::Int 2×3
 
     echo!("--- map: quadrar cada elemento (Int → Int) ---")
-    let sq := map (* _ _) m
+    let sq := map (lambda x: * x x) m
     echo!(sq)
 
-    echo!("--- map: dividir por 10 (Int → Float) ---")
-    # div retorna Result; | 0.0 desempacota (inalcançável: 10 ≠ 0)
-    let f := map (lambda x: div x 10.0 | 0.0) m
-    echo!(f)
+    echo!("--- map: somar 1 a cada elemento ---")
+    let inc := map (lambda x: + x 1) m
+    echo!(inc)
 
-    echo!("--- map com lambda: relu (Float → Float) ---")
-    let pre := [1.5 -0.5 2.0; -1.0 0.0 3.0]
-    let act := map (lambda x:
-        match (> x 0.0)
-            Boolean::True: x
-            Boolean::False: 0.0) pre
-    echo!(act)
+    echo!("--- map: multiplicar por 2 ---")
+    let dbl := map (lambda x: * x 2) m
+    echo!(dbl)
 
-    echo!("--- map com lambda: sigmoid ---")
-    let z := [0.0 1.0 2.0; -1.0 0.0 1.0]
-    let sig := map (lambda x:
-        div 1.0 (+ 1.0 (exp (- 0.0 x))) | 0.0) z
-    echo!(sig)
+    echo!("--- map Float → Float: dobrar ---")
+    let f := [1.5 2.5; 3.5 4.5]
+    let fd := map (lambda x: * x 2.0) f
+    echo!(fd)
+
+    echo!("--- map sobre 1-D ---")
+    let v := [1 2 3;]
+    let vd := map (lambda x: * x 2) v
+    echo!(vd)
 
 main!()

@@ -26,6 +26,23 @@ trampoline/scheduler ou usar um canal lateral (e.g. célula
 
 ### 🟢 Baixo
 
+#### `shape` retorna `Tuple` mas `Tuple` não implementa `SHOW`
+
+`echo!(shape m)` falha com `type.no_overload` — `shape :: Tensor::T => Tuple`
+mas `Tuple` não implementa `SHOW`. Ou Tuple implementa SHOW (display
+`(a, b, ...)`) ou `shape` retorna `Text`/`Array::Int`.
+
+#### Lambda com `match`/guards em `let` binding não registra o binding
+
+`let f := lambda x: match ...` produz `type.unbound_name` — o binding
+`f` não é registrado. Lambda de corpo único (`let f := lambda x: + x 1`)
+funciona. O problema está na inferência de lambdas com cláusulas
+(guards/match) em posição de `let` — provavelmente o body do lambda
+consome o `let` antes de registrá-lo no env.
+
+**Caminho:** investigar `infer_lambda_body` e como o `let` binding é
+inserido no `TypeEnv` quando o body é multi-cláusula.
+
 #### `spawn!` no Windows é stub
 
 `ipc.rs:155-161` — Implementar `spawn` no Windows. Ver
