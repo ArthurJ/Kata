@@ -11,6 +11,7 @@ use kata_inference::TypedModule;
 pub use env::Env;
 pub use eval::{InterpCtx, InterpError, eval};
 
+mod cache_key;
 mod csp;
 mod env;
 mod eval;
