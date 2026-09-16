@@ -115,8 +115,8 @@ fn prelude_has_multiple_add_overloads() {
         .collect();
     assert_eq!(
         adds.len(),
-        13,
-        "deve ter 13 overloads de + (Int, Float, Rational, Text, List, Set+Set, Set+elem, Dict+Dict, Bytes+Bytes + 4 cross-type: Int Float, Int Rational, Float Rational, Rational Float)"
+        14,
+        "deve ter 14 overloads de + (Int, Float, Rational, Text, List, Set+Set, Set+elem, Dict+Dict, Bytes+Bytes, Tensor+Tensor + 4 cross-type: Int Float, Int Rational, Float Rational, Rational Float)"
     );
 }
 
@@ -130,7 +130,7 @@ fn prelude_has_show_for_int_float_rational_and_text() {
         .collect();
     assert_eq!(
         shows.len(),
-        6,
-        "deve ter 6 overloads de show (Int, Float, Rational, Text, Bytes, Unit)"
+        7,
+        "deve ter 7 overloads de show (Int, Float, Rational, Text, Bytes, Unit, Tensor)"
     );
 }
