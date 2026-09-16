@@ -2,8 +2,8 @@
 //!
 //! Extraído de `expr.rs` para reduzir o tamanho do dispatch central.
 
-use cranelift_codegen::ir::types::I64;
 use cranelift_codegen::ir::types::F64;
+use cranelift_codegen::ir::types::I64;
 use cranelift_codegen::ir::{AbiParam, InstBuilder, MemFlagsData, Signature};
 use cranelift_codegen::isa::CallConv;
 use kata_core::ty::Ty;
@@ -213,12 +213,31 @@ pub(crate) fn lower_closure(
                 }
             }
         }
-        // ── Bitcast Float args para I64 ──
-        // FFIs têm assinatura I64, mas valores Float são F64 no IR do Cranelift.
-        // Sem bitcast, o verifier do Cranelift rejeita a compilação.
-        // Isto é o bug que impedia passar escalares Float para FFIs (ex: scale t 2.0).
-        for arg_val in call_args.iter_mut() {
-            *arg_val = super::dict_set_lit::bitcast_to_i64(*arg_val, ctx);
+        // ── Bitcast args conforme assinatura da FFI ──
+        // FFIs podem ter parâmetros I64 (ex: tensor_scale) ou F64 (ex: fmul).
+        // Só bitcastar quando o tipo do arg difere do tipo esperado pelo param.
+        let sig_ref = ctx.builder.func.dfg.ext_funcs[*func_ref].signature;
+        let sig_params: Vec<_> = ctx.builder.func.dfg.signatures[sig_ref]
+            .params
+            .iter()
+            .map(|p| p.value_type)
+            .collect();
+        for (i, arg_val) in call_args.iter_mut().enumerate() {
+            if i >= sig_params.len() {
+                break;
+            }
+            let expected = sig_params[i];
+            let actual = ctx.builder.func.dfg.value_type(*arg_val);
+            if expected != actual {
+                if expected == I64 && actual == F64 {
+                    *arg_val = super::dict_set_lit::bitcast_to_i64(*arg_val, ctx);
+                } else if expected == F64 && actual == I64 {
+                    *arg_val = ctx
+                        .builder
+                        .ins()
+                        .bitcast(F64, MemFlagsData::new(), *arg_val);
+                }
+            }
         }
 
         let call_inst = ctx.builder.ins().call(*func_ref, &call_args);
@@ -227,9 +246,11 @@ pub(crate) fn lower_closure(
         if results.is_empty() {
             Ok(ctx.builder.ins().iconst(I64, 0))
         } else {
-            // FFI retorna I64. Se o tipo esperado é Float, bitcast I64 → F64.
+            // FFI pode retornar I64 ou F64. Se o tipo esperado é Float e a FFI
+            // retorna I64, bitcast I64 → F64. Se já retorna F64, usar direto.
             let ret = results[0];
-            if expr.ty == Ty::float() {
+            let ret_ty = ctx.builder.func.dfg.value_type(ret);
+            if expr.ty == Ty::float() && ret_ty == I64 {
                 Ok(ctx.builder.ins().bitcast(F64, MemFlagsData::new(), ret))
             } else {
                 Ok(ret)
