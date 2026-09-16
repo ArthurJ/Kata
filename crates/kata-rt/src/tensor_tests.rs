@@ -106,7 +106,7 @@ fn tensor_new_basic() {
 fn tensor_shape_basic() {
     let (_rt, ptr) = make_2x3_int();
     let shape_ptr = kata_rt_tensor_shape(ptr) as *const i64;
-    assert!(shape_ptr != std::ptr::null());
+    assert!(!shape_ptr.is_null());
     let s0 = unsafe { std::ptr::read_unaligned(shape_ptr) };
     let s1 = unsafe { std::ptr::read_unaligned(shape_ptr.add(1)) };
     assert_eq!(s0, 2);
@@ -298,12 +298,11 @@ fn tensor_dot_float_2x2() {
     assert_eq!(tag, 0);
 
     let expected = [7.0, 10.0, 15.0, 22.0];
-    for i in 0..4 {
+    for (i, &exp) in expected.iter().enumerate() {
         let val = read_float(tensor_ptr, i as i64);
         assert!(
-            (val - expected[i]).abs() < 1e-10,
-            "dot[{i}] = {val}, esperado {}",
-            expected[i]
+            (val - exp).abs() < 1e-10,
+            "dot[{i}] = {val}, esperado {exp}"
         );
     }
 }
@@ -448,8 +447,8 @@ fn tensor_add_float() {
     assert_eq!(tag, 0);
 
     let expected = [11.0, 22.0, 33.0, 44.0];
-    for i in 0..4 {
+    for (i, &exp) in expected.iter().enumerate() {
         let val = read_float(tensor_ptr, i as i64);
-        assert!((val - expected[i]).abs() < 1e-10);
+        assert!((val - exp).abs() < 1e-10);
     }
 }

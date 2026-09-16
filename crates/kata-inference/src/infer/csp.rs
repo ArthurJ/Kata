@@ -56,10 +56,9 @@ pub(crate) fn infer_transmission_op(
             // escrita. Erro de tipo, não UnboundName.
             Err(MiddleError::TypeMismatch {
                 expected: "Receiver::T (endpoint de leitura) como source de !>".into(),
-                found: format!(
-                    "Sender::T — Sender é endpoint de escrita, não pode ser source de dados. \
+                found: "Sender::T — Sender é endpoint de escrita, não pode ser source de dados. \
                      Para enviar, use `tx <! valor` ou `valor !> tx`"
-                ),
+                    .into(),
                 span: source.span.into(),
             })
         }

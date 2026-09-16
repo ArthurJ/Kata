@@ -648,10 +648,7 @@ pub(crate) fn infer_tensor_lit(
         found: format!("{elem_ty}"),
         span: (*span).into(),
     })?;
-    if !ctx
-        .interface_registry
-        .type_implements(&type_name, "NUM")
-    {
+    if !ctx.interface_registry.type_implements(&type_name, "NUM") {
         return Err(MiddleError::TypeMismatch {
             expected: format!("tipo que implementa NUM ({type_name} não implementa)"),
             found: format!("{elem_ty}"),

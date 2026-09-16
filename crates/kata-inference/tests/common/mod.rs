@@ -79,7 +79,9 @@ pub fn assert_no_holes(expr: &Spanned<Expr>) {
             assert_no_holes(v);
         }),
         Expr::SetLit { elements } => elements.iter().for_each(assert_no_holes),
-        Expr::TensorLit { rows, .. } => rows.iter().flat_map(|r| r.iter()).for_each(assert_no_holes),
+        Expr::TensorLit { rows, .. } => {
+            rows.iter().flat_map(|r| r.iter()).for_each(assert_no_holes)
+        }
         Expr::RangeLit {
             start, step, end, ..
         } => {
@@ -218,7 +220,9 @@ pub fn assert_no_pipes(expr: &Spanned<Expr>) {
             assert_no_pipes(v);
         }),
         Expr::SetLit { elements } => elements.iter().for_each(assert_no_pipes),
-        Expr::TensorLit { rows, .. } => rows.iter().flat_map(|r| r.iter()).for_each(assert_no_pipes),
+        Expr::TensorLit { rows, .. } => {
+            rows.iter().flat_map(|r| r.iter()).for_each(assert_no_pipes)
+        }
         Expr::RangeLit {
             start, step, end, ..
         } => {

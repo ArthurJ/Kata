@@ -27,14 +27,11 @@ use super::helpers::InferResult;
 /// retornam erro (primeira implementação: apenas literais).
 fn eval_int_literal(expr: &Expr) -> Result<i64, MiddleError> {
     match expr {
-        Expr::IntLit { text } => {
-            text.parse::<i64>()
-                .map_err(|_| MiddleError::TypeMismatch {
-                    expected: "literal inteiro".into(),
-                    found: format!("não-integer literal: {}", text),
-                    span: Span::zero().into(),
-                })
-        }
+        Expr::IntLit { text } => text.parse::<i64>().map_err(|_| MiddleError::TypeMismatch {
+            expected: "literal inteiro".into(),
+            found: format!("não-integer literal: {}", text),
+            span: Span::zero().into(),
+        }),
         _ => Err(MiddleError::TypeMismatch {
             expected: "literal inteiro em índice de range de tensor".into(),
             found: "expressão não-literal".into(),
@@ -168,7 +165,10 @@ pub(crate) fn infer_dot_access(
         // O dispatch retorna Result::(A, Err) — access checked.
         // `at` tem type_params (A é genérico), então precisa do caminho
         // genérico: percorrer overloads e fazer unify.
-        (Ty::List(_) | Ty::Array(_) | Ty::Bytes | Ty::Prim(PrimTy::Text) | Ty::Tensor(_), DotIndex::Int(n)) => {
+        (
+            Ty::List(_) | Ty::Array(_) | Ty::Bytes | Ty::Prim(PrimTy::Text) | Ty::Tensor(_),
+            DotIndex::Int(n),
+        ) => {
             let arg_types = vec![inner.ty.clone(), Ty::int()];
             // Tenta caminho não-genérico primeiro.
             let overload = ctx.table.resolve("at", &arg_types, ctx.interface_registry);
@@ -437,7 +437,11 @@ pub(crate) fn infer_dot_access(
         }),
         // Field access em coleção não faz sentido.
         (
-            Ty::List(_) | Ty::Array(_) | Ty::Range(_) | Ty::Bytes | Ty::Prim(PrimTy::Text)
+            Ty::List(_)
+            | Ty::Array(_)
+            | Ty::Range(_)
+            | Ty::Bytes
+            | Ty::Prim(PrimTy::Text)
             | Ty::Tensor(_),
             DotIndex::Field(_),
         ) => Err(MiddleError::FieldAccessOnTuple {

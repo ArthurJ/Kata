@@ -87,12 +87,12 @@ fn tensor_alloc(rank: i64, shape: &[i64], elem_type: i64, data_in: *const u8) ->
         std::ptr::write_unaligned(base.add(OFF_ELEM_SIZE) as *mut i64, elem_size);
 
         // Copia shape
-        for i in 0..rank as usize {
-            std::ptr::write_unaligned(shape_ptr.add(i), shape[i]);
+        for (i, &s) in shape.iter().enumerate().take(rank as usize) {
+            std::ptr::write_unaligned(shape_ptr.add(i), s);
         }
         // Copia strides
-        for i in 0..rank as usize {
-            std::ptr::write_unaligned(strides_ptr.add(i), strides[i]);
+        for (i, &s) in strides.iter().enumerate().take(rank as usize) {
+            std::ptr::write_unaligned(strides_ptr.add(i), s);
         }
         // Copia ou zera data
         if data_in.is_null() {
@@ -111,6 +111,7 @@ unsafe fn read_field(ptr: i64, offset: usize) -> i64 {
 }
 
 /// Escreve um field no header.
+#[allow(dead_code)]
 unsafe fn write_field(ptr: i64, offset: usize, val: i64) {
     unsafe {
         std::ptr::write_unaligned((ptr as *mut u8).add(offset) as *mut i64, val);
@@ -199,6 +200,7 @@ fn broadcast_shapes(a: &[i64], b: &[i64]) -> Option<Vec<i64>> {
 }
 
 /// Converte índice N-D em índice flatten (usando strides).
+#[allow(dead_code)]
 unsafe fn nd_to_flat(ptr: i64, indices: &[i64]) -> i64 {
     unsafe {
         let strides = get_strides_vec(ptr);
@@ -650,8 +652,8 @@ pub extern "C" fn kata_rt_tensor_transpose(ptr: i64) -> i64 {
     // precisamos dos strides transpostos para zero-copy view)
     unsafe {
         let strides_ptr = get_strides_ptr(result);
-        for i in 0..rank as usize {
-            std::ptr::write_unaligned(strides_ptr.add(i), new_strides[i]);
+        for (i, &s) in new_strides.iter().enumerate().take(rank as usize) {
+            std::ptr::write_unaligned(strides_ptr.add(i), s);
         }
     }
 
@@ -841,10 +843,10 @@ pub extern "C" fn kata_rt_tensor_sub(
 
     // Constrói lista de strides originais para eixos não-colapsados
     let mut orig_strides: Vec<i64> = Vec::new();
-    for i in 0..n_axes as usize {
+    for (i, &s) in strides.iter().enumerate().take(n_axes as usize) {
         let is_collapsed = (collapse_mask >> i) & 1 == 1;
         if !is_collapsed {
-            orig_strides.push(strides[i]);
+            orig_strides.push(s);
         }
     }
 
@@ -944,7 +946,7 @@ fn format_tensor(ptr: i64, shape: &[i64], elem_type: i64) -> String {
         let mut lines = Vec::new();
         for r in 0..rows {
             let row_cells: Vec<String> = (0..cols)
-                .map(|c| format!("{:>width$}", &cells[r * cols + c], width = col_widths[c]))
+                .map(|c| format!("{:>width$}", cells[r * cols + c], width = col_widths[c]))
                 .collect();
             lines.push(row_cells.join("  "));
         }
@@ -994,7 +996,7 @@ fn format_2d_or_deeper(cells: &[String], shape: &[i64], _elem_type: i64) -> Stri
     let mut lines = Vec::new();
     for r in 0..rows {
         let row_cells: Vec<String> = (0..cols)
-            .map(|c| format!("{:>width$}", &cells[r * cols + c], width = col_widths[c]))
+            .map(|c| format!("{:>width$}", cells[r * cols + c], width = col_widths[c]))
             .collect();
         lines.push(row_cells.join("  "));
     }
