@@ -286,14 +286,37 @@ pub extern "C" fn kata_rt_tensor_rank(ptr: i64) -> i64 {
     tag_smi(unsafe { get_rank(ptr) })
 }
 
-/// Retorna o shape como um ponteiro para `rank` int64s.
-/// O caller não libera — vive na arena.
+/// Retorna o shape como um Array de Int (layout: [len: i64][data: i64 * len]).
+/// O Array é alocado na arena do runtime e é próprio para uso em Kata
+/// (implementa SHOW, INDEXABLE, etc). O caller não libera — vive na arena.
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_tensor_shape(ptr: i64) -> i64 {
     if ptr == 0 {
         return 0;
     }
-    unsafe { get_shape_ptr(ptr) as i64 }
+    let rank = unsafe { get_rank(ptr) } as i64;
+    if rank <= 0 {
+        return 0;
+    }
+    // Aloca Array: [len: i64][data: i64 * rank]
+    let size = 8 + rank * 8;
+    let arr_ptr = crate::arena::kata_rt_arena_alloc(crate::arena::rt_ptr(), 0, size);
+    if arr_ptr == 0 {
+        return 0;
+    }
+    let shape_ptr = unsafe { get_shape_ptr(ptr) };
+    unsafe {
+        // len no offset 0
+        std::ptr::write_unaligned(arr_ptr as *mut i64, rank);
+        // Copia cada dimensão (SMI-tagged) para o Array
+        for i in 0..rank as usize {
+            let dim = std::ptr::read_unaligned(shape_ptr.add(i));
+            // SMI tag: (dim << 1) | 1
+            let smi = (dim << 1) | 1;
+            std::ptr::write_unaligned((arr_ptr as *mut u8).add(8 + i * 8) as *mut i64, smi);
+        }
+    }
+    arr_ptr
 }
 
 /// Acesso por índice flatten com bounds check. Retorna um Result box (Sum):

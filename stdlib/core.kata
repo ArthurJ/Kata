@@ -651,7 +651,7 @@ List::A implements SLICEABLE::A
 # Tensor::T parametriza o tipo do elemento (deve implementar NUM).
 
 interface TENSOR::T
-    shape :: Self => Tuple
+    shape :: Self => {Int}
 
     rank :: Self => Int
 
@@ -673,7 +673,7 @@ interface TENSOR::T
 # o DispatchTable resolve por tipo concreto dos argumentos).
 
 @ffi("kata_rt_tensor_shape")
-shape :: Tensor::T => Tuple
+shape :: Tensor::T => {Int}
 
 @ffi("kata_rt_tensor_rank")
 rank :: Tensor::T => Int

@@ -148,6 +148,21 @@ impl Parser {
                     span,
                 ))
             }
+            Token::LBrace => {
+                // `{T}` — açúcar sintático para `Array::T`.
+                // Desugara no mesmo TypeExpr::ParamApp que `Array::T` produz.
+                self.advance(); // consume {
+                let ty = self.parse_type_expr()?;
+                self.expect(&Token::RBrace, "\"}\"")?;
+                let span = start.cover(ty.span);
+                Ok(Spanned::new(
+                    TypeExpr::ParamApp {
+                        name: "Array".into(),
+                        params: vec![ty],
+                    },
+                    span,
+                ))
+            }
             Token::LParen => {
                 self.advance(); // consume (
 

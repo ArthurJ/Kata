@@ -105,12 +105,18 @@ fn tensor_new_basic() {
 #[test]
 fn tensor_shape_basic() {
     let (_rt, ptr) = make_2x3_int();
-    let shape_ptr = kata_rt_tensor_shape(ptr) as *const i64;
-    assert!(!shape_ptr.is_null());
-    let s0 = unsafe { std::ptr::read_unaligned(shape_ptr) };
-    let s1 = unsafe { std::ptr::read_unaligned(shape_ptr.add(1)) };
-    assert_eq!(s0, 2);
-    assert_eq!(s1, 3);
+    let arr_ptr = kata_rt_tensor_shape(ptr);
+    assert!(arr_ptr != 0);
+    // Array layout: [len: i64][data: i64 * len]
+    // len no offset 0 (raw, não SMI)
+    let len = unsafe { std::ptr::read_unaligned(arr_ptr as *const i64) };
+    assert_eq!(len, 2);
+    // Elementos SMI-tagged no offset 8+
+    let s0 = unsafe { std::ptr::read_unaligned((arr_ptr as *const u8).add(8) as *const i64) };
+    let s1 = unsafe { std::ptr::read_unaligned((arr_ptr as *const u8).add(16) as *const i64) };
+    // SMI: (dim << 1) | 1
+    assert_eq!(s0, (2 << 1) | 1);
+    assert_eq!(s1, (3 << 1) | 1);
 }
 
 // ── at (indexação flatten) ─────────────────────────────────────────
@@ -339,10 +345,14 @@ fn tensor_transpose_2x3() {
     let result = kata_rt_tensor_transpose(ptr);
     assert!(result != 0);
 
-    // Shape deve ser 3×2
-    let shape_ptr = kata_rt_tensor_shape(result) as *const i64;
-    assert_eq!(unsafe { std::ptr::read_unaligned(shape_ptr) }, 3);
-    assert_eq!(unsafe { std::ptr::read_unaligned(shape_ptr.add(1)) }, 2);
+    // Shape deve ser 3×2 (Array layout: [len][data...], SMI-tagged)
+    let shape_arr = kata_rt_tensor_shape(result);
+    let len = unsafe { std::ptr::read_unaligned(shape_arr as *const i64) };
+    assert_eq!(len, 2);
+    let s0 = unsafe { std::ptr::read_unaligned((shape_arr as *const u8).add(8) as *const i64) };
+    let s1 = unsafe { std::ptr::read_unaligned((shape_arr as *const u8).add(16) as *const i64) };
+    assert_eq!(s0, (3 << 1) | 1);
+    assert_eq!(s1, (2 << 1) | 1);
 
     // Strides devem ser transpostos: original [3,1] → [1,3]
     // No tensor transposto, acessar (i,j) deve dar o elemento (j,i) do original
