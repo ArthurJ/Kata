@@ -219,6 +219,30 @@ main!()"#;
     assert_eq!(stdout.trim_end(), "1  0  0\n0  1  0\n0  0  1");
 }
 
+#[test]
+fn tensor_eye_float_dispatch() {
+    // eye 3.0 → Tensor::Float (dispatch por tipo do argumento)
+    let (code, stdout, _) = run_kata("echo!(show (eye 3.0))");
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim_end(), "1  0  0\n0  1  0\n0  0  1");
+}
+
+#[test]
+fn tensor_zeros_float_dispatch() {
+    // zeros {2.0 3.0} → Tensor::Float 2×3
+    let (code, stdout, _) = run_kata("echo!(show (zeros {2.0 3.0}))");
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim_end(), "0  0  0\n0  0  0");
+}
+
+#[test]
+fn tensor_scale_float_scalar() {
+    // scale com escalar Float — bug pré-existente do codegen corrigido
+    let (code, stdout, _) = run_kata("echo!(show (scale [1.0 2.0; 3.0 4.0] 2.0))");
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim_end(), "2  4\n6  8");
+}
+
 // ── Programa completo (operações que funcionam corretamente) ───
 
 #[test]

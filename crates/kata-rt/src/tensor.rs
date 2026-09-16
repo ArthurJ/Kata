@@ -916,14 +916,15 @@ pub extern "C" fn kata_rt_tensor_eye_int(n: i64) -> i64 {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_tensor_eye_float(n: i64) -> i64 {
-    // n é SMI-tagged Int (o tamanho da matriz é sempre inteiro)
-    tensor_eye_impl(untag_smi(n), ELEM_FLOAT)
+    // n é Float passado como bits de f64 (não SMI-tagged)
+    tensor_eye_impl(f64::from_bits(n as u64) as i64, ELEM_FLOAT)
 }
 
 /// Constrói um tensor N-D de zeros com a shape dada.
 /// `shape_ptr` aponta para um Array (layout: len no offset 0 como
-/// i64 cru, elementos a partir do offset 8, cada um SMI-tagged).
-fn tensor_zeros_impl(shape_ptr: i64, elem_type: i64) -> i64 {
+/// i64 cru, elementos a partir do offset 8).
+/// `is_float_shape`: se true, elementos são bits de f64; se false, SMI-tagged.
+fn tensor_zeros_impl(shape_ptr: i64, elem_type: i64, is_float_shape: bool) -> i64 {
     if shape_ptr == 0 {
         return 0;
     }
@@ -933,25 +934,30 @@ fn tensor_zeros_impl(shape_ptr: i64, elem_type: i64) -> i64 {
     }
     let mut shape: Vec<i64> = Vec::with_capacity(len as usize);
     for i in 0..len as usize {
-        let raw = untag_smi(unsafe {
+        let raw = unsafe {
             std::ptr::read_unaligned((shape_ptr as *const u8).add(8 + i * 8) as *const i64)
-        });
-        if raw < 1 {
+        };
+        let dim = if is_float_shape {
+            f64::from_bits(raw as u64) as i64
+        } else {
+            untag_smi(raw)
+        };
+        if dim < 1 {
             return 0;
         }
-        shape.push(raw);
+        shape.push(dim);
     }
     tensor_alloc(len, &shape, elem_type, std::ptr::null())
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_tensor_zeros_int(shape_ptr: i64) -> i64 {
-    tensor_zeros_impl(shape_ptr, ELEM_INT)
+    tensor_zeros_impl(shape_ptr, ELEM_INT, false)
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_tensor_zeros_float(shape_ptr: i64) -> i64 {
-    tensor_zeros_impl(shape_ptr, ELEM_FLOAT)
+    tensor_zeros_impl(shape_ptr, ELEM_FLOAT, true)
 }
 
 /// Constrói um Text (C string) com a representação de display do tensor.

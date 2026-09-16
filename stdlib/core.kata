@@ -712,13 +712,19 @@ Tensor::T implements SHOW
     show :: Tensor::T => Text
 
 # Construtores de tensor
-# eye(n) → matriz identidade n×n (Tensor::Float, default para álgebra linear)
-@ffi("kata_rt_tensor_eye_float")
-eye :: Int => Tensor::Float
+# eye despacha por tipo do argumento: Int → Tensor::Int, Float → Tensor::Float
+@ffi("kata_rt_tensor_eye_int")
+eye :: Int => Tensor::Int
 
-# zeros(shape) → tensor N-D de zeros (Tensor::Float)
+@ffi("kata_rt_tensor_eye_float")
+eye :: Float => Tensor::Float
+
+# zeros despacha por tipo do Array: Array::Int → Tensor::Int, Array::Float → Tensor::Float
+@ffi("kata_rt_tensor_zeros_int")
+zeros :: Array::Int => Tensor::Int
+
 @ffi("kata_rt_tensor_zeros_float")
-zeros :: Array::Int => Tensor::Float
+zeros :: Array::Float => Tensor::Float
 
 # ── Dict (Fio 13) ───────────────────────────────────────────────
 
