@@ -212,6 +212,14 @@ pub(crate) fn lower_closure(
                 }
             }
         }
+        // ── Bitcast Float args para I64 ──
+        // FFIs têm assinatura I64, mas valores Float são F64 no IR do Cranelift.
+        // Sem bitcast, o verifier do Cranelift rejeita a compilação.
+        // Isto é o bug que impedia passar escalares Float para FFIs (ex: scale t 2.0).
+        for arg_val in call_args.iter_mut() {
+            *arg_val = super::dict_set_lit::bitcast_to_i64(*arg_val, ctx);
+        }
+
         let call_inst = ctx.builder.ins().call(*func_ref, &call_args);
         // Void FFI (ex: kata_rt_log_config) — sem retorno. Retorna Unit (iconst 0).
         let results = ctx.builder.inst_results(call_inst);
