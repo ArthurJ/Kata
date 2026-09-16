@@ -1,6 +1,6 @@
 # TODO — Kata-Lang
 
-Único arquivo de pendências. Atualizado 2026-09-10.
+Único arquivo de pendências. Atualizado 2026-09-16.
 
 ---
 
@@ -25,23 +25,6 @@ trampoline/scheduler ou usar um canal lateral (e.g. célula
 `Mutex<Option<InterpError>>` no `InterpCtx`).
 
 ### 🟢 Baixo
-
-#### `shape` retorna `Tuple` mas `Tuple` não implementa `SHOW`
-
-`echo!(shape m)` falha com `type.no_overload` — `shape :: Tensor::T => Tuple`
-mas `Tuple` não implementa `SHOW`. Ou Tuple implementa SHOW (display
-`(a, b, ...)`) ou `shape` retorna `Text`/`Array::Int`.
-
-#### Lambda com `match`/guards em `let` binding não registra o binding
-
-`let f := lambda x: match ...` produz `type.unbound_name` — o binding
-`f` não é registrado. Lambda de corpo único (`let f := lambda x: + x 1`)
-funciona. O problema está na inferência de lambdas com cláusulas
-(guards/match) em posição de `let` — provavelmente o body do lambda
-consome o `let` antes de registrá-lo no env.
-
-**Caminho:** investigar `infer_lambda_body` e como o `let` binding é
-inserido no `TypeEnv` quando o body é multi-cláusula.
 
 #### `spawn!` no Windows é stub
 
@@ -69,11 +52,6 @@ refere-se a, permitindo remover overloads não-usadas antes do codegen.
 
 ## Futuro
 
-- **Tensor size parameters** — tensor base implementado (PRD-tensor.md ✅).
-  Size parameters no type system + Z3 para shapes parcialmente conhecidos
-  + refined pair (DotCompatible) na fronteira. Não exige novo runtime —
-  trabalho de compilador (size params + Ty::Generic("Tensor") + parser
-  + codegen) + FFI em kata-rt.
 - **Sistema de supressão de diagnóstico** — braço de match redundante
   agora é erro (decisão 8 do PRD-exaustividade-aninhada); `otherwise`
   inútil é isento, mas patterns não-otherwise redundantes com intenção
