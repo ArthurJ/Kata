@@ -1,6 +1,6 @@
 # PRD — Tensores
 
-**Status:** 🔴 Pendente
+**Status:** ✅ Concluído
 **Depende de:** `kata_rt_array` ✅ (runtime base — modelo de buffer contíguo)
 
 ## 1. Objetivo
@@ -179,7 +179,7 @@ kata_rt_tensor_free      (tensor*)
 
 ## 5. Fases
 
-### Fase 1: Runtime `kata_rt_tensor`
+### Fase 1: Runtime `kata_rt_tensor` ✅
 
 Criar `crates/kata-rt/src/tensor.rs` com a struct `kata_rt_tensor` e todas as FFIs da §3.8.
 
@@ -208,7 +208,7 @@ Criar `crates/kata-rt/src/tensor.rs` com a struct `kata_rt_tensor` e todas as FF
 - `add` shapes incompatíveis (`[1 2; 3 4]` + `[1 2 3]`) → Err.
 - `panic_add` shapes incompatíveis → panic.
 
-### Fase 2: AST — `Ty::Tensor` + `Expr::TensorLit`
+### Fase 2: AST — `Ty::Tensor` + `Expr::TensorLit` ✅
 
 - Adicionar `Tensor(Box<Ty>)` em `kata-core/src/ty.rs`.
 - Adicionar `TensorLit { rows: Vec<Vec<Spanned<Expr>>>, trailing_semi: bool }` em `kata-ast/src/expr.rs`.
@@ -217,7 +217,7 @@ Criar `crates/kata-rt/src/tensor.rs` com a struct `kata_rt_tensor` e todas as FF
 
 **DoD:** `cargo check --workspace` compila com os novos variants. Parser ainda não produz `TensorLit` (Fase 3).
 
-### Fase 3: Parser — `;` como discriminador
+### Fase 3: Parser — `;` como discriminador ✅
 
 - Em `parse_list_or_range` (`kata-parser/src/expr_containers.rs`): após parsear o primeiro elemento, se o próximo token é `;`, mudar para modo Tensor — coletar linhas separadas por `;`.
 - `;` terminal (`[1 2 3;]`): uma linha, `trailing_semi = true` → Tensor 1×N.
@@ -235,7 +235,7 @@ Criar `crates/kata-rt/src/tensor.rs` com a struct `kata_rt_tensor` e todas as FF
 - `[1, 2, 3; 4, 5, 6]` → mesmo `TensorLit` que sem vírgulas.
 - N-D aninhado: `[[1 2; 3 4]; [5 6; 7 8]]` → `TensorLit` com 2 rows, cada row contém `TensorLit`.
 
-### Fase 4: Inference — typeck de `TensorLit` + interface TENSOR
+### Fase 4: Inference — typeck de `TensorLit` + interface TENSOR ✅
 
 - Em `kata-inference/src/infer/expr.rs`: novo braço para `TensorLit`.
   - Inferir tipo de cada elemento; unificar para `T`.
@@ -261,7 +261,7 @@ Criar `crates/kata-rt/src/tensor.rs` com a struct `kata_rt_tensor` e todas as FF
 - `[1 2 3; 4 5 6].(0 1)` → `Result::Int`.
 - `[1 2 3; 4 5 6].(0)` → `Tensor::Int`.
 
-### Fase 5: Codegen — lowering de `TensorLit` + operações
+### Fase 5: Codegen — lowering de `TensorLit` + operações ✅
 
 - Em `kata-codegen/src/lowering/collections_literal.rs`: novo braço para `TensorLit`.
   - Para cada elemento, lowerar e armazenar no buffer contíguo.
@@ -290,7 +290,7 @@ Criar `crates/kata-rt/src/tensor.rs` com a struct `kata_rt_tensor` e todas as FF
 - `echo!(show [1 2 3; 4 5 6].(0 1))` → `2` (Result::Ok).
 - `echo!(show [1 2 3; 4 5 6].(0))` → `[1 2 3]` (Tensor 1×3).
 
-### Fase 6: Display
+### Fase 6: Display ✅
 
 - Em `kata-rt/src/display.rs`: adicionar `TYPE_TENSOR` tag.
 - Implementar formatação tabular: largura de coluna dinâmica, células centralizadas, espaços entre colunas.
@@ -304,7 +304,7 @@ Criar `crates/kata-rt/src/tensor.rs` com a struct `kata_rt_tensor` e todas as FF
 - `echo!([1 2; 3 4])` → `1 2\n3 4` (simples, sem bordas).
 - Tensor 3-D: fatias separadas por `[0]:` e `[1]:`.
 
-### Fase 7: Snapshot + testes E2E
+### Fase 7: Snapshot + testes E2E ✅
 
 - Criar testes E2E em `crates/kata-driver/tests/` cobrindo:
   - Literais (1-D, 2-D, 3-D, vetor linha, vetor coluna, aninhamento).
