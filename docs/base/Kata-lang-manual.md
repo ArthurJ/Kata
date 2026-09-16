@@ -4233,5 +4233,20 @@ não-contíguos são exibidos na ordem correta.
 
 Subtração não existe como operação dedicada: `+ a (scale b (- 0 1))`.
 
+### 30.8. Construtores
+
+```kata
+eye 3              # matriz identidade 3×3 (Tensor::Float)
+zeros {2 3}        # tensor 2×3 de zeros (Tensor::Float)
+zeros {3 3 3}      # tensor 3-D 3×3×3 de zeros
+```
+
+`eye :: Int => Tensor::Float` — matriz identidade n×n, 1.0 na diagonal
+principal e 0.0 fora. O argumento é sempre `Int` (tamanho é inteiro); o
+tensor resultante é sempre `Float` (default para álgebra linear).
+
+`zeros :: Array::Int => Tensor::Float` — tensor N-D preenchido com zeros.
+Recebe um `Array` com as dimensões de cada eixo.
+
 Backend de álgebra linear: `matrixmultiply` (Rust puro, SIMD SSE2/AVX/NEON)
 é o default. OpenBLAS é opt-in via Cargo feature.
