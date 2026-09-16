@@ -137,28 +137,34 @@ pub(crate) fn run(typed_module: &mut TypedModule) {
     // O spawn!/fork! aplica env.apply_substitutions durante a inferência,
     // que resolve Var nos bindings do TypeEnv. Mas o ChannelCreate já foi
     // construído antes do spawn! e ainda tem Var no elem_ty e no expr.ty.
-    // ── Resolução de Var("T0") na TAST ──
-    // O spawn!/fork! aplica env.apply_substitutions durante a inferência,
-    // que resolve Var nos bindings do TypeEnv. Mas o ChannelCreate já foi
-    // construído antes do spawn! e ainda tem Var no elem_ty e no expr.ty.
-    // Coletamos os tipos concretos dos ChannelSend (onde o tipo já foi
+    // Coletamos os tipos concretos dos TransmissionOp (onde o tipo já foi
     // resolvido pelo spawn!) e mutamos os ChannelCreate correspondentes
     // diretamente pelo span.
-    if !channel_bindings.is_empty() {
-        // Mapa: span_do_ChannelCreate -> tipo_concreto_do_elemento
-        let mut create_types: HashMap<kata_ast::Span, Ty> = HashMap::new();
 
+    // ── Entry point: constants + pre_entry + entry ──
+    let mut entry_bindings: HashMap<String, kata_ast::Span> = HashMap::new();
+    loop {
+        let prev_len = entry_bindings.len();
         for expr in &typed_module.constants {
-            collect_concrete_channel_types(&expr.node, &channel_bindings, &mut create_types);
+            collect_channel_bindings(&expr.node, &mut entry_bindings);
         }
         for expr in &typed_module.pre_entry {
-            collect_concrete_channel_types(&expr.node, &channel_bindings, &mut create_types);
+            collect_channel_bindings(&expr.node, &mut entry_bindings);
         }
-        collect_concrete_channel_types(
-            &typed_module.entry.node,
-            &channel_bindings,
-            &mut create_types,
-        );
+        collect_channel_bindings(&typed_module.entry.node, &mut entry_bindings);
+        if entry_bindings.len() == prev_len {
+            break;
+        }
+    }
+    if !entry_bindings.is_empty() {
+        let mut create_types: HashMap<kata_ast::Span, Ty> = HashMap::new();
+        for expr in &typed_module.constants {
+            collect_concrete_channel_types(&expr.node, &entry_bindings, &mut create_types);
+        }
+        for expr in &typed_module.pre_entry {
+            collect_concrete_channel_types(&expr.node, &entry_bindings, &mut create_types);
+        }
+        collect_concrete_channel_types(&typed_module.entry.node, &entry_bindings, &mut create_types);
 
         if !create_types.is_empty() {
             for expr in &mut typed_module.constants {
@@ -168,6 +174,32 @@ pub(crate) fn run(typed_module: &mut TypedModule) {
                 resolve_channel_create(&mut expr.node, &create_types);
             }
             resolve_channel_create(&mut typed_module.entry.node, &create_types);
+        }
+    }
+
+    // ── Actions: cada action tem seu próprio escopo ──
+    for action in &mut typed_module.actions {
+        let mut action_bindings: HashMap<String, kata_ast::Span> = HashMap::new();
+        loop {
+            let prev_len = action_bindings.len();
+            for stmt in &action.body {
+                collect_channel_bindings(&stmt.node, &mut action_bindings);
+            }
+            if action_bindings.len() == prev_len {
+                break;
+            }
+        }
+        if action_bindings.is_empty() {
+            continue;
+        }
+        let mut create_types: HashMap<kata_ast::Span, Ty> = HashMap::new();
+        for stmt in &action.body {
+            collect_concrete_channel_types(&stmt.node, &action_bindings, &mut create_types);
+        }
+        if !create_types.is_empty() {
+            for stmt in &mut action.body {
+                resolve_channel_create(&mut stmt.node, &create_types);
+            }
         }
     }
 }
@@ -277,39 +309,64 @@ fn mark_channel_create_by_span(expr: &mut TypedExpr, target_span: kata_ast::Span
     });
 }
 
-/// Coleta tipos concretos de canais a partir de `ChannelSend` onde o
-/// `channel` é um `Ident` cujo nome está em `channel_bindings`. Extrai
-/// o tipo do elemento do `Sender(inner)` e mapeia `span_do_ChannelCreate
-/// → inner`.
+/// Coleta tipos concretos de canais a partir de `TransmissionOp` onde o
+/// canal é um `Ident` cujo nome está em `channel_bindings`. Extrai o
+/// tipo do elemento e mapeia `span_do_ChannelCreate → tipo_concreto`.
 ///
-/// Também coleta de `TransmissionOp` (recv) onde o `source` é `Ident` em
-/// `channel_bindings` e o `elem_ty` é concreto.
+/// Após a remodelagem direcional (`d1ddde6b`), a posição do canal no
+/// `TransmissionOp` depende da direção do operador, não de send/recv:
+/// - `Left` (`tx <! val`): source = valor, dest = canal
+/// - `Right` (`val !> tx` ou `rx !> n`): source = canal, dest = valor/binding
+///
+/// Para send: o canal (Sender) pode estar em source (Right) ou dest (Left).
+/// O tipo concreto vem do `Sender(inner)` do canal, ou do `elem_ty` se
+/// este já foi resolvido pela unificação em `infer_send`.
+///
+/// Para recv: o canal (Receiver) pode estar em source (Right) ou dest (Left).
+/// O tipo concreto vem do `elem_ty` (resolvido pelo hint em `infer_recv`).
 fn collect_concrete_channel_types(
     expr: &TypedExpr,
     channel_bindings: &HashMap<String, kata_ast::Span>,
     create_types: &mut HashMap<kata_ast::Span, Ty>,
 ) {
     walk::for_each_subexpr(expr, &mut |e| {
-        if let TypedExprKind::TransmissionOp {
+        let TypedExprKind::TransmissionOp {
             source,
+            dest,
             is_send,
             elem_ty,
             ..
-        } = &e.kind
-            && let TypedExprKind::Ident { name } = &source.node.kind
-            && let Some(span) = channel_bindings.get(name)
-        {
+        } = &e.kind else {
+            return true;
+        };
+
+        // Procurar o Ident do canal em source ou dest (depende da direção).
+        for operand in [source, dest] {
+            let Some(span) = (|| {
+                let TypedExprKind::Ident { name } = &operand.node.kind else {
+                    return None;
+                };
+                channel_bindings.get(name).copied()
+            })() else {
+                continue;
+            };
+
             if *is_send {
-                if let Ty::Sender(inner) = &source.node.ty
+                // Send: tipo concreto do Sender(inner) do canal, ou elem_ty
+                // se já resolvido pela unificação.
+                if let Ty::Sender(inner) = &operand.node.ty
                     && !matches!(inner.as_ref(), Ty::Var(_))
                 {
                     create_types
-                        .entry(*span)
+                        .entry(span)
                         .or_insert_with(|| inner.as_ref().clone());
+                } else if !matches!(elem_ty, Ty::Var(_)) {
+                    create_types.entry(span).or_insert_with(|| elem_ty.clone());
                 }
             } else {
+                // Recv: tipo concreto do elem_ty (resolvido pelo hint).
                 if !matches!(elem_ty, Ty::Var(_)) {
-                    create_types.entry(*span).or_insert_with(|| elem_ty.clone());
+                    create_types.entry(span).or_insert_with(|| elem_ty.clone());
                 }
             }
         }
