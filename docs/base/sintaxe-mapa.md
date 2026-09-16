@@ -568,6 +568,24 @@ lst.2 ?                  # indexação em lista (O(n) traversal, retorna Result)
   Em tuplas, `t.0 ?` é type error (`?` exige Result, tupla retorna direto)
   — o type system enforces a distinção.
 
+### Indexação N-D `.()` (Tensores)
+
+```kata
+let m := [1 2 3; 4 5 6]       # Tensor 2×3
+m.(0 1)                        # Ok(2) — elemento [0,1] → Result::T
+m.(_ 1)                        # sub-tensor: todas as linhas, coluna 1 → Tensor
+m.(0..2 0..2)                  # sub-matriz 2×2 → Tensor
+m.(_ _)                        # tensor completo → Tensor
+```
+
+- Sintaxe: `.(eixo0 eixo1 ... eixoN)` — tupla de índices entre parênteses
+  após `.`. Cada eixo pode ser `Int`, `Range`, ou `_` (wildcard).
+- **Princípio de retorno:** todos os eixos como `Int` → `Result::T` (pode
+  estar out-of-bounds). Algum eixo como `Range` ou `_` → `Tensor` (sempre
+  válido — seleciona um sub-tensor).
+- `_` seleciona todas as posições do eixo (equivalente a `0..N`).
+- `Range` seleciona um intervalo: `0..2` = índices 0 e 1.
+
 ---
 
 ## Operadores Aritméticos (`+`, `-`, `*`, `/`, `//`, `div`, `mod`)
@@ -945,7 +963,7 @@ tentar usar em runtime é erro.
 | `{1 2 3}` | Array contíguo | Bloco contíguo (imutável por padrão). |
 | `{"k": v "k2": v2}` | Dict (HAMT) | Mapeamento persistente imutável. `:` após primeira entrada desambigua de Array. `{:}` para vazio. |
 | `{|1 2 3|}` | Set (HAMT) | Conjunto persistente imutável. `|` após `{` ativa modo Set. `{||}` para vazio. |
-| `{1; 2; 3}` | Tensor N-D | Dimensões separadas por `;` |
+| `[1 2 3; 4 5 6]` | Tensor N-D | `;` dentro de `[]` discrimina List (sem `;`) de Tensor. `[1 2 3;]` = vetor linha. `[1; 2; 3]` = vetor coluna. Vírgula equivalente a espaço. |
 | `(1, 2, 3)` | Tupla | Agrupamento heterogêneo. `(42,)` é tupla de 1 elemento (vírgula obrigatória). `(42)` é agrupamento, não tupla. `()` é `Unit`. |
 
 - **Ranges**: `[0..10]` (0 a 9), `[0..=9]` (0 a 9 incluso), `[0..2..10]` (step 2: 0, 2, 4, 6, 8). Geram um descritor `Range` (struct com start, step, end) alocado na arena — os limites são materializados na criação, mas a sequência é virtual: cada elemento é computado sob demanda durante a iteração, sem pré-materializar a lista. Sintaxe: `start..end` (step default via `STEPPABLE`), `start..=end` (inclusivo, step default), `start..step..end` (step explícito, exclusivo), `start..step..=end` (step explícito, inclusivo). Range degenerado (step não progressivo, ex: `start == start + step`) produz zero iterações.

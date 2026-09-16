@@ -2389,11 +2389,10 @@ sintáticos no momento da declaração.
   baseado em HAMT (delega para Dict com `Unit` como valor). `T` deve implementar
   `HASHABLE`. `{||}` para vazio. Não mantém ordem de inserção (iteração via
   HAMT, não determinística).
-* **Tensores N-Dimensionais (`{T::Int...}`):** Separador de dimensão `;` dentro
-  de `{}`. Dimensionalidade processada em compile-time (*Const Generics*).
-  **Não implementado** — `Tensor` não existe no type system nem no codegen.
-  O `;` como separador de dimensão é reconhecido pelo lexer (comentário no
-  token) mas não há código para processá-lo.
+* **Tensores N-Dimensionais (`Tensor::T`):** Sintaxe `[1 2 3; 4 5 6]` —
+  `;` dentro de `[]` discrimina List (sem `;`) de Tensor (com `;`). Shape
+  armazenada em runtime, não em compile-time. `T` deve implementar `NUM`.
+  Ver §30 para operações, indexação e display.
 * **Ranges:** `[0..10]` (0 a 9), `[0..=9]` (0 a 9 incluso),
   `[0..2..10]` (0 a 8 com step 2). Geram um descritor `Range` (struct com
   start, step, end) alocado na arena — os limites são materializados na
@@ -4098,3 +4097,141 @@ constant _ := config.set_recursion_limit(-5)   # erro de tipo
 A configuração só funciona em `constant` (compile-time). Tentar usar
 `set_recursion_limit` em runtime é um erro — a FFI só está registrada
 no comptime.
+
+## 30. Tensores (`Tensor::T`)
+
+Tensores são cidadãos de primeira classe para computação numérica. Diferem
+de Arrays porque são objetos matemáticos com operações algébricas definidas:
+`+` é adição element-wise com broadcast, `*` é produto Hadamard, `dot` é
+contração matricial.
+
+### 30.1. Sintaxe de Literais
+
+`;` dentro de `[]` discrimina List de Tensor:
+
+```kata
+[1 2 3]          # List (Cons) — sem ;
+[1 2 3;]         # Tensor 1×3 — ; terminal (vetor linha)
+[1 2 3; 4 5 6]   # Tensor 2×3
+[1; 2; 3]        # Tensor 3×1 — vetor coluna
+```
+
+Vírgula é equivalente a espaço dentro de `[]`:
+
+```kata
+[1, 2, 3; 4, 5, 6]  # mesmo tensor que [1 2 3; 4 5 6]
+```
+
+N-D via aninhamento — cada `[` inicia um novo nível:
+
+```kata
+[
+    [1 2; 3 4];
+    [5 6; 7 8]
+]
+```
+
+Tensores 0-D não existem — escalar é o tipo nativo (`Int`, `Float`). Todo
+tensor tem rank ≥ 1.
+
+### 30.2. Tipo
+
+`Tensor::T` onde `T` implementa `NUM`. O tipo parametriza o elemento; a shape
+é armazenada em runtime, não no tipo. `Tensor::Int`, `Tensor::Float`.
+
+`Ty::Tensor` é intrínseco (não `data`) porque o compilador controla sintaxe
+literal, restrição de elemento, dispatch de operadores, e ABI.
+
+### 30.3. Interface TENSOR
+
+```kata
+interface TENSOR::T
+    shape     :: Self => Tuple
+    rank      :: Self => Int
+    at        :: Self Int => Result::T
+    +         :: Self Self => Result::Self
+    *         :: Self Self => Result::Self
+    dot       :: Self Self => Result::Self
+    transpose :: Self => Self
+    scale     :: Self T => Self
+    shift     :: Self T => Self
+```
+
+`scale`, `shift`, e `transpose` nunca falham — retornam `Self` direto.
+`+`, `*`, e `dot` retornam `Result::Self` — shape incompatível é falha
+recuperável (como `div`). `|` (fallback) e `?` (propagação) tornam o
+`Result` ergonômico.
+
+### 30.4. Variantes Pânicas
+
+```kata
+_+ :: Self Self => Self    # element-wise + broadcast, panic se incompatível
+_* :: Self Self => Self    # Hadamard, panic se incompatível
+```
+
+Panic é determinístico (exit 1), não undefined behavior. Para quem tem
+certeza que shapes casam — evita desempacotar `Result` toda vez.
+
+### 30.5. Indexação
+
+`.N` é indexação flatten (1-D) via interface INDEXABLE — mesma interface de
+Array/List. Retorna `Result::T`:
+
+```kata
+let m := [1 2 3; 4 5 6]       # Tensor 2×3
+m.0                            # Ok(1) — elemento flatten no índice 0
+m.5                            # Ok(6) — elemento flatten no índice 5
+```
+
+`.()` é indexação N-D com tupla de índices — cada posição corresponde a
+um eixo:
+
+```kata
+m.(0 1)                        # Ok(2) — elemento [0,1] → Result::T
+m.(_ 1)                        # sub-tensor: todas as linhas, coluna 1
+m.(0..2 0..2)                  # sub-matriz 2×2
+m.(_ _)                        # tensor completo (cópia)
+```
+
+**Princípio de retorno:** todos os eixos como inteiros → `Result::T` (pode
+estar out-of-bounds). Algum eixo como range ou `_` (wildcard) → `Tensor`
+(sempre válido — seleciona um sub-tensor).
+
+### 30.6. Display
+
+`show` exibe tensores em formato tabular. Largura de coluna dinâmica (baseada
+no maior elemento), células alinhadas à direita com padding, espaços entre
+colunas — sem bordas, `|`, ou `-`.
+
+```kata
+echo!([1 22 333; 4444 55 6; 7 88888 99])
+```
+```
+    1    22    333
+ 4444    55      6
+    7 88888    99
+```
+
+Rank > 2: cada fatia 2-D ao longo do eixo 0, separadas por linha em branco
+com índice `[k]:`.
+
+O display consulta strides — transposições (zero-copy) e sub-tensores
+não-contíguos são exibidos na ordem correta.
+
+### 30.7. Operações
+
+| Operação | Assinatura | Descrição |
+|---|---|---|
+| `+` | `Self Self => Result::Self` | Adição element-wise com broadcast |
+| `*` | `Self Self => Result::Self` | Hadamard (element-wise) |
+| `dot` | `Self Self => Result::Self` | Contração matricial (matmul em 2-D) |
+| `transpose` | `Self => Self` | Transposição (zero-copy via troca de strides) |
+| `scale` | `Self T => Self` | Multiplicar por escalar |
+| `shift` | `Self T => Self` | Somar escalar a cada elemento |
+| `_+` | `Self Self => Self` | `+` pânico (panic se incompatível) |
+| `_*` | `Self Self => Self` | `*` pânico (panic se incompatível) |
+
+Subtração não existe como operação dedicada: `+ a (scale b (- 0 1))`.
+
+Backend de álgebra linear: `matrixmultiply` (Rust puro, SIMD SSE2/AVX/NEON)
+é o default. OpenBLAS é opt-in via Cargo feature.
