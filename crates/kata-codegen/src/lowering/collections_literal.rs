@@ -9,10 +9,96 @@
 use cranelift_codegen::ir::types::I64;
 use cranelift_codegen::ir::{InstBuilder, MemFlagsData};
 
+use kata_ast::Spanned;
 use kata_core::ty::Ty;
 use kata_inference::{TypedExpr, TypedExprKind};
 
 use super::LowerCtx;
+
+/// Coleta o shape e os elementos escalares de um TensorLit recursivamente.
+/// Retorna `(shape, flat_elems)` onde `shape` é o número de elementos em cada
+/// dimensão (do externo para o interno) e `flat_elems` é a lista de TypedExpr
+/// escalares na ordem row-major.
+fn flatten_tensor_lit(rows: &[Vec<Spanned<TypedExpr>>]) -> Option<(Vec<i64>, Vec<&TypedExpr>)> {
+    if rows.is_empty() || rows[0].is_empty() {
+        return None;
+    }
+
+    let mut flat_elems: Vec<&TypedExpr> = Vec::new();
+    let mut shape: Vec<i64> = Vec::new();
+
+    // Primeira dimensão = número de rows.
+    // Caso especial 1-D: [1 2 3;] tem 1 row com 3 elementos escalares.
+    // shape = [3] (rank 1), não [1, 3] (rank 2).
+    let n_rows = rows.len();
+    let n_cols = rows[0].len();
+    let first_is_scalar = !matches!(&rows[0][0].node.kind, TypedExprKind::TensorLit { .. });
+
+    if n_rows == 1 && first_is_scalar {
+        // 1-D: shape = [n_cols]
+        shape.push(n_cols as i64);
+        for elem in &rows[0] {
+            flat_elems.push(&elem.node);
+        }
+        return Some((shape, flat_elems));
+    }
+
+    // N-D (n_rows > 1 ou elementos aninhados)
+    shape.push(n_rows as i64);
+
+    // Descobre o shape interno do primeiro elemento
+    let first_elem = &rows[0][0].node;
+    let inner_shape: Vec<i64> = match &first_elem.kind {
+        TypedExprKind::TensorLit {
+            rows: inner_rows, ..
+        } => {
+            let (inner, _) = flatten_tensor_lit(inner_rows)?;
+            inner
+        }
+        _ => vec![], // escalar — sem dimensões internas
+    };
+
+    if first_is_scalar {
+        // 2-D com elementos escalares: shape = [n_rows, n_cols]
+        shape.push(n_cols as i64);
+    } else {
+        // Elementos são sub-TensorLits.
+        // n_cols == 1: cada row É um sub-tensor. shape = [n_rows, *inner_shape].
+        //   Ex: [[1 2; 3 4]; [5 6; 7 8]] → n_rows=2, n_cols=1, inner=[2,2] → shape=[2,2,2]
+        // n_cols > 1: múltiplos sub-tensores por row.
+        //   Ex: [[1 2] [3 4]; [5 6] [7 8]] → n_rows=2, n_cols=2, inner=[2] → shape=[2,2,2]
+        if n_cols == 1 {
+            shape.extend(inner_shape.iter().copied());
+        } else {
+            shape.push(n_cols as i64);
+            // Descarta a primeira dimensão do sub-tensor (n_rows do sub-tensor
+            // já está implícita — todas as cols têm o mesmo n_rows).
+            shape.extend(inner_shape[1..].iter().copied());
+        }
+    }
+
+    // Coleta elementos recursivamente
+    for row in rows {
+        if row.len() != n_cols {
+            return None; // shape inconsistency
+        }
+        for elem in row {
+            match &elem.node.kind {
+                TypedExprKind::TensorLit {
+                    rows: inner_rows, ..
+                } => {
+                    let (_, inner_elems) = flatten_tensor_lit(inner_rows)?;
+                    flat_elems.extend(inner_elems);
+                }
+                _ => {
+                    flat_elems.push(&elem.node);
+                }
+            }
+        }
+    }
+
+    Some((shape, flat_elems))
+}
 use super::dict_set_lit::{
     bitcast_to_i64, eq_fn_name, get_ffi_fn_ptr, hash_fn_name, lower_dict_lit, lower_set_lit,
 };
@@ -322,14 +408,17 @@ pub(crate) fn lower_collections_literal(
             trailing_semi: _,
             elem_ty,
         } => {
-            // Flatten rows em uma lista de elementos.
-            // Para 2-D: rows[i][j] → flat[i * cols + j]
-            // Para N-D (rows contendo TensorLit): cada elemento é um sub-tensor.
-            //   Por ora, suportamos apenas 1-D e 2-D (elementos escalares).
-            let n_rows = rows.len() as i64;
-            let n_cols = if n_rows > 0 { rows[0].len() as i64 } else { 0 };
-            let n_elems = n_rows * n_cols;
-            let rank = if n_rows == 1 { 1 } else { 2 };
+            // Flatten rows recursivamente para N-D.
+            // 1-D: [1 2 3;] → shape=[3], n_elems=3
+            // 2-D: [1 2; 3 4] → shape=[2,2], n_elems=4
+            // 3-D: [[1 2; 3 4]; [5 6; 7 8]] → shape=[2,2,2], n_elems=8
+            let (shape, flat_elems) =
+                flatten_tensor_lit(rows).ok_or_else(|| super::CodegenError::UnsupportedNode {
+                    node: "TensorLit com shape inválido ou vazio".into(),
+                })?;
+
+            let rank = shape.len() as i64;
+            let n_elems = shape.iter().product::<i64>();
 
             // Determina elem_type: 0 = Int, 1 = Float
             let elem_type = match elem_ty {
@@ -354,24 +443,21 @@ pub(crate) fn lower_collections_literal(
                 .call(*alloc_ref, &[rt_val, arena_handle, buf_size]);
             let data_ptr = ctx.builder.inst_results(alloc_call)[0];
 
-            // Store cada elemento no buffer
+            // Store cada elemento escalar no buffer (ordem row-major já garantida pelo flatten)
             let flags = MemFlagsData::new();
-            for (i, row) in rows.iter().enumerate() {
-                for (j, elem) in row.iter().enumerate() {
-                    let flat_idx = (i * n_cols as usize + j) as i64;
-                    let val = lower_expr(&elem.node, ctx)?;
-                    // Bitcast F64→I64 se Float, senão usar valor SMI-tagged diretamente
-                    let val = {
-                        let val_ty = ctx.builder.func.dfg.value_type(val);
-                        if val_ty == cranelift_codegen::ir::types::F64 {
-                            ctx.builder.ins().bitcast(I64, MemFlagsData::new(), val)
-                        } else {
-                            val
-                        }
-                    };
-                    let offset = (flat_idx * 8) as i32;
-                    ctx.builder.ins().store(flags, val, data_ptr, offset);
-                }
+            for (i, elem) in flat_elems.iter().enumerate() {
+                let val = lower_expr(elem, ctx)?;
+                // Bitcast F64→I64 se Float, senão usar valor SMI-tagged diretamente
+                let val = {
+                    let val_ty = ctx.builder.func.dfg.value_type(val);
+                    if val_ty == cranelift_codegen::ir::types::F64 {
+                        ctx.builder.ins().bitcast(I64, MemFlagsData::new(), val)
+                    } else {
+                        val
+                    }
+                };
+                let offset = (i as i64 * 8) as i32;
+                ctx.builder.ins().store(flags, val, data_ptr, offset);
             }
 
             // Aloca shape array na arena: rank * 8 bytes
@@ -383,14 +469,10 @@ pub(crate) fn lower_collections_literal(
             let shape_ptr = ctx.builder.inst_results(shape_alloc)[0];
 
             // Store shape values
-            if rank == 1 {
-                let dim0 = ctx.builder.ins().iconst(I64, n_cols);
-                ctx.builder.ins().store(flags, dim0, shape_ptr, 0);
-            } else {
-                let dim0 = ctx.builder.ins().iconst(I64, n_rows);
-                let dim1 = ctx.builder.ins().iconst(I64, n_cols);
-                ctx.builder.ins().store(flags, dim0, shape_ptr, 0);
-                ctx.builder.ins().store(flags, dim1, shape_ptr, 8);
+            for (dim_idx, &dim_val) in shape.iter().enumerate() {
+                let dim = ctx.builder.ins().iconst(I64, dim_val);
+                let offset = (dim_idx as i64 * 8) as i32;
+                ctx.builder.ins().store(flags, dim, shape_ptr, offset);
             }
 
             // Chama kata_rt_tensor_new(data, rank, shape, elem_type)

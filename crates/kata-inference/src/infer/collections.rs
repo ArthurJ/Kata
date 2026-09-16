@@ -573,6 +573,22 @@ pub(crate) fn infer_in(
 ///    rows têm o mesmo shape aninhado.
 ///
 /// Retorna `TypedExprKind::TensorLit { rows, trailing_semi, elem_ty }`.
+/// Extrai o tipo escalar base de um TypedExpr.
+/// Se o elemento é um TensorLit aninhado, extrai o elem_ty recursivamente.
+/// Se é um escalar (Int, Float), retorna o tipo diretamente.
+fn extract_scalar_ty(typed: &TypedExpr) -> Option<Ty> {
+    match &typed.kind {
+        TypedExprKind::TensorLit { elem_ty, .. } => Some(elem_ty.clone()),
+        _ => {
+            // Escalar: deve ser tipo primitivo NUM
+            match &typed.ty {
+                Ty::Prim(_) => Some(typed.ty.clone()),
+                _ => None,
+            }
+        }
+    }
+}
+
 pub(crate) fn infer_tensor_lit(
     rows: &[Vec<Spanned<Expr>>],
     trailing_semi: bool,
@@ -606,14 +622,22 @@ pub(crate) fn infer_tensor_lit(
         for elem in row {
             let typed = infer_expr(&elem.node, &elem.span, env, ctx, false)?;
 
-            // Unifica tipo do elemento
+            // Extrai o tipo escalar base: se o elemento é um TensorLit
+            // aninhado, o elem_ty é o tipo escalar interno (não Tensor::T).
+            let scalar_ty = extract_scalar_ty(&typed).ok_or_else(|| MiddleError::TypeMismatch {
+                expected: "tipo que implementa NUM (Tensor não implementa)".into(),
+                found: format!("{}", typed.ty),
+                span: elem.span.into(),
+            })?;
+
+            // Unifica tipo escalar
             match &elem_ty {
-                None => elem_ty = Some(typed.ty.clone()),
+                None => elem_ty = Some(scalar_ty.clone()),
                 Some(existing) => {
-                    if &typed.ty != existing {
+                    if &scalar_ty != existing {
                         return Err(MiddleError::TypeMismatch {
                             expected: format!("{existing}"),
-                            found: format!("{}", typed.ty),
+                            found: format!("{scalar_ty}"),
                             span: elem.span.into(),
                         });
                     }
