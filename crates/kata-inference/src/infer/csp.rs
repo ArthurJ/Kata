@@ -649,8 +649,7 @@ pub(crate) fn infer_select(
                                 span: chunk_size_expr.span.into(),
                             });
                         }
-                        let result_ty =
-                            Ty::Generic("ReadResult".to_string(), vec![Ty::Bytes]);
+                        let result_ty = Ty::Generic("ReadResult".to_string(), vec![Ty::Bytes]);
                         (
                             TypedReadMode::Chunk(Box::new(Spanned::new(
                                 typed_chunk,
@@ -662,8 +661,7 @@ pub(crate) fn infer_select(
                     ReadMode::Line => {
                         // readline!(handle) — sem chunk_size.
                         // Binding recebe ReadResult::(Text).
-                        let result_ty =
-                            Ty::Generic("ReadResult".to_string(), vec![Ty::text()]);
+                        let result_ty = Ty::Generic("ReadResult".to_string(), vec![Ty::text()]);
                         (TypedReadMode::Line, result_ty)
                     }
                 };
@@ -794,8 +792,11 @@ fn escape_for_channel_send(ty: &Ty, _tail_pos: bool, _ctx: &InferCtx) -> EscapeT
         Ty::Var(_) | Ty::InferVar(_) => EscapeTarget::Local,
         // Sender/Receiver são handles (i64), não ponteiros.
         Ty::Sender(_) | Ty::Receiver(_) => EscapeTarget::Local,
-        // Function é fn_ptr, não ponteiro.
-        Ty::Function(..) => EscapeTarget::Local,
+        // Function pode ser box_ptr (closure com captures) — se enviada via
+        // canal e alocada na fiber_arena do sender, o box_ptr fica dangling
+        // quando o sender termina. Caller (arena do LCA) cobre o lifetime
+        // de ambos sob structured concurrency.
+        Ty::Function(..) => EscapeTarget::Caller,
         // Compostos — alocados na caller_arena, que sobrevive ao fiber
         // que os envia. O scheduler é structured concurrency: o pai só
         // morre depois de todas as filhas, então a caller_arena (arena
