@@ -1,26 +1,10 @@
 # TODO — Kata-Lang
 
-Único arquivo de pendências. Atualizado 2026-09-17 (auditoria: EOF/ReadResult resolvido e removido).
+Único arquivo de pendências. Atualizado 2026-09-17 (auditoria: connect TCP non-blocking resolvido e removido).
 
 ---
 
 ## Pendentes
-
-### 🔴 Alto
-
-#### `connect` TCP é blocking com busy-wait retry
-
-`create_tcp_connected` (`socket/create.rs`) usa `TcpStream::connect_timeout`
-(200ms blocking) até 50 vezes, suspendendo o fiber 100ms entre tentativas.
-Cada `connect_timeout` bloqueia o scheduler por até 200ms — todos os fibers
-congelam. O `suspend` inicial ajuda (dá tempo ao servidor fazer listen), mas
-não elimina o blocking da chamada de connect em si.
-
-**Caminho:** non-blocking connect: `socket()` + `fcntl(O_NONBLOCK)` + `connect()`
-(retorna EINPROGRESS) → suspender fiber → scheduler faz poll por POLLOUT →
-resume e verifica `SO_ERROR` via `getsockopt`. Elimina o busy-wait e torna o
-timeout configurável.
-
 ### 🟡 Médio
 
 #### Trampoline do scheduler engole erros (interp)
