@@ -13,7 +13,7 @@ use std::cell::Cell;
 use super::{
     FileInner, IoHandle, IoMode, READ_CHUNK_SIZE, alloc_file_inner, alloc_text, file_from_handle,
 };
-use crate::platform::{is_would_block, raw_read, set_nonblocking};
+use crate::platform::{is_would_block, raw_read_file, set_nonblocking_file};
 
 thread_local! {
     static STDIN_HANDLE: Cell<i64> = const { Cell::new(0) };
@@ -33,7 +33,7 @@ fn get_or_create_stdio(fd: i32, mode: IoMode, label: &str, cache: &Cell<i64>) ->
     // stdio FDs são non-blocking para permitir suspensão cooperativa
     // quando stdin é um pipe. Para terminal interativo, read() blocking
     // é o comportamento esperado (não retorna EAGAIN).
-    set_nonblocking(fd);
+    set_nonblocking_file(fd);
 
     let inner = FileInner {
         closed: false,
@@ -125,7 +125,7 @@ pub unsafe extern "C" fn kata_rt_input(prompt_ptr: *const std::os::raw::c_char) 
             return alloc_text(std::str::from_utf8(line).unwrap_or(""));
         }
 
-        let n_read = raw_read(inner.fd, buf.as_mut_ptr(), buf.len());
+        let n_read = raw_read_file(inner.fd, buf.as_mut_ptr(), buf.len());
 
         if n_read > 0 {
             inner.line_buf.extend_from_slice(&buf[..n_read as usize]);

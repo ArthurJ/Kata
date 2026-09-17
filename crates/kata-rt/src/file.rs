@@ -38,7 +38,8 @@ use std::fs::{File, OpenOptions};
 use std::os::raw::c_char;
 
 use crate::platform::{
-    close_fd, file_into_raw_fd, is_would_block, raw_read, raw_write, set_nonblocking,
+    close_file_handle, file_into_raw_fd, is_would_block, raw_read_file, raw_write_file,
+    set_nonblocking_file,
 };
 
 // ── Submódulos ─────────────────────────────────────────────────────
@@ -335,7 +336,7 @@ pub unsafe extern "C" fn kata_rt_file_open(
     // Para arquivos regulares, O_NONBLOCK é no-op (kernel ignora).
     // Para pipes/FIFOs/FUSE, habilita EAGAIN — permite suspensão cooperativa.
     let fd = file_into_raw_fd(file);
-    set_nonblocking(fd);
+    set_nonblocking_file(fd);
 
     let inner = FileInner {
         closed: false,
@@ -457,7 +458,7 @@ pub unsafe extern "C" fn kata_rt_file_read(handle: i64) -> i64 {
     }
 
     loop {
-        let n_read = raw_read(inner.fd, buf.as_mut_ptr(), buf.len());
+        let n_read = raw_read_file(inner.fd, buf.as_mut_ptr(), buf.len());
 
         if n_read > 0 {
             data.extend_from_slice(&buf[..n_read as usize]);
@@ -556,7 +557,7 @@ pub unsafe extern "C" fn kata_rt_file_read_chunk(handle: i64, n: i64) -> i64 {
 
     while total_read < max_bytes {
         let chunk_end = (total_read + READ_CHUNK_SIZE).min(max_bytes);
-        let n_read = raw_read(
+        let n_read = raw_read_file(
             inner.fd,
             buf[total_read..].as_mut_ptr(),
             chunk_end - total_read,
@@ -650,7 +651,7 @@ pub unsafe extern "C" fn kata_rt_file_readline(handle: i64) -> i64 {
             return alloc_result_box(0, text_ptr);
         }
 
-        let n_read = raw_read(inner.fd, buf.as_mut_ptr(), buf.len());
+        let n_read = raw_read_file(inner.fd, buf.as_mut_ptr(), buf.len());
 
         if n_read > 0 {
             inner.line_buf.extend_from_slice(&buf[..n_read as usize]);
@@ -773,7 +774,7 @@ fn write_all_fd(inner: &mut FileInner, handle: i64, data: &[u8]) -> i64 {
     let mut written = 0usize;
 
     while written < data.len() {
-        let n_written = raw_write(inner.fd, data[written..].as_ptr(), data.len() - written);
+        let n_written = raw_write_file(inner.fd, data[written..].as_ptr(), data.len() - written);
 
         if n_written > 0 {
             written += n_written as usize;
@@ -835,5 +836,5 @@ pub unsafe extern "C" fn kata_rt_file_close(handle: i64) {
     crate::scheduler::FIBER_OPEN_FILES.with(|r| r.borrow_mut().retain(|&h| h != handle));
     // Fecha o FD via syscall direta. A memória do FileInner permanece na
     // arena até o teardown.
-    close_fd(inner.fd);
+    close_file_handle(inner.fd);
 }

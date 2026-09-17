@@ -89,7 +89,7 @@ pub(crate) mod winsock {
     }
 }
 
-// ── Bindings Win32 (Console) ────────────────────────────────────────
+// ── Bindings Win32 (Console + File I/O) ─────────────────────────────
 #[cfg(windows)]
 pub(crate) mod win32 {
     use std::ffi::c_void;
@@ -104,6 +104,22 @@ pub(crate) mod win32 {
     #[link(name = "kernel32")]
     unsafe extern "C" {
         pub fn GetStdHandle(n_std_handle: u32) -> Handle;
+        pub fn ReadFile(
+            handle: Handle,
+            buf: *mut u8,
+            len: u32,
+            bytes_read: *mut u32,
+            overlapped: *mut c_void,
+        ) -> i32;
+        pub fn WriteFile(
+            handle: Handle,
+            buf: *const u8,
+            len: u32,
+            bytes_written: *mut u32,
+            overlapped: *mut c_void,
+        ) -> i32;
+        pub fn CloseHandle(handle: Handle) -> i32;
+        pub fn GetLastError() -> u32;
     }
 }
 
@@ -162,6 +178,7 @@ pub(crate) fn close_fd(fd: i32) {
 // No Unix, `read`/`write` funcionam para files, pipes e sockets.
 // No Windows, sockets usam `recv`/`send`; files/pipes usam `ReadFile`/`WriteFile`.
 // Para sockets (o caso principal no runtime), usamos `recv`/`send` no Windows.
+// Para files, `raw_read_file`/`raw_write_file` despacham para `ReadFile`/`WriteFile`.
 
 /// Lê bytes de um FD/socket. Retorna número de bytes lidos, 0 para EOF, <0 para erro.
 #[cfg(unix)]
@@ -183,6 +200,97 @@ pub(crate) fn raw_write(fd: i32, buf: *const u8, len: usize) -> isize {
 #[cfg(windows)]
 pub(crate) fn raw_write(fd: i32, buf: *const u8, len: usize) -> isize {
     unsafe { winsock::send(fd as usize, buf, len as i32, 0) as isize }
+}
+
+// ── raw_read_file / raw_write_file ──────────────────────────────────
+//
+// Funções separadas para file handles no Windows.
+// No Unix, delegam para `raw_read`/`raw_write` (FD unificado).
+// No Windows, usam `ReadFile`/`WriteFile` do kernel32.
+
+/// Lê bytes de um file handle. Retorna número de bytes lidos, 0 para EOF, <0 para erro.
+#[cfg(unix)]
+pub(crate) fn raw_read_file(fd: i32, buf: *mut u8, len: usize) -> isize {
+    raw_read(fd, buf, len)
+}
+
+#[cfg(windows)]
+pub(crate) fn raw_read_file(fd: i32, buf: *mut u8, len: usize) -> isize {
+    let handle = fd as *mut c_void;
+    let mut bytes_read: u32 = 0;
+    let rc = unsafe {
+        win32::ReadFile(
+            handle,
+            buf,
+            len as u32,
+            &mut bytes_read,
+            std::ptr::null_mut(),
+        )
+    };
+    if rc != 0 {
+        bytes_read as isize
+    } else {
+        // ReadFile retorna 0 em erro ou EOF. Distinguir via GetLastError:
+        // ERROR_HANDLE_EOF (38) ou ERROR_BROKEN_PIPE (109) = EOF (0).
+        // Outros = erro (-1).
+        let err = unsafe { win32::GetLastError() };
+        if err == 38 || err == 109 {
+            0
+        } else {
+            -1
+        }
+    }
+}
+
+/// Escreve bytes em um file handle. Retorna número de bytes escritos, <0 para erro.
+#[cfg(unix)]
+pub(crate) fn raw_write_file(fd: i32, buf: *const u8, len: usize) -> isize {
+    raw_write(fd, buf, len)
+}
+
+#[cfg(windows)]
+pub(crate) fn raw_write_file(fd: i32, buf: *const u8, len: usize) -> isize {
+    let handle = fd as *mut c_void;
+    let mut bytes_written: u32 = 0;
+    let rc = unsafe {
+        win32::WriteFile(
+            handle,
+            buf,
+            len as u32,
+            &mut bytes_written,
+            std::ptr::null_mut(),
+        )
+    };
+    if rc != 0 {
+        bytes_written as isize
+    } else {
+        -1
+    }
+}
+
+/// Fecha um file handle.
+#[cfg(unix)]
+pub(crate) fn close_file_handle(fd: i32) {
+    close_fd(fd);
+}
+
+#[cfg(windows)]
+pub(crate) fn close_file_handle(fd: i32) {
+    unsafe { win32::CloseHandle(fd as *mut c_void) };
+}
+
+/// Configura file handle como non-blocking.
+#[cfg(unix)]
+pub(crate) fn set_nonblocking_file(fd: i32) {
+    set_nonblocking(fd);
+}
+
+#[cfg(windows)]
+pub(crate) fn set_nonblocking_file(_fd: i32) {
+    // No Windows, files regulares são sempre "prontos" para I/O (como no Unix
+    // com O_NONBLOCK — o kernel ignora para regular files). Pipes podem usar
+    // PIPE_NOWAIT via SetNamedPipeHandleState, mas isso é edge case.
+    // No-op para regular files.
 }
 
 // ── poll_fds ────────────────────────────────────────────────────────
