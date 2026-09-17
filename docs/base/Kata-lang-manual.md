@@ -2245,14 +2245,12 @@ Como não há Garbage Collector, a posse da memória é regida em tempo de compi
   sharing entre threads — cada fiber tem sua arena.
 * **Caller's Arena:** Valores de retorno de Actions são alocados na arena do
   caller (zero cópia, persiste até o caller terminar).
-* **Heap (Root Arena):** A root arena (TrackedArena) armazena recursos do SO
-  (file/socket handles) e CaptureBoxes de closures com captura. CaptureBoxes
-  têm header próprio (`fn_ptr`, `refcount`, `n_captures`) com ARC manual — o
-  codegen injeta `incref`/`decref` via FFI. Quando o refcount chega a 0,
-  `kata_rt_decref` libera o bloco individualmente. O refcount é não-atomic
-  (adequado ao scheduler single-threaded). Valores que trafegam por canais
-  **não** usam ARC — são alocados na caller_arena (ver §5.2.2, "Por que não
-  ARC").
+* **Root Arena (Bump):** A root arena (Bump, mesma tecnologia das fiber arenas)
+  armazena recursos do SO (file/socket handles) e CaptureBoxes de closures
+  com captura. CaptureBoxes têm layout `fn_ptr`, `n_captures`, `captures[]`
+  — sem refcount. O box sobrevive até a arena ser resetada ou destruída
+  (teardown do Runtime). Valores que trafegam por canais são alocados na
+  caller_arena (arena do LCA de sender e receiver) — ver §5.2.2.
 
 ## 7. Diretivas de Compilador (@)
 
@@ -3579,10 +3577,11 @@ O binário final encapsula código de máquina (Cranelift) acoplado ao runtime
   é uma struct explícita. Multithread (M:N com work-stealing) é aspiracional.
 * **Corrotinas Stackful (wasmtime-fiber):** Cada Action é encapsulada numa
   corrotina nativa. `!>` bloqueante faz yield da fiber, não da thread OS.
-* **ARC manual (CaptureBox):** Reference counting gerenciado pelo codegen via
-  FFI (`kata_rt_incref`/`kata_rt_decref`). CaptureBox alocado na root arena
-  (TrackedArena); quando refcount chega a 0, o bloco é liberado individualmente.
-  Refcount não-atomic (single-threaded).
+* **CaptureBox (arena-managed):** Closures com captura são alocadas como
+  CaptureBox na arena determinada por `EscapeTarget` (Local → fiber_arena,
+  Caller → caller_arena). Layout: `fn_ptr`(0), `n_captures`(8),
+  `captures[]`(16+). Sem refcount — o box sobrevive até a arena ser
+  resetada (fiber termina) ou destruída (teardown).
 * **`spawn!` multiprocess:** Fork de processo OS com IPC. Isolamento total
   para CPU-bound pesado. Valores são serializados por marshalling (by-value).
 
@@ -3590,8 +3589,7 @@ O binário final encapsula código de máquina (Cranelift) acoplado ao runtime
 
 O runtime mantém uma type table para reflexão estrutural: dado um `type_id`
 (u32), obter o `TypeShape` que descreve o layout do valor. Isto é usado
-internamente para `decref` (walk type-directed em ARC pointers) e pretty
-printing.
+internamente para pretty printing.
 
 **Implementação:** A type table é um `Vec<TypeShape>` no `Runtime` struct,
 indexada por `type_id`. O driver (Rust) chama

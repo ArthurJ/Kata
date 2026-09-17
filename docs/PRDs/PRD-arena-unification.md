@@ -2,7 +2,7 @@
 
 ## Status
 
-**Status:** 🔴 Pendente
+**Status:** ✅ Completo (2026-09-17)
 **Data:** 2026-09-17
 **Substitui:** PRD-fio16-arc-arena (ARC nunca foi implementado — `incref`/`decref` não emitidos)
 **Resolve:** Heap corruption intermitente em FFIs JIT (TrackedArena + `std::alloc::alloc`)

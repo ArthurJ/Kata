@@ -1,9 +1,14 @@
 # PRD — Fio 16: ARC Arena — Deallocation Individual na Root Arena
 
-**Status:** 📄 Rascunho
+**Status:** ⛔ Superseded por [PRD-arena-unification](PRD-arena-unification.md) (2026-09-17)
 **Data:** 2026-07-24
 **Depende de:** Fio 11 ✅ (CSP, scheduler, fibers, arenas), Fio 13 ✅ (Closure Unification, CaptureBox)
 **Não depende de:** `spawn!` (não implementado)
+
+> **Nota:** O ARC nunca foi implementado (`incref`/`decref` não emitidos pelo
+> codegen). O PRD-arena-unification substitui esta abordagem: remove o ARC
+> vestigial, unifica todas as arenas em Bump, e usa `EscapeTarget` para
+> selecionar a arena correta. Ver `PRD-arena-unification.md`.
 
 ## 1. Problema
 
