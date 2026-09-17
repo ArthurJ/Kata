@@ -157,10 +157,11 @@ main!()"#
 fn select_misto_channel_file() {
     let path = make_temp_file("file data");
     let src = format!(
-        r#"action chunk_len (r::Result::(Bytes, Text)) => Int
+        r#"action chunk_len (r::ReadResult::(Bytes)) => Int
   match r
-    Ok bytes: len bytes
-    Err _: -1
+    Data bytes: len bytes
+    Error _: -1
+    Eof: -2
 
 action prod (ch::Sender::Int) => Unit
   ch <! 42
@@ -201,10 +202,11 @@ main!()"#
 fn select_file_eof() {
     let path = make_temp_file("");
     let src = format!(
-        r#"action chunk_len (r::Result::(Bytes, Text)) => Int
+        r#"action chunk_len (r::ReadResult::(Bytes)) => Int
   match r
-    Ok bytes: len bytes
-    Err _: -99
+    Data bytes: len bytes
+    Error _: -1
+    Eof: -99
 
 action do_select (h::File) => Int
   select

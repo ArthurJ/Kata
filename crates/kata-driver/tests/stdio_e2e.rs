@@ -74,8 +74,9 @@ fn stdio_file_stdin() {
 action main => Int
     let r := readline!(__stdin__)
     match r
-        Ok msg: echo!(msg, __stdout__)
-        Err _: echo!("erro", __stdout__)
+        Data msg: echo!(msg, __stdout__)
+        Error _: echo!("erro", __stdout__)
+        Eof: echo!("eof", __stdout__)
     0
 
 main!()"#,
@@ -196,8 +197,9 @@ fn stdio_stdout_read_erro() {
 action main => Int
     let r := read!(__stdout__)
     match r
-        Ok _: echo!("ok", __stdout__)
-        Err e: echo!(e, __stdout__)
+        Data _: echo!("ok", __stdout__)
+        Error e: echo!(e, __stdout__)
+        Eof: echo!("eof", __stdout__)
     0
 
 main!()"#,
@@ -240,8 +242,9 @@ action main => Int
         Ok fh:
             let r := readline!(fh)
             match r
-                Ok txt: echo!(txt, __stdout__)
-                Err _: echo!("erro-read", __stdout__)
+                Data txt: echo!(txt, __stdout__)
+                Error _: echo!("erro-read", __stdout__)
+                Eof: echo!("eof-read", __stdout__)
             close!(fh)
         Err _: echo!("erro-open2", __stdout__)
     0

@@ -30,7 +30,7 @@ pub(crate) mod math;
 pub(crate) mod platform;
 pub(crate) mod range;
 pub(crate) mod rational;
-pub mod runtime;
+pub(crate) mod runtime;
 pub(crate) mod scheduler;
 pub(crate) mod set;
 pub(crate) mod slice;

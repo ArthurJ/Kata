@@ -251,7 +251,7 @@ fn lower_map_tensor(
     let input_data_ptr = ctx.builder.ins().load(I64, flags, coll_val, 0);
     let rank_val = ctx.builder.ins().load(I64, flags, coll_val, 8);
     let shape_ptr = ctx.builder.ins().load(I64, flags, coll_val, 16);
-    let elem_type_val = ctx.builder.ins().load(I64, flags, coll_val, 32);
+    let _elem_type_val = ctx.builder.ins().load(I64, flags, coll_val, 32);
 
     // Calcula n_elems = product(shape[0..rank])
     // Loop compile-time: rank é conhecido em compile-time? Não — precisamos

@@ -542,7 +542,7 @@ fn unify_channel_elem(elem_ty: &Ty, value_ty: &Ty, env: &mut TypeEnv) -> Ty {
 /// cada braço faz binding do seu próprio `recv_ty`.
 /// Os corpos dos braços devem produzir o mesmo tipo (o valor do braço
 /// que disparar é o valor do `select`).
-/// Braços de I/O: binding recebe `Result::(Bytes, Text)`.
+/// Braços de I/O: binding recebe `ReadResult::(Bytes)` (read) ou `ReadResult::(Text)` (readline).
 pub(crate) fn infer_select(
     arms: &[SelectArm],
     timeout_ms: &Option<Box<Spanned<Expr>>>,
@@ -650,7 +650,7 @@ pub(crate) fn infer_select(
                             });
                         }
                         let result_ty =
-                            Ty::Generic("Result".to_string(), vec![Ty::Bytes, Ty::text()]);
+                            Ty::Generic("ReadResult".to_string(), vec![Ty::Bytes]);
                         (
                             TypedReadMode::Chunk(Box::new(Spanned::new(
                                 typed_chunk,
@@ -661,9 +661,9 @@ pub(crate) fn infer_select(
                     }
                     ReadMode::Line => {
                         // readline!(handle) — sem chunk_size.
-                        // Binding recebe Result::(Text, Text).
+                        // Binding recebe ReadResult::(Text).
                         let result_ty =
-                            Ty::Generic("Result".to_string(), vec![Ty::text(), Ty::text()]);
+                            Ty::Generic("ReadResult".to_string(), vec![Ty::text()]);
                         (TypedReadMode::Line, result_ty)
                     }
                 };

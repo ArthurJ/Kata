@@ -124,11 +124,14 @@ fn socket_unix_listen_connect_roundtrip() {
           Ok conn:
             let dados := read!(conn, 100)
             match dados
-              Ok bytes:
+              Data bytes:
                 let n := len bytes
                 close!(conn)
                 tx <! n
-              Err msg:
+              Error msg:
+                close!(conn)
+                tx <! -1
+              Eof:
                 close!(conn)
                 tx <! -1
           Err msg: tx <! -2

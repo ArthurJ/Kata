@@ -41,6 +41,11 @@ enum Optional
     Some(T)
     None
 
+enum ReadResult
+    Data(T)
+    Error(Text)
+    Eof
+
 # ── Interfaces base ───────────────────────────────────────────
 
 interface EQ
@@ -1114,13 +1119,13 @@ enum FileMode
 action open (path::Text, mode::FileMode) => Result::(File, Text)
 
 @ffi("kata_rt_file_read")
-action read (f::File) => Result::(Bytes, Text)
+action read (f::File) => ReadResult::(Bytes)
 
 @ffi("kata_rt_file_read_chunk")
-action read (f::File, n::Int) => Result::(Bytes, Text)
+action read (f::File, n::Int) => ReadResult::(Bytes)
 
 @ffi("kata_rt_file_readline")
-action readline (f::File) => Result::(Text, Text)
+action readline (f::File) => ReadResult::(Text)
 
 @ffi("kata_rt_file_write_text")
 action write (f::File, content::Text) => Result::(Unit, Text)
@@ -1156,13 +1161,13 @@ action open (kind::SocketKind, mode::SocketMode) => Result::(Socket, Text)
 action listen (listener::Socket) => Result::(Socket, Text)
 
 @ffi("kata_rt_socket_read")
-action read (s::Socket) => Result::(Bytes, Text)
+action read (s::Socket) => ReadResult::(Bytes)
 
 @ffi("kata_rt_socket_read_chunk")
-action read (s::Socket, n::Int) => Result::(Bytes, Text)
+action read (s::Socket, n::Int) => ReadResult::(Bytes)
 
 @ffi("kata_rt_socket_readline")
-action readline (s::Socket) => Result::(Text, Text)
+action readline (s::Socket) => ReadResult::(Text)
 
 @ffi("kata_rt_socket_write_text")
 action write (s::Socket, content::Text) => Result::(Unit, Text)

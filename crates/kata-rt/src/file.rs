@@ -37,7 +37,9 @@ use std::ffi::CStr;
 use std::fs::{File, OpenOptions};
 use std::os::raw::c_char;
 
-use crate::platform::{close_fd, file_into_raw_fd, is_would_block, raw_read, raw_write, set_nonblocking};
+use crate::platform::{
+    close_fd, file_into_raw_fd, is_would_block, raw_read, raw_write, set_nonblocking,
+};
 
 // ── Submódulos ─────────────────────────────────────────────────────
 mod select;
@@ -488,6 +490,11 @@ pub unsafe extern "C" fn kata_rt_file_read(handle: i64) -> i64 {
         return alloc_result_box(1, error_text(&format!("erro de leitura: {err}")));
     }
 
+    if data.is_empty() {
+        // EOF — tag 2 = variante Eof do ReadResult, sem payload.
+        return alloc_result_box(2, 0);
+    }
+
     let bytes_ptr = alloc_bytes(&data);
     if bytes_ptr == 0 {
         return alloc_result_box(1, error_text("falha na alocação"));
@@ -549,7 +556,11 @@ pub unsafe extern "C" fn kata_rt_file_read_chunk(handle: i64, n: i64) -> i64 {
 
     while total_read < max_bytes {
         let chunk_end = (total_read + READ_CHUNK_SIZE).min(max_bytes);
-        let n_read = raw_read(inner.fd, buf[total_read..].as_mut_ptr(), chunk_end - total_read);
+        let n_read = raw_read(
+            inner.fd,
+            buf[total_read..].as_mut_ptr(),
+            chunk_end - total_read,
+        );
 
         if n_read > 0 {
             total_read += n_read as usize;
@@ -582,8 +593,8 @@ pub unsafe extern "C" fn kata_rt_file_read_chunk(handle: i64, n: i64) -> i64 {
     }
 
     if total_read == 0 {
-        // EOF — consistente com readline.
-        return alloc_result_box(1, error_text("EOF"));
+        // EOF — tag 2 = variante Eof do ReadResult, sem payload.
+        return alloc_result_box(2, 0);
     }
 
     buf.truncate(total_read);
@@ -663,7 +674,7 @@ pub unsafe extern "C" fn kata_rt_file_readline(handle: i64) -> i64 {
                 }
                 return alloc_result_box(0, text_ptr);
             }
-            return alloc_result_box(1, error_text("EOF"));
+            return alloc_result_box(2, 0); // EOF — tag 2 = Eof
         }
 
         // n_read < 0 — erro.

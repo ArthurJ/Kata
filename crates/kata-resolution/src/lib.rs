@@ -6,7 +6,7 @@
 //! Produz o `ResolvedModule` (imutável).
 
 mod directives;
-pub mod embed;
+pub(crate) mod embed;
 pub(crate) mod ident_collector;
 pub(crate) mod merge_imports;
 pub(crate) mod module_loader;

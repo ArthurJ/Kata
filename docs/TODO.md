@@ -28,11 +28,9 @@ caller a distinguir casos por string-matching: `Err("EOF")` (normal) vs
 `Err("erro de leitura")` (falha real). Sem distinção tipada entre graceful
 close e I/O error.
 
-**Caminho:** introduzir enum `IoError` com variantes tipadas
-(`Eof`, `NotFound`, `Permission`, `BrokenPipe`, `ConnectionReset`, etc.) ou
-um `ReadResult` tri-valorado: `Data(Bytes)` | `Eof` | `Error(Text)`.
-Impacto: stdlib (`core.kata`), FFI de read/readline (File e Socket), codegen,
-e todos os testes E2E que fazem match em `Err _`.
+**Caminho:** `ReadResult(T)` tri-valorado: `Data(T)` | `Error(Text)` | `Eof`.
+Ver PRD-io-result. Impacto: stdlib (`core.kata`), FFI de read/readline
+(File e Socket), testes E2E que fazem match em `Err _`.
 
 ### 🟡 Médio
 
@@ -66,15 +64,6 @@ passivo, "accept" espera por conexão. Toda a literatura de sockets usa
 (`kata_rt_socket_listen` → `kata_rt_socket_accept`), codegen
 (`ffi_sigs/file_io.rs`, `ffi_registry.rs`), e testes E2E.
 
-#### `spawn!` não suportado no Windows
-
-`spawn!` depende de `fork()` (COW do address space inteiro). Windows não
-tem `fork()` — a limitação é da plataforma, não da linguagem. A FFI
-(`ipc.rs`) chama `panic!` com mensagem sugerindo WSL.
-
-**Caminho:** nenhum — a limitação é de plataforma. Documentar na
-referência que `spawn!` requer `fork()` e não funciona em Windows nativo.
-
 #### Tree-shaking por instância de família polimórfica
 
 O tree-shaking remove funções por **nome** — se uma função com overloads
@@ -104,3 +93,11 @@ refere-se a, permitindo remover overloads não-usadas antes do codegen.
 - **`select_arms_different_types`** — test placeholder em
   `kata-inference/tests/csp_typeck.rs:215`, depende de T0 unification.
   Corpo vazio, sem assertions.
+- **Qualificação obrigatória em conflito de variantes** — quando duas
+  variantes de mesmo nome existem em enums diferentes (ex: `Err` em
+  `Result` e outro enum), `resolve_unqual_variant` já detecta e exige
+  qualificação. Mas não usa hint de tipo contextual (ret_ty, `?`,
+  ascription) para disambiguar automaticamente. Patterns de match não
+  têm esse problema (`scrutinee_ty` disambigua). Melhoria: passar hint
+  de tipo para `resolve_unqual_variant` para resolver ambiguidade por
+  contexto em vez de exigir qualificação manual.

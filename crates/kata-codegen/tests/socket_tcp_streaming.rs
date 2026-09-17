@@ -136,14 +136,18 @@ action servidor (addr::Text, tx::Sender::Int) => Unit
           Ok conn:
             let c1 := read!(conn, 4)
             match c1
-              Ok b1: match (read!(conn, 4))
-                Ok b2: match (read!(conn, 4))
-                  Ok b3: match (read!(conn, 4))
-                    Ok _: tx <! -10
-                    Err _: tx <! sum3!(len b1, len b2, len b3)
-                  Err _: tx <! -9
-                Err _: tx <! -8
-              Err _: tx <! -7
+              Data b1: match (read!(conn, 4))
+                Data b2: match (read!(conn, 4))
+                  Data b3: match (read!(conn, 4))
+                    Data _: tx <! -10
+                    Error _: tx <! -11
+                    Eof: tx <! sum3!(len b1, len b2, len b3)
+                  Error _: tx <! -9
+                  Eof: tx <! -9
+                Error _: tx <! -8
+                Eof: tx <! -8
+              Error _: tx <! -7
+              Eof: tx <! -7
           Err msg: tx <! -2
       Err msg: tx <! -3
 
@@ -193,10 +197,11 @@ fn socket_select_with_socket() {
     let addr = format!("127.0.0.1:{port}");
 
     let src = format!(
-        r#"action extrair_n (r::Result::(Bytes, Text)) => Int
+        r#"action extrair_n (r::ReadResult::(Bytes)) => Int
   match r
-    Ok bytes: len bytes
-    Err _: -1
+    Data bytes: len bytes
+    Error _: -1
+    Eof: -2
 
 action fazer_select (conn::Socket, tx::Sender::Int) => Unit
   select
@@ -262,10 +267,11 @@ fn socket_select_misto_channel_socket() {
     let addr = format!("127.0.0.1:{port}");
 
     let src = format!(
-        r#"action extrair_n (r::Result::(Bytes, Text)) => Int
+        r#"action extrair_n (r::ReadResult::(Bytes)) => Int
   match r
-    Ok bytes: len bytes
-    Err _: -1
+    Data bytes: len bytes
+    Error _: -1
+    Eof: -2
 
 action fazer_select (conn::Socket, rx::Receiver::Int, tx_result::Sender::Int) => Unit
   select

@@ -46,9 +46,9 @@ pub unsafe extern "C" fn kata_rt_socket_read(handle: i64) -> i64 {
             continue;
         }
         if n_read == 0 {
-            // EOF — peer fechou.
+            // EOF — peer fechou. tag 2 = Eof do ReadResult.
             if data.is_empty() {
-                return alloc_result_box(1, error_text("EOF"));
+                return alloc_result_box(2, 0);
             }
             break;
         }
@@ -121,8 +121,8 @@ pub unsafe extern "C" fn kata_rt_socket_read_chunk(handle: i64, n: i64) -> i64 {
         }
 
         if n_read == 0 {
-            // EOF.
-            return alloc_result_box(1, error_text("EOF"));
+            // EOF. tag 2 = Eof do ReadResult.
+            return alloc_result_box(2, 0);
         }
 
         // n_read < 0 — erro.
@@ -223,7 +223,7 @@ pub unsafe extern "C" fn kata_rt_socket_readline(handle: i64) -> i64 {
                 }
                 return alloc_result_box(0, text_ptr);
             }
-            return alloc_result_box(1, error_text("EOF"));
+            return alloc_result_box(2, 0); // EOF — tag 2 = Eof
         }
 
         // n_read < 0 — erro.

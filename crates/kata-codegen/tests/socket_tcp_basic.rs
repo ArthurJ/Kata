@@ -141,11 +141,14 @@ fn socket_tcp_listen_connect_roundtrip() {
           Ok conn:
             let dados := read!(conn, 100)
             match dados
-              Ok bytes:
+              Data bytes:
                 let n := len bytes
                 close!(conn)
                 tx <! n
-              Err msg:
+              Error msg:
+                close!(conn)
+                tx <! -1
+              Eof:
                 close!(conn)
                 tx <! -1
           Err msg: tx <! -2
@@ -202,11 +205,14 @@ fn socket_tcp_echo_server() {
           Ok conn:
             let dados := read!(conn, 100)
             match dados
-              Ok bytes:
+              Data bytes:
                 let _ := write!(conn, bytes)
                 close!(conn)
                 tx <! 1
-              Err msg:
+              Error msg:
+                close!(conn)
+                tx <! -1
+              Eof:
                 close!(conn)
                 tx <! -1
           Err msg: tx <! -2
@@ -219,11 +225,14 @@ action cliente (addr::Text) => Int
         let _ := write!(sock, "ping")
         let dados := read!(sock, 100)
         match dados
-          Ok bytes:
+          Data bytes:
             let n := len bytes
             close!(sock)
             n
-          Err msg:
+          Error msg:
+            close!(sock)
+            -5
+          Eof:
             close!(sock)
             -5
       Err _: -4
@@ -273,10 +282,11 @@ fn socket_close_epilogo() {
             # Não chama close!(conn) — epílogo deve fechar
             let dados := read!(conn, 100)
             match dados
-              Ok bytes:
+              Data bytes:
                 let n := len bytes
                 tx <! n
-              Err _: tx <! -1
+              Error _: tx <! -1
+              Eof: tx <! -1
           Err _: tx <! -2
       Err _: tx <! -3
 

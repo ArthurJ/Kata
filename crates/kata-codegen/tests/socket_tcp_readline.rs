@@ -135,11 +135,14 @@ fn socket_readline_single_line() {
           Ok conn:
             let line := readline!(conn)
             match line
-              Ok text:
+              Data text:
                 let n := len text
                 close!(conn)
                 tx <! n
-              Err msg:
+              Error msg:
+                close!(conn)
+                tx <! -1
+              Eof:
                 close!(conn)
                 tx <! -1
           Err msg: tx <! -2
@@ -200,17 +203,23 @@ fn socket_readline_multiple_lines() {
           Ok conn:
             let line1 := readline!(conn)
             match line1
-              Ok t1:
+              Data t1:
                 let line2 := readline!(conn)
                 match line2
-                  Ok t2:
+                  Data t2:
                     let n2 := len t2
                     close!(conn)
                     tx <! n2
-                  Err msg:
+                  Error msg:
                     close!(conn)
                     tx <! -1
-              Err msg:
+                  Eof:
+                    close!(conn)
+                    tx <! -1
+              Error msg:
+                close!(conn)
+                tx <! -2
+              Eof:
                 close!(conn)
                 tx <! -2
           Err msg: tx <! -3
@@ -268,11 +277,14 @@ fn socket_readline_eof_partial() {
           Ok conn:
             let line := readline!(conn)
             match line
-              Ok text:
+              Data text:
                 let n := len text
                 close!(conn)
                 tx <! n
-              Err msg:
+              Error msg:
+                close!(conn)
+                tx <! -1
+              Eof:
                 close!(conn)
                 tx <! -1
           Err msg: tx <! -2

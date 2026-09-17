@@ -123,8 +123,9 @@ fn file_open_read_bytes() {
         r#"action read_bytes_len (h::File) => Int
   let content := read!(h)
   match content
-    Ok bytes: len bytes
-    Err _: -1
+    Data bytes: len bytes
+    Error _: -1
+    Eof: -1
 
 action main => Int
   let f := open!("{path}", FileMode::Read)
@@ -152,8 +153,9 @@ fn file_open_readline_text() {
         r#"action readline_len (h::File) => Int
   let line := readline!(h)
   match line
-    Ok text: len text
-    Err _: -1
+    Data text: len text
+    Error _: -1
+    Eof: -1
 
 action main => Int
   let f := open!("{path}", FileMode::Read)
@@ -193,8 +195,9 @@ fn file_write_read_roundtrip() {
   let f2 := open!(p, FileMode::Read)
   match f2
     Ok h2: match (read!(h2))
-      Ok bytes: len bytes
-      Err _: -1
+      Data bytes: len bytes
+      Error _: -1
+      Eof: -1
     Err _: -2
 
 action do_write (h::File, p::Text) => Int
@@ -301,8 +304,9 @@ fn file_echo_writes_show_plus_newline() {
   let f2 := open!(p, FileMode::Read)
   match f2
     Ok h2: match (read!(h2))
-      Ok bytes: len bytes
-      Err _: -1
+      Data bytes: len bytes
+      Error _: -1
+      Eof: -1
     Err _: -2
 
 action do_echo (h::File, p::Text) => Int
@@ -367,14 +371,18 @@ fn file_read_chunk_streaming() {
 action read_all_chunks (h::File) => Int
   let c1 := read!(h, 4096)
   match c1
-    Ok b1: match (read!(h, 4096))
-      Ok b2: match (read!(h, 4096))
-        Ok b3: match (read!(h, 4096))
-          Ok _: -10
-          Err _: sum3!(len b1, len b2, len b3)
-        Err _: -9
-      Err _: -8
-    Err _: -7
+    Data b1: match (read!(h, 4096))
+      Data b2: match (read!(h, 4096))
+        Data b3: match (read!(h, 4096))
+          Data _: -10
+          Error _: -11
+          Eof: sum3!(len b1, len b2, len b3)
+        Error _: -9
+        Eof: -9
+      Error _: -8
+      Eof: -8
+    Error _: -7
+    Eof: -7
 
 action main => Int
   let f := open!("{path}", FileMode::Read)
@@ -421,14 +429,18 @@ fn file_read_chunk_readline_intercalados() {
 action interleave (h::File) => Int
   let c1 := read!(h, 5)
   match c1
-    Ok b1: match (readline!(h))
-      Ok l1: match (read!(h, 5))
-        Ok b2: match (read!(h, 1))
-          Ok _: -10
-          Err _: sum3!(len b1, len l1, len b2)
-        Err _: -9
-      Err _: -8
-    Err _: -7
+    Data b1: match (readline!(h))
+      Data l1: match (read!(h, 5))
+        Data b2: match (read!(h, 1))
+          Data _: -10
+          Error _: -11
+          Eof: sum3!(len b1, len l1, len b2)
+        Error _: -9
+        Eof: -9
+      Error _: -8
+      Eof: -8
+    Error _: -7
+    Eof: -7
 
 action main => Int
   let f := open!("{path}", FileMode::Read)
@@ -462,8 +474,9 @@ fn file_read_chunk_eof_imediato() {
   let f := open!("{path}", FileMode::Read)
   match f
     Ok handle: match (read!(handle, 100))
-      Ok _: 0
-      Err _: -1
+      Data _: 0
+      Error _: -2
+      Eof: -1
     Err _: -3
 main!()"#
     );
@@ -494,8 +507,9 @@ fn file_read_large_yields() {
   let f := open!("{path}", FileMode::Read)
   match f
     Ok handle: match (read!(handle))
-      Ok bytes: len bytes
-      Err _: -1
+      Data bytes: len bytes
+      Error _: -1
+      Eof: -1
     Err _: -3
 main!()"#
     );
@@ -522,8 +536,9 @@ fn file_read_chunk_yield() {
   let f := open!("{path}", FileMode::Read)
   match f
     Ok handle: match (read!(handle, 131072))
-      Ok bytes: len bytes
-      Err _: -1
+      Data bytes: len bytes
+      Error _: -1
+      Eof: -1
     Err _: -3
 main!()"#
     );
@@ -551,8 +566,9 @@ fn file_readline_large() {
   var n := 0
   loop
     match (readline!(h))
-      Ok _: n := + n 1
-      Err _: break
+      Data _: n := + n 1
+      Error _: break
+      Eof: break
   n
 
 action main => Int

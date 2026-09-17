@@ -128,8 +128,9 @@ fn socket_listener_read_fails() {
       Ok listener:
         let dados := read!(listener)
         match dados
-          Ok _: 0
-          Err _: -1
+          Data _: 0
+          Error _: -1
+          Eof: -1
       Err _: -2
 main!()"#
     );

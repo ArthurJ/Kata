@@ -164,7 +164,11 @@ pub(crate) fn run(typed_module: &mut TypedModule) {
         for expr in &typed_module.pre_entry {
             collect_concrete_channel_types(&expr.node, &entry_bindings, &mut create_types);
         }
-        collect_concrete_channel_types(&typed_module.entry.node, &entry_bindings, &mut create_types);
+        collect_concrete_channel_types(
+            &typed_module.entry.node,
+            &entry_bindings,
+            &mut create_types,
+        );
 
         if !create_types.is_empty() {
             for expr in &mut typed_module.constants {
@@ -336,7 +340,8 @@ fn collect_concrete_channel_types(
             is_send,
             elem_ty,
             ..
-        } = &e.kind else {
+        } = &e.kind
+        else {
             return true;
         };
 

@@ -10,7 +10,9 @@
 
 use std::cell::Cell;
 
-use super::{alloc_text, file_from_handle, FileInner, IoHandle, IoMode, alloc_file_inner, READ_CHUNK_SIZE};
+use super::{
+    FileInner, IoHandle, IoMode, READ_CHUNK_SIZE, alloc_file_inner, alloc_text, file_from_handle,
+};
 use crate::platform::{is_would_block, raw_read, set_nonblocking};
 
 thread_local! {

@@ -1,7 +1,7 @@
 pub mod analysis;
 mod diagnostics;
 mod hover;
-pub mod server;
+pub(crate) mod server;
 mod state;
 mod unicode;
 
