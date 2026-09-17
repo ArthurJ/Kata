@@ -143,19 +143,15 @@ fn spawn_process_unix(_rt: i64, fn_ptr: i64, args_ptr: i64, arena_handle: i64) -
 
 /// Implementação Windows de spawn.
 ///
-/// **Limitação arquitetural:** Windows não tem `fork()`. O modelo COW do
-/// Kata5 (child herda address space inteiro do parent, incluindo código JIT
-/// e arenas) não tem equivalente direto em Windows. `CreateProcessW` começa
-/// um processo novo do zero.
+/// **Limitação de plataforma:** Windows não tem `fork()`. O modelo COW do
+/// Kata (child herda address space inteiro do parent, incluindo código JIT
+/// e arenas) não tem equivalente direto em Windows. `spawn!` depende de
+/// `fork()` e não pode ser implementado nativamente.
 ///
-/// Por enquanto, retorna 0 (sucesso no-op) — a Action não é executada.
-/// Isto é um stub: `spawn!` compila mas não funciona em Windows.
-/// A solução completa requer re-arquitetar o spawn para Windows (ex: shared
-/// memory + CreateProcessW, ou threads em vez de processos).
+/// A FFI chama `panic!` com mensagem clara em vez de falhar silenciosamente.
+/// Alternativa para usuários Windows: WSL (Windows Subsystem for Linux),
+/// que fornece `fork()` via kernel Linux.
 #[cfg(windows)]
 fn spawn_process_windows(_rt: i64, _fn_ptr: i64, _args_ptr: i64, _arena_handle: i64) -> i64 {
-    // TODO: Implementar spawn no Windows. Ver PRD-portability-windows.md.
-    // Opções: CreateProcessW + shared memory, ou threads, ou serializar
-    // a Action + args e re-executar num novo processo.
-    0
+    panic!("spawn! não é suportado no Windows — use WSL (Windows Subsystem for Linux) para fork()");
 }

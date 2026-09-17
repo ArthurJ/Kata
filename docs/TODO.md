@@ -66,10 +66,14 @@ passivo, "accept" espera por conexão. Toda a literatura de sockets usa
 (`kata_rt_socket_listen` → `kata_rt_socket_accept`), codegen
 (`ffi_sigs/file_io.rs`, `ffi_registry.rs`), e testes E2E.
 
-#### `spawn!` no Windows é stub
+#### `spawn!` não suportado no Windows
 
-`ipc.rs:155-161` — Implementar `spawn` no Windows. Ver
-`docs/PRDs/PRD-portability-windows.md`.
+`spawn!` depende de `fork()` (COW do address space inteiro). Windows não
+tem `fork()` — a limitação é da plataforma, não da linguagem. A FFI
+(`ipc.rs`) chama `panic!` com mensagem sugerindo WSL.
+
+**Caminho:** nenhum — a limitação é de plataforma. Documentar na
+referência que `spawn!` requer `fork()` e não funciona em Windows nativo.
 
 #### Tree-shaking por instância de família polimórfica
 
