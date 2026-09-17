@@ -97,6 +97,42 @@ recebeu
 
 O produtor envia após 50ms — o `select` recebe antes do timeout de 100ms.
 
+## `select` com sockets
+
+`select` não é limitado a canais — também multiplexa sockets e file
+handles. Um servidor pode ler de múltiplas fontes concorrentemente:
+
+```kata
+action extrair_n (r::ReadResult::(Bytes)) => Int
+    match r
+        Data bytes: len bytes
+        Error _: -1
+        Eof: -2
+
+action fazer_select (conn::Socket, tx::Sender::Int) => Unit
+    select
+        read!(conn, 100) !> dados: tx <! extrair_n!(dados)
+
+action servidor (listener::Socket, tx::Sender::Int) => Unit
+    match (accept!(listener))
+        Ok conn: fazer_select!(conn, tx)
+        Err _: tx <! -2
+
+action main => Unit
+    match (open!(SocketKind::TCP("127.0.0.1:8080"), SocketMode::Listener))
+        Ok listener:
+            let (tx, rx) := channel!()
+            fork!(servidor, (listener, tx))
+            rx !> n
+            echo!(n)
+        Err msg: echo!(msg)
+main!()
+```
+
+`accept!(listener)` retorna `Result::(Socket, Text)` e fica fora do
+`select`. Dentro do `select`, `read!(conn, 100) !> dados` aguarda dados
+do socket — o primeiro braço pronto vence.
+
 ## `queue!` — canal bufferizado
 
 `channel!` é síncrono (rendezvous): o operador de transmissão `<!` bloqueia até o `!>` sincronizar. `queue!(N)` cria um canal com buffer de capacidade N — o `<!` não bloqueia enquanto houver espaço no buffer:
@@ -212,6 +248,84 @@ Use `fork!` para concorrência leve dentro do mesmo processo. Use `spawn!` para 
 ## Limitações no Windows
 
 `fork!`, canais, `select`, e `sleep!` funcionam em todas as plataformas. No entanto, `spawn!` — que cria processos filhos isolados do sistema operacional — é um stub no Windows: compila, mas em runtime não faz nada (retorna 0). Se você precisa de processos externos, use Linux ou macOS. Veja o [Apêndice — Plataformas e Limitações](17-plataformas-limitacoes.md) para detalhes.
+
+## Sockets — I/O de rede
+
+Sockets em Kata são handles opacos (`Socket`) para conexões TCP ou Unix.
+A API segue o modelo BSD/POSIX: `open!` cria, `accept!` aceita, `read!`/`write!`
+transportam, `close!` fecha.
+
+### Criar um listener
+
+```kata
+action main => Unit
+    match (open!(SocketKind::TCP("127.0.0.1:8080"), SocketMode::Listener))
+        Ok listener:
+            echo!("servidor ouvindo")
+            let _ := close!(listener)
+        Err msg: echo!(msg)
+main!()
+```
+
+`SocketKind::TCP(addr)` ou `SocketKind::Unix(path)`.
+`SocketMode::Listener` (passivo — espera conexões) ou `SocketMode::Connected` (ativo — conecta a um servidor).
+
+### Aceitar conexões
+
+`accept!(listener)` bloqueia até um cliente conectar. Retorna
+`Result::(Socket, Text)` — o socket `Connected` do cliente:
+
+```kata
+action main => Unit
+    match (open!(SocketKind::TCP("127.0.0.1:8080"), SocketMode::Listener))
+        Ok listener:
+            match (accept!(listener))
+                Ok conn: echo!("cliente conectado")
+                Err msg: echo!(msg)
+            let _ := close!(listener)
+        Err msg: echo!(msg)
+main!()
+```
+
+### Ler e escrever
+
+`read!(conn)` retorna `ReadResult::(Bytes)` — tri-valorado:
+`Data(bytes)` (dado lido), `Error(msg)` (falha), `Eof` (cliente
+desconectou). `readline!(conn)` retorna `ReadResult::(Text)`:
+
+```kata
+action eco (conn::Socket) => Unit
+    loop
+        match (readline!(conn))
+            ReadResult::Data linha:
+                let _ := write!(conn, linha)
+            ReadResult::Error _:
+                echo!("erro")
+                break
+            ReadResult::Eof:
+                echo!("fim")
+                break
+```
+
+`write!(conn, content)` envia `Text` ou `Bytes` — retorna
+`Result::(Unit, Text)`.
+
+### Conectar a um servidor
+
+```kata
+action cliente => Unit
+    match (open!(SocketKind::TCP("127.0.0.1:8080"), SocketMode::Connected))
+        Ok conn:
+            let _ := write!(conn, "olá")
+            echo!("enviado")
+            let _ := close!(conn)
+        Err msg: echo!(msg)
+```
+
+### Fechar
+
+`close!(socket)` fecha o handle. Não retorna `Result` — sempre
+sucede.
 
 ## Fim
 
