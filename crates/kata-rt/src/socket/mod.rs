@@ -81,9 +81,21 @@ pub(crate) struct SocketInner {
 
 // ── Helpers compartilhados ──────────────────────────────────────────
 
-/// Aloca um bloco na root_arena via `kata_rt_arena_alloc`.
-pub(crate) fn arena_alloc(size: i64) -> i64 {
+/// Aloca um bloco na fiber arena (Bump) com fallback para root_arena.
+///
+/// A fiber arena é resetada quando o fiber termina — liberação mais
+/// frequente que a root_arena. Se sem fiber ativo, usa root_arena (Bump).
+pub(crate) fn fiber_alloc(size: i64) -> i64 {
     let rt = crate::arena::rt_ptr();
+    if rt == 0 {
+        return 0;
+    }
+    let fiber_arena = crate::scheduler::CURRENT_FIBER_ARENA
+        .with(|c| c.get())
+        .unwrap_or(0);
+    if fiber_arena > 0 {
+        return crate::arena::kata_rt_arena_alloc(rt, fiber_arena, size);
+    }
     let root_arena = crate::arena::kata_rt_get_root_arena_handle(rt);
     crate::arena::kata_rt_arena_alloc(rt, root_arena, size)
 }
@@ -91,7 +103,7 @@ pub(crate) fn arena_alloc(size: i64) -> i64 {
 /// Aloca um Result box com tag e payload.
 /// Layout: tag (i64) no offset 0, payload (i64) no offset 8.
 pub(crate) fn alloc_result_box(tag: i64, payload: i64) -> i64 {
-    let data_ptr = arena_alloc(16);
+    let data_ptr = fiber_alloc(16);
     if data_ptr == 0 {
         return 0;
     }
@@ -105,7 +117,7 @@ pub(crate) fn alloc_result_box(tag: i64, payload: i64) -> i64 {
 /// Aloca um SocketInner e retorna o ponteiro (handle).
 pub(crate) fn alloc_socket_inner(inner: SocketInner) -> i64 {
     let size = std::mem::size_of::<SocketInner>() as i64;
-    let data_ptr = arena_alloc(size);
+    let data_ptr = fiber_alloc(size);
     if data_ptr == 0 {
         return 0;
     }
@@ -127,7 +139,7 @@ pub(crate) fn socket_from_handle(handle: i64) -> Option<&'static mut SocketInner
 /// Cria um Text a partir de uma String (C string nulo-terminada).
 pub(crate) fn alloc_text(s: &str) -> i64 {
     let data_size = s.len() as i64 + 1;
-    let data_ptr = arena_alloc(data_size);
+    let data_ptr = fiber_alloc(data_size);
     if data_ptr == 0 {
         return 0;
     }
@@ -142,7 +154,7 @@ pub(crate) fn alloc_text(s: &str) -> i64 {
 /// Layout: len (i64) no offset 0, data[i] no offset 8+i.
 pub(crate) fn alloc_bytes(data: &[u8]) -> i64 {
     let data_size = 8 + data.len() as i64;
-    let data_ptr = arena_alloc(data_size);
+    let data_ptr = fiber_alloc(data_size);
     if data_ptr == 0 {
         return 0;
     }

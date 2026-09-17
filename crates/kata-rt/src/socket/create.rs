@@ -115,7 +115,7 @@ fn create_tcp_listener(addr: &str) -> i64 {
 fn create_tcp_connected(addr: &str) -> i64 {
     let sock_addr: SocketAddr = match addr.parse() {
         Ok(a) => a,
-        Err(e) => return alloc_err_fiber(&format!("endereço inválido: {e}")),
+        Err(e) => return alloc_result_box(1, error_text(&format!("endereço inválido: {e}"))),
     };
 
     // Ceder controle ao scheduler antes do primeiro connect — o servidor
@@ -138,12 +138,12 @@ fn create_tcp_connected(addr: &str) -> i64 {
                     addr: sock_addr.to_string(),
                     line_buf: Vec::new(),
                 };
-                let handle = alloc_socket_inner_fiber(inner);
+                let handle = alloc_socket_inner(inner);
                 if handle == 0 {
                     close_fd(fd);
-                    return alloc_err_fiber("falha na alocação");
+                    return alloc_result_box(1, error_text("falha na alocação"));
                 }
-                return alloc_ok_fiber(handle);
+                return alloc_result_box(0, handle);
             }
             ConnectResult::Refused => {
                 // ECONNREFUSED — servidor não está ouvindo. Suspende com Sleep
@@ -154,97 +154,15 @@ fn create_tcp_connected(addr: &str) -> i64 {
                     ));
                 });
                 if suspended.is_none() {
-                    return alloc_err_fiber("connect falhou: sem fiber");
+                    return alloc_result_box(1, error_text("connect falhou: sem fiber"));
                 }
             }
             ConnectResult::Error(msg) => {
-                return alloc_err_fiber(&msg);
+                return alloc_result_box(1, error_text(&msg));
             }
         }
     }
-    alloc_err_fiber("connect falhou: timeout após retries")
-}
-
-/// Aloca um bloco na fiber arena (Bump) em vez da root_arena.
-///
-/// A fiber arena é resetada quando o fiber termina — liberação mais
-/// frequente que a root_arena (que só é destruída no teardown do Runtime).
-/// Se a fiber arena não estiver disponível (fora de fiber), fallback
-/// para a root_arena (também Bump).
-#[cfg(unix)]
-fn fiber_alloc(size: i64) -> i64 {
-    let rt = crate::arena::rt_ptr();
-    if rt == 0 {
-        return 0;
-    }
-    // Tentar fiber arena primeiro (Bump — segura).
-    let fiber_arena = crate::scheduler::CURRENT_FIBER_ARENA
-        .with(|c| c.get())
-        .unwrap_or(0);
-    if fiber_arena > 0 {
-        return crate::arena::kata_rt_arena_alloc(rt, fiber_arena, size);
-    }
-    // Fallback: root_arena (Bump — sem fiber ativo).
-    let root_arena = crate::arena::kata_rt_get_root_arena_handle(rt);
-    crate::arena::kata_rt_arena_alloc(rt, root_arena, size)
-}
-
-/// Aloca um texto (C string nulo-terminada) na fiber arena.
-#[cfg(unix)]
-fn alloc_text_fiber(msg: &str) -> i64 {
-    let data_size = msg.len() as i64 + 1;
-    let data_ptr = fiber_alloc(data_size);
-    if data_ptr == 0 {
-        return 0;
-    }
-    unsafe {
-        std::ptr::copy_nonoverlapping(msg.as_ptr(), data_ptr as *mut u8, msg.len());
-        std::ptr::write_unaligned((data_ptr as *mut u8).add(msg.len()), 0);
-    }
-    data_ptr
-}
-
-/// Aloca um Result box Ok(handle) na fiber arena.
-#[cfg(unix)]
-fn alloc_ok_fiber(handle: i64) -> i64 {
-    let data_ptr = fiber_alloc(16);
-    if data_ptr == 0 {
-        return 0;
-    }
-    unsafe {
-        std::ptr::write_unaligned(data_ptr as *mut i64, 0);
-        std::ptr::write_unaligned((data_ptr as *mut u8).add(8) as *mut i64, handle);
-    }
-    data_ptr
-}
-
-/// Aloca um Result box Err(text) na fiber arena.
-#[cfg(unix)]
-fn alloc_err_fiber(msg: &str) -> i64 {
-    let text_ptr = alloc_text_fiber(msg);
-    let data_ptr = fiber_alloc(16);
-    if data_ptr == 0 {
-        return 0;
-    }
-    unsafe {
-        std::ptr::write_unaligned(data_ptr as *mut i64, 1);
-        std::ptr::write_unaligned((data_ptr as *mut u8).add(8) as *mut i64, text_ptr);
-    }
-    data_ptr
-}
-
-/// Aloca um SocketInner na fiber arena.
-#[cfg(unix)]
-fn alloc_socket_inner_fiber(inner: SocketInner) -> i64 {
-    let size = std::mem::size_of::<SocketInner>() as i64;
-    let data_ptr = fiber_alloc(size);
-    if data_ptr == 0 {
-        return 0;
-    }
-    unsafe {
-        std::ptr::write_unaligned(data_ptr as *mut SocketInner, inner);
-    }
-    data_ptr
+    alloc_result_box(1, error_text("connect falhou: timeout após retries"))
 }
 
 /// Resultado de uma tentativa de non-blocking connect.
