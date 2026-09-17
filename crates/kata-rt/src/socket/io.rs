@@ -16,6 +16,9 @@ use std::os::raw::c_char;
 /// Non-blocking: se não há dados (EAGAIN), suspende o fiber.
 /// EOF (read retorna 0) → Err("EOF").
 ///
+/// I/O cooperativo: cede CPU entre chunks de 8KB para não monopolizar
+/// o scheduler quando há muitos dados disponíveis.
+///
 /// # Safety
 /// `handle` deve ser um handle válido.
 #[unsafe(no_mangle)]
@@ -36,7 +39,10 @@ pub unsafe extern "C" fn kata_rt_socket_read(handle: i64) -> i64 {
         let n_read = raw_read(inner.fd, buf.as_mut_ptr(), buf.len());
         if n_read > 0 {
             data.extend_from_slice(&buf[..n_read as usize]);
-            // Continua lendo enquanto há dados (non-blocking).
+            // Cede CPU entre chunks — outros fibers rodam.
+            crate::fiber::with_suspend(|suspend| {
+                suspend.suspend(crate::fiber::YieldReason::Cooperative);
+            });
             continue;
         }
         if n_read == 0 {

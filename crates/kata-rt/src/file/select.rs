@@ -10,7 +10,7 @@
 //! - `collect_file_fds`: coleta FDs brutos para poll unificado (sleep path).
 //! - `kata_rt_select_files`: FFI de select multiplexado com suspensão de fiber.
 
-use crate::platform::{POLLHUP, POLLIN, PollFd, file_raw_fd, poll_fds};
+use crate::platform::{POLLHUP, POLLIN, PollFd, poll_fds};
 
 use super::FileInner;
 
@@ -45,7 +45,7 @@ pub(crate) fn try_select_files(handles: &[i64]) -> i64 {
         if inner.closed {
             continue;
         }
-        let fd = file_raw_fd(inner.buf_reader.get_ref());
+        let fd = inner.fd;
         fds.push(PollFd {
             fd,
             events: POLLIN,
@@ -91,7 +91,7 @@ pub(crate) fn collect_file_fds(handles: &[i64]) -> Vec<PollFd> {
         if inner.closed {
             continue;
         }
-        let fd = file_raw_fd(inner.buf_reader.get_ref());
+        let fd = inner.fd;
         fds.push(PollFd {
             fd,
             events: POLLIN,

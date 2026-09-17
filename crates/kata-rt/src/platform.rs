@@ -295,19 +295,19 @@ pub(crate) fn tcp_stream_into_fd(stream: std::net::TcpStream) -> i32 {
 
 // ── raw_fd de File ──────────────────────────────────────────────────
 //
-// Extrai o FD/handle bruto de std::fs::File para poll. No Unix usa
-// `as_raw_fd`; no Windows usa `as_raw_socket`.
+// Extrai o FD/handle bruto de std::fs::File para armazenar no FileInner.
+// `into_raw_fd` consome o File (não fecha o FD — close via `close_fd`).
 
 #[cfg(unix)]
-pub(crate) fn file_raw_fd(file: &std::fs::File) -> i32 {
-    use std::os::unix::io::AsRawFd;
-    file.as_raw_fd()
+pub(crate) fn file_into_raw_fd(file: std::fs::File) -> i32 {
+    use std::os::unix::io::IntoRawFd;
+    file.into_raw_fd()
 }
 
 #[cfg(windows)]
-pub(crate) fn file_raw_fd(file: &std::fs::File) -> i32 {
-    use std::os::windows::io::AsRawHandle;
-    file.as_raw_handle() as i32
+pub(crate) fn file_into_raw_fd(file: std::fs::File) -> i32 {
+    use std::os::windows::io::IntoRawHandle;
+    file.into_raw_handle() as i32
 }
 
 // ── EAGAIN / EWOULDBLOCK ────────────────────────────────────────────

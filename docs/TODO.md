@@ -1,10 +1,38 @@
 # TODO — Kata-Lang
 
-Único arquivo de pendências. Atualizado 2026-09-16.
+Único arquivo de pendências. Atualizado 2026-09-17.
 
 ---
 
 ## Pendentes
+
+### 🔴 Alto
+
+#### `connect` TCP é blocking com busy-wait retry
+
+`create_tcp_connected` (`socket/create.rs`) usa `TcpStream::connect_timeout`
+(200ms blocking) até 50 vezes, suspendendo o fiber 100ms entre tentativas.
+Cada `connect_timeout` bloqueia o scheduler por até 200ms — todos os fibers
+congelam. O `suspend` inicial ajuda (dá tempo ao servidor fazer listen), mas
+não elimina o blocking da chamada de connect em si.
+
+**Caminho:** non-blocking connect: `socket()` + `fcntl(O_NONBLOCK)` + `connect()`
+(retorna EINPROGRESS) → suspender fiber → scheduler faz poll por POLLOUT →
+resume e verifica `SO_ERROR` via `getsockopt`. Elimina o busy-wait e torna o
+timeout configurável.
+
+#### EOF representado como `Err("EOF")`
+
+EOF é terminação normal, não erro. Confluir EOF com erro de leitura força o
+caller a distinguir casos por string-matching: `Err("EOF")` (normal) vs
+`Err("erro de leitura")` (falha real). Sem distinção tipada entre graceful
+close e I/O error.
+
+**Caminho:** introduzir enum `IoError` com variantes tipadas
+(`Eof`, `NotFound`, `Permission`, `BrokenPipe`, `ConnectionReset`, etc.) ou
+um `ReadResult` tri-valorado: `Data(Bytes)` | `Eof` | `Error(Text)`.
+Impacto: stdlib (`core.kata`), FFI de read/readline (File e Socket), codegen,
+e todos os testes E2E que fazem match em `Err _`.
 
 ### 🟡 Médio
 
@@ -25,6 +53,18 @@ trampoline/scheduler ou usar um canal lateral (e.g. célula
 `Mutex<Option<InterpError>>` no `InterpCtx`).
 
 ### 🟢 Baixo
+
+#### `listen!` deveria ser `accept!`
+
+`open!(SocketKind::TCP(addr), SocketMode::Listener)` já faz bind + listen.
+`listen!(socket)` aceita uma conexão e retorna um novo socket Connected. O
+nome viola décadas de convenção de sockets — "listen" marca o socket como
+passivo, "accept" espera por conexão. Toda a literatura de sockets usa
+"accept" para esta operação.
+
+**Caminho:** renomear `listen!` → `accept!` em stdlib (`core.kata`), FFI
+(`kata_rt_socket_listen` → `kata_rt_socket_accept`), codegen
+(`ffi_sigs/file_io.rs`, `ffi_registry.rs`), e testes E2E.
 
 #### `spawn!` no Windows é stub
 

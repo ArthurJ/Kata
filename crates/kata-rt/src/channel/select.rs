@@ -14,6 +14,18 @@ use super::ops::{WOULD_BLOCK, can_recv};
 /// Sentinel: timeout expirado (distinto de WOULD_BLOCK).
 pub(super) const SELECT_TIMEOUT: i64 = -2;
 
+// TLS: offset de rodízio do select combinado. Persiste entre chamadas
+// para que braços always-ready (ex: arquivo regular) não façam starvation
+// dos outros braços. Resetado em `reset_tls_between_runs`.
+thread_local! {
+    pub(crate) static SELECT_ROTATION: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Reseta o rodízio do select (chamado por `reset_tls_between_runs`).
+pub(crate) fn reset_select_rotation() {
+    SELECT_ROTATION.with(|r| r.set(0));
+}
+
 /// Tenta encontrar um canal pronto para recebimento (sem consumir).
 /// Retorna o índice (0..N-1) se algum canal tem dado, ou `WOULD_BLOCK` se
 /// nenhum tem. Usa `can_recv` (não-consome) — o codegen faz `channel_recv`
@@ -158,39 +170,70 @@ pub extern "C" fn kata_rt_select_combined(
     let file_vec: Vec<i64> = file_slice.to_vec();
     let socket_vec: Vec<i64> = socket_slice.to_vec();
 
+    // Total de braços no select — usado para rodízio.
+    let total_arms = (n_c + n_f + n_s) as usize;
+
     let deadline = if timeout_ms > 0 {
         Some(std::time::Instant::now() + std::time::Duration::from_millis(timeout_ms as u64))
     } else {
         None
     };
 
+    // Rodízio: a cada chamada do select, começar a checagem a partir do
+    // próximo braço. Isto previne starvation quando um braço always-ready
+    // (ex: arquivo regular) sempre vence. O offset persiste entre chamadas
+    // via TLS — cada chamada ao select começa onde a anterior parou.
+    let rotation = SELECT_ROTATION.with(|r| r.get());
+
     loop {
-        // 1. Tentar channels (can_recv — não consome).
-        let chan_result = try_select(chan_slice);
-        if chan_result != WOULD_BLOCK {
-            return chan_result; // 0..n_c-1
+        // 1. Percorrer braços na ordem rotacionada.
+        //    Para cada offset i no range [rotation, rotation+total_arms),
+        //    checar o braço correspondente.
+        let mut found: i64 = WOULD_BLOCK;
+        for step in 0..total_arms {
+            let global_idx = (rotation + step) % total_arms;
+            if global_idx < n_c as usize {
+                // Channel arm.
+                if can_recv(chan_slice[global_idx]) {
+                    found = global_idx as i64;
+                    break;
+                }
+            } else if global_idx < (n_c + n_f) as usize {
+                // File arm.
+                let file_idx = global_idx - n_c as usize;
+                // Poll non-blocking no file handle.
+                let one_handle = [file_slice[file_idx]];
+                if crate::file::try_select_files(&one_handle) != crate::file::FILE_WOULD_BLOCK {
+                    found = global_idx as i64;
+                    break;
+                }
+            } else {
+                // Socket arm.
+                let sock_idx = global_idx - (n_c + n_f) as usize;
+                let one_handle = [socket_slice[sock_idx]];
+                if crate::socket::try_select_sockets(&one_handle)
+                    != crate::socket::SOCKET_WOULD_BLOCK
+                {
+                    found = global_idx as i64;
+                    break;
+                }
+            }
         }
 
-        // 2. Tentar files (poll POLLIN non-blocking).
-        let file_result = crate::file::try_select_files(file_slice);
-        if file_result != crate::file::FILE_WOULD_BLOCK {
-            return n_c + file_result; // n_c..n_c+n_f-1
+        if found != WOULD_BLOCK {
+            // Avança rodízio para a próxima chamada começar no braço seguinte.
+            SELECT_ROTATION.with(|r| r.set((rotation + 1) % total_arms));
+            return found;
         }
 
-        // 3. Tentar sockets (poll POLLIN|POLLOUT non-blocking).
-        let socket_result = crate::socket::try_select_sockets(socket_slice);
-        if socket_result != crate::socket::SOCKET_WOULD_BLOCK {
-            return n_c + n_f + socket_result; // n_c+n_f..n_c+n_f+n_s-1
-        }
-
-        // 4. Verificar timeout.
+        // 2. Verificar timeout.
         if let Some(dl) = deadline
             && std::time::Instant::now() >= dl
         {
             return SELECT_TIMEOUT;
         }
 
-        // 5. Suspender com todos os conjuntos de handles.
+        // 3. Suspender com todos os conjuntos de handles.
         let suspended = crate::fiber::with_suspend(|suspend| {
             suspend.suspend(crate::fiber::YieldReason::WaitingOnSelect {
                 channel_handles: chan_vec.clone(),
@@ -204,6 +247,6 @@ pub extern "C" fn kata_rt_select_combined(
             return WOULD_BLOCK;
         }
         // Fiber resumido — scheduler acorda quando algum handle ficou pronto
-        // ou o deadline expirou. Loop tenta novamente.
+        // ou o deadline expirou. Loop tenta novamente com rodízio atualizado.
     }
 }

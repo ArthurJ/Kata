@@ -476,3 +476,98 @@ main!()"#
     );
     let _ = std::fs::remove_file(&path);
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// I/O cooperativo — yield entre chunks
+// ═══════════════════════════════════════════════════════════════════
+
+/// Lê um arquivo grande (> 64KB) com read! e verifica que o conteúdo
+/// está completo — o yield cooperativo entre chunks não perde dados.
+#[test]
+#[serial]
+fn file_read_large_yields() {
+    // 128KB de dados — dois chunks de 64KB.
+    let content = "A".repeat(128 * 1024);
+    let path = make_temp_file(&content);
+    let src = format!(
+        r#"action main => Int
+  let f := open!("{path}", FileMode::Read)
+  match f
+    Ok handle: match (read!(handle))
+      Ok bytes: len bytes
+      Err _: -1
+    Err _: -3
+main!()"#
+    );
+    let (raw, ty) = eval_src(&src);
+    assert_eq!(ty, Ty::int(), "deve retornar Int");
+    assert_eq!(
+        untag_smi(raw),
+        131072,
+        "read! de 128KB deve retornar todos os bytes"
+    );
+    let _ = std::fs::remove_file(&path);
+}
+
+/// Lê um arquivo grande com read!(handle, n) e verifica que o
+/// conteúdo está completo — o yield cooperativo entre chunks não perde dados.
+#[test]
+#[serial]
+fn file_read_chunk_yield() {
+    // 128KB de dados — dois chunks de 64KB.
+    let content = "B".repeat(128 * 1024);
+    let path = make_temp_file(&content);
+    let src = format!(
+        r#"action main => Int
+  let f := open!("{path}", FileMode::Read)
+  match f
+    Ok handle: match (read!(handle, 131072))
+      Ok bytes: len bytes
+      Err _: -1
+    Err _: -3
+main!()"#
+    );
+    let (raw, ty) = eval_src(&src);
+    assert_eq!(ty, Ty::int(), "deve retornar Int");
+    assert_eq!(
+        untag_smi(raw),
+        131072,
+        "read!(handle, 128KB) deve retornar todos os bytes"
+    );
+    let _ = std::fs::remove_file(&path);
+}
+
+/// readline em arquivo grande (> 8KB) com múltiplas linhas —
+/// verifica que line_buf preserva bytes parciais entre chamadas.
+#[test]
+#[serial]
+fn file_readline_large() {
+    // 10 linhas de 1KB cada — exercita o line_buf entre chamadas.
+    let line: String = "C".repeat(1023) + "\n";
+    let content = line.repeat(10);
+    let path = make_temp_file(&content);
+    let src = format!(
+        r#"action count_lines (h::File) => Int
+  var n := 0
+  loop
+    match (readline!(h))
+      Ok _: n := + n 1
+      Err _: break
+  n
+
+action main => Int
+  let f := open!("{path}", FileMode::Read)
+  match f
+    Ok handle: count_lines!(handle)
+    Err _: -3
+main!()"#
+    );
+    let (raw, ty) = eval_src(&src);
+    assert_eq!(ty, Ty::int(), "deve retornar Int");
+    assert_eq!(
+        untag_smi(raw),
+        10,
+        "readline deve ler 10 linhas de 1KB cada"
+    );
+    let _ = std::fs::remove_file(&path);
+}

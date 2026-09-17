@@ -2,21 +2,26 @@
 //!
 //! Layout:
 //! - `FileInner` alocado via `kata_rt_arena_alloc` na root_arena (sem header ARC).
-//!   Handle = ponteiro puro para FileInner. O close faz `drop_in_place`
-//!   (fecha o FD). O campo `closed` no FileInner garante idempotência —
+//!   Handle = ponteiro puro para FileInner. O close faz `close_fd` no FD
+//!   bruto. O campo `closed` no FileInner garante idempotência —
 //!   o epílogo pode chamar close num handle já fechado sem double-free.
-//! - `BufReader<File>` persistente dentro de `FileInner` — todos os reads
-//!   (read, read_chunk, readline) passam pelo mesmo BufReader. Isto resolve
-//!   o bug de readline (recriar BufReader perde bytes bufferizados em
-//!   arquivos > 8KB) e previne state corruption entre read_chunk e
-//!   readline intercalados.
+//! - FD bruto (`i32`) armazenado diretamente em `FileInner` — sem `BufReader`.
+//!   Isto permite `raw_read`/`raw_write` direto no FD, non-blocking via
+//!   `fcntl(O_NONBLOCK)`, e poll uniforme (igual `SocketInner`).
+//! - `line_buf` persistente em `FileInner` para `readline` — acumula bytes
+//!   parciais entre chamadas, igual `SocketInner`.
 //! - Result boxes alocados via `kata_rt_arena_alloc` na root_arena (sem
 //!   header ARC, sem destructor encadeado).
 //! - Bytes de `read`/`read_chunk` alocados via `kata_rt_arena_alloc` na root_arena.
 //! - Text de `readline` alocado via `kata_rt_arena_alloc` na root_arena.
 //!
+//! I/O cooperativo: reads em chunks de 64KB com yield cooperativo entre
+//! syscalls. Se `raw_read` retorna EAGAIN (pipe/FIFO non-blocking), suspende
+//! o fiber via `WaitingOnSelect`. O scheduler faz poll no FD e resume quando
+//! há dados.
+//!
 //! FFI:
-//! - `kata_rt_file_open(path_ptr, mode_tag) -> result_box` — Result::(File, Text)
+//! - `kata_rt_file_open(path_ptr, mode_tag, arena_handle) -> result_box` — Result::(File, Text)
 //! - `kata_rt_file_read(handle) -> result_box` — Result::(Bytes, Text)
 //! - `kata_rt_file_read_chunk(handle, n) -> result_box` — Result::(Bytes, Text)
 //! - `kata_rt_file_readline(handle) -> result_box` — Result::(Text, Text)
@@ -30,8 +35,9 @@
 
 use std::ffi::CStr;
 use std::fs::{File, OpenOptions};
-use std::io::{BufRead, BufReader, Read, Write};
 use std::os::raw::c_char;
+
+use crate::platform::{close_fd, file_into_raw_fd, is_would_block, raw_read, raw_write, set_nonblocking};
 
 // ── Submódulos ─────────────────────────────────────────────────────
 mod select;
@@ -41,11 +47,15 @@ pub(crate) use select::{FILE_WOULD_BLOCK, collect_file_fds, try_select_files};
 pub(crate) use stdio::reset_stdio_cache;
 pub use stdio::{kata_rt_input, kata_rt_stderr, kata_rt_stdin, kata_rt_stdout};
 
-// ── IoHandle — camada comum para File e futuro Socket ──────────────
+// ── Constantes ────────────────────────────────────────────────────
+
+/// Tamanho do chunk para leitura cooperativa (64KB).
+const READ_CHUNK_SIZE: usize = 64 * 1024;
+
+// ── IoHandle — camada comum para File e Socket ─────────────────────
 
 /// Handle de I/O genérico — base para File e Socket.
 /// `mode` indica quais operações são permitidas.
-/// O `File` (descritor OS) vive dentro do `BufReader` em `FileInner`.
 pub(crate) struct IoHandle {
     pub mode: IoMode,
 }
@@ -71,20 +81,22 @@ fn mode_from_tag(tag: i64) -> Option<IoMode> {
     }
 }
 
-/// FileInner — arquivo aberto com path, BufReader persistente e modo.
+/// FileInner — arquivo aberto com FD bruto, line_buf e modo.
 /// Alocado via `arena_alloc` na root_arena. O campo `closed` garante
 /// que `kata_rt_file_close` é idempotente — múltiplas chamadas de close
 /// (explícita + epílogo) não causam double-free.
 ///
-/// O `BufReader<File>` persistente garante que todos os reads (read,
-/// read_chunk, readline) compartilham o mesmo buffer interno. Isto resolve:
-/// 1. Bug de readline que recriava BufReader a cada chamada (perdia bytes
-///    bufferizados em arquivos > 8KB).
-/// 2. State corruption entre read_chunk e readline intercalados (cursos
-///    de leitura divergentes).
+/// O FD bruto permite `raw_read`/`raw_write` direto, non-blocking via
+/// `fcntl(O_NONBLOCK)`, e poll uniforme com sockets. O `line_buf`
+/// acumula bytes parciais para `readline` entre chamadas — mesmo
+/// pattern do `SocketInner`.
+///
+/// Não misturar `readline` com `read`/`read_chunk` no mesmo handle:
+/// `read`/`read_chunk` lêem do FD diretamente, ignorando `line_buf`,
+/// e consomem bytes que `readline` esperava.
 pub(crate) struct FileInner {
     pub closed: bool,
-    pub buf_reader: BufReader<File>,
+    pub fd: i32,
     pub io: IoHandle,
     /// Se true, o handle é um descritor padrão (FD 0/1/2).
     /// `kata_rt_file_close` é no-op. `read`/`readline` em stdout/stderr
@@ -93,6 +105,10 @@ pub(crate) struct FileInner {
     pub is_stdio: bool,
     #[allow(dead_code)]
     pub path: String,
+    /// Buffer parcial para readline — acumula bytes até encontrar \n.
+    /// Usado apenas por `kata_rt_file_readline`; `read`/`read_chunk`
+    /// lêem do FD diretamente.
+    pub line_buf: Vec<u8>,
 }
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -313,12 +329,19 @@ pub unsafe extern "C" fn kata_rt_file_open(
         Err(e) => return alloc_result_box(1, error_text(&format!("erro ao abrir: {e}"))),
     };
 
+    // Extrai o FD bruto do File e seta non-blocking.
+    // Para arquivos regulares, O_NONBLOCK é no-op (kernel ignora).
+    // Para pipes/FIFOs/FUSE, habilita EAGAIN — permite suspensão cooperativa.
+    let fd = file_into_raw_fd(file);
+    set_nonblocking(fd);
+
     let inner = FileInner {
         closed: false,
-        buf_reader: BufReader::new(file),
+        fd,
         io: IoHandle { mode },
         is_stdio: false,
         path,
+        line_buf: Vec::new(),
     };
     let handle = alloc_file_inner_in(crate::arena::rt_ptr(), arena_handle, inner);
     if handle == 0 {
@@ -342,7 +365,69 @@ pub unsafe extern "C" fn kata_rt_file_open(
     alloc_result_box(0, handle)
 }
 
+/// Helper: yield cooperativo entre chunks.
+///
+/// Suspende o fiber com `YieldReason::Cooperative` se há um fiber em
+/// execução. Fora de fiber (teste unitário), é no-op.
+fn yield_cooperative() {
+    crate::fiber::with_suspend(|suspend| {
+        suspend.suspend(crate::fiber::YieldReason::Cooperative);
+    });
+}
+
+/// Helper: suspende o fiber esperando dados no FD (EAGAIN).
+///
+/// Suspende com `WaitingOnSelect` para o scheduler fazer poll no FD.
+/// Fora de fiber, retorna `false` (não pode suspender).
+fn suspend_waiting_on_file(handle: i64) -> bool {
+    let suspended = crate::fiber::with_suspend(|suspend| {
+        suspend.suspend(crate::fiber::YieldReason::WaitingOnSelect {
+            channel_handles: Vec::new(),
+            file_handles: vec![handle],
+            socket_handles: Vec::new(),
+            deadline: None,
+        });
+    });
+    suspended.is_some()
+}
+
+/// Helper: verifica se o modo permite leitura.
+/// Retorna `Err` com mensagem apropriada se não permite.
+fn check_read_mode(inner: &FileInner) -> Result<(), i64> {
+    match inner.io.mode {
+        IoMode::Read | IoMode::ReadWrite => Ok(()),
+        _ => {
+            let msg = if inner.is_stdio {
+                "not readable"
+            } else {
+                "modo não permite leitura"
+            };
+            Err(error_text(msg))
+        }
+    }
+}
+
+/// Helper: verifica se o modo permite escrita.
+/// Retorna `Err` com mensagem apropriada se não permite.
+fn check_write_mode(inner: &FileInner) -> Result<(), i64> {
+    match inner.io.mode {
+        IoMode::Write | IoMode::Append | IoMode::ReadWrite | IoMode::Create => Ok(()),
+        _ => {
+            let msg = if inner.is_stdio {
+                "not writable"
+            } else {
+                "modo não permite escrita"
+            };
+            Err(error_text(msg))
+        }
+    }
+}
+
 /// Lê todo o conteúdo do arquivo como Bytes.
+///
+/// I/O cooperativo: lê em chunks de 64KB com yield cooperativo entre
+/// syscalls. Se `raw_read` retorna EAGAIN (pipe/FIFO non-blocking),
+/// suspende o fiber via `WaitingOnSelect`.
 ///
 /// Retorna Result box Ok(bytes_ptr) ou Err(text).
 ///
@@ -355,23 +440,52 @@ pub unsafe extern "C" fn kata_rt_file_read(handle: i64) -> i64 {
         None => return alloc_result_box(1, error_text("handle inválido")),
     };
 
-    // Verifica que o modo permite leitura.
-    // stdio write-only (stdout/stderr) usa mensagem "not readable".
-    match inner.io.mode {
-        IoMode::Read | IoMode::ReadWrite => {}
-        _ => {
-            let msg = if inner.is_stdio {
-                "not readable"
-            } else {
-                "modo não permite leitura"
-            };
-            return alloc_result_box(1, error_text(msg));
-        }
+    if let Err(e) = check_read_mode(inner) {
+        return alloc_result_box(1, e);
     }
 
     let mut data = Vec::new();
-    if inner.buf_reader.read_to_end(&mut data).is_err() {
-        return alloc_result_box(1, error_text("erro de leitura"));
+    let mut buf = [0u8; READ_CHUNK_SIZE];
+
+    // Drena line_buf primeiro — bytes que readline bufferizou de uma
+    // chamada anterior devem ser visíveis a read/read_chunk.
+    if !inner.line_buf.is_empty() {
+        data.append(&mut inner.line_buf);
+        yield_cooperative();
+    }
+
+    loop {
+        let n_read = raw_read(inner.fd, buf.as_mut_ptr(), buf.len());
+
+        if n_read > 0 {
+            data.extend_from_slice(&buf[..n_read as usize]);
+            // Yield cooperativo entre chunks — outros fibers rodam.
+            yield_cooperative();
+            continue;
+        }
+
+        if n_read == 0 {
+            // EOF.
+            break;
+        }
+
+        // n_read < 0 — erro.
+        let err = std::io::Error::last_os_error().raw_os_error().unwrap_or(0);
+        if is_would_block(err) {
+            if data.is_empty() {
+                // Sem dados — suspender fiber esperando poll no FD.
+                if !suspend_waiting_on_file(handle) {
+                    return alloc_result_box(1, error_text("WOULDBLOCK sem fiber"));
+                }
+                // Fiber resumido — tentar novamente.
+                continue;
+            }
+            // Já tem dados — retorna partial read.
+            break;
+        }
+
+        // Erro real.
+        return alloc_result_box(1, error_text(&format!("erro de leitura: {err}")));
     }
 
     let bytes_ptr = alloc_bytes(&data);
@@ -385,6 +499,10 @@ pub unsafe extern "C" fn kata_rt_file_read(handle: i64) -> i64 {
 /// Lê até `n` bytes do arquivo como Bytes.
 ///
 /// `n` é um valor Int SMI-tagged (payload = n >> 1).
+///
+/// I/O cooperativo: lê em chunks de 64KB com yield cooperativo entre
+/// syscalls. Se `raw_read` retorna EAGAIN (pipe/FIFO non-blocking),
+/// suspende o fiber via `WaitingOnSelect`.
 ///
 /// Retorna:
 /// - Result box Ok(bytes_ptr) — bytes lidos (0 a n bytes).
@@ -401,34 +519,66 @@ pub unsafe extern "C" fn kata_rt_file_read_chunk(handle: i64, n: i64) -> i64 {
         None => return alloc_result_box(1, error_text("handle inválido")),
     };
 
-    // Verifica que o modo permite leitura.
-    // stdio write-only (stdout/stderr) usa mensagem "not readable".
-    match inner.io.mode {
-        IoMode::Read | IoMode::ReadWrite => {}
-        _ => {
-            let msg = if inner.is_stdio {
-                "not readable"
-            } else {
-                "modo não permite leitura"
-            };
-            return alloc_result_box(1, error_text(msg));
-        }
+    if let Err(e) = check_read_mode(inner) {
+        return alloc_result_box(1, e);
     }
 
     // Decodifica SMI: n >> 1.
     let max_bytes = (n >> 1) as usize;
-
     let mut buf = vec![0u8; max_bytes];
     let mut total_read = 0usize;
 
-    // read_buf pode retornar menos bytes que solicitado (especialmente
-    // com BufReader). Loop até preencher buf ou atingir EOF.
-    while total_read < max_bytes {
-        match inner.buf_reader.read(&mut buf[total_read..]) {
-            Ok(0) => break, // EOF
-            Ok(n) => total_read += n,
-            Err(_) => return alloc_result_box(1, error_text("erro de leitura")),
+    // Drena line_buf primeiro — bytes que readline bufferizou de uma
+    // chamada anterior devem ser visíveis a read/read_chunk.
+    if !inner.line_buf.is_empty() {
+        let take = inner.line_buf.len().min(max_bytes);
+        buf[..take].copy_from_slice(&inner.line_buf[..take]);
+        total_read = take;
+        inner.line_buf.drain(..take);
+        if total_read >= max_bytes {
+            // line_buf já tinha dados suficientes.
+            buf.truncate(total_read);
+            let bytes_ptr = alloc_bytes(&buf);
+            if bytes_ptr == 0 {
+                return alloc_result_box(1, error_text("falha na alocação"));
+            }
+            return alloc_result_box(0, bytes_ptr);
         }
+        yield_cooperative();
+    }
+
+    while total_read < max_bytes {
+        let chunk_end = (total_read + READ_CHUNK_SIZE).min(max_bytes);
+        let n_read = raw_read(inner.fd, buf[total_read..].as_mut_ptr(), chunk_end - total_read);
+
+        if n_read > 0 {
+            total_read += n_read as usize;
+            // Yield cooperativo entre chunks.
+            yield_cooperative();
+            continue;
+        }
+
+        if n_read == 0 {
+            // EOF.
+            break;
+        }
+
+        // n_read < 0 — erro.
+        let err = std::io::Error::last_os_error().raw_os_error().unwrap_or(0);
+        if is_would_block(err) {
+            if total_read == 0 {
+                // Sem dados — suspender fiber.
+                if !suspend_waiting_on_file(handle) {
+                    return alloc_result_box(1, error_text("WOULDBLOCK sem fiber"));
+                }
+                continue;
+            }
+            // Já tem dados — retorna partial read.
+            break;
+        }
+
+        // Erro real.
+        return alloc_result_box(1, error_text(&format!("erro de leitura: {err}")));
     }
 
     if total_read == 0 {
@@ -445,7 +595,15 @@ pub unsafe extern "C" fn kata_rt_file_read_chunk(handle: i64, n: i64) -> i64 {
     alloc_result_box(0, bytes_ptr)
 }
 
-/// Lê uma linha do arquivo como Text.
+/// Lê uma linha do arquivo como Text (até `\n`).
+///
+/// Usa `line_buf` persistente em `FileInner` para acumular bytes parciais
+/// entre chamadas. Non-blocking: se não há dados (EAGAIN) e o buffer não
+/// tem `\n`, suspende o fiber. EOF (read retorna 0): se o buffer tem dados,
+/// retorna como linha parcial (sem `\n`); se vazio, retorna `Err("EOF")`.
+///
+/// Não misturar com `read`/`read_chunk` no mesmo handle — estas lêem do FD
+/// diretamente, ignorando `line_buf`, e consomem bytes que readline esperava.
 ///
 /// Retorna Result box Ok(text_ptr) ou Err(text).
 ///
@@ -458,46 +616,76 @@ pub unsafe extern "C" fn kata_rt_file_readline(handle: i64) -> i64 {
         None => return alloc_result_box(1, error_text("handle inválido")),
     };
 
-    // Verifica que o modo permite leitura.
-    // stdio write-only (stdout/stderr) usa mensagem "not readable".
-    match inner.io.mode {
-        IoMode::Read | IoMode::ReadWrite => {}
-        _ => {
-            let msg = if inner.is_stdio {
-                "not readable"
+    if let Err(e) = check_read_mode(inner) {
+        return alloc_result_box(1, e);
+    }
+
+    let mut buf = [0u8; READ_CHUNK_SIZE];
+
+    loop {
+        // Verifica se já temos uma linha completa no buffer.
+        if let Some(pos) = inner.line_buf.iter().position(|&b| b == b'\n') {
+            let line: Vec<u8> = inner.line_buf.drain(..=pos).collect();
+            let line = &line[..line.len() - 1]; // remove \n
+            let line = if line.ends_with(b"\r") {
+                &line[..line.len() - 1]
             } else {
-                "modo não permite leitura"
+                line
             };
-            return alloc_result_box(1, error_text(msg));
+            let text_ptr = alloc_text(std::str::from_utf8(line).unwrap_or(""));
+            if text_ptr == 0 {
+                return alloc_result_box(1, error_text("falha na alocação"));
+            }
+            return alloc_result_box(0, text_ptr);
         }
-    }
 
-    // Usa o BufReader persistente — bytes bufferizados de read_chunk
-    // ou readline anterior são preservados entre chamadas.
-    let mut line = String::new();
-    match inner.buf_reader.read_line(&mut line) {
-        Ok(0) => return alloc_result_box(1, error_text("EOF")), // EOF → Err
-        Ok(_) => {}
-        Err(_) => return alloc_result_box(1, error_text("erro de leitura")),
-    }
+        let n_read = raw_read(inner.fd, buf.as_mut_ptr(), buf.len());
 
-    // Remove o \n ou \r\n do final, se presente.
-    if line.ends_with('\n') {
-        line.pop();
-        if line.ends_with('\r') {
-            line.pop();
+        if n_read > 0 {
+            inner.line_buf.extend_from_slice(&buf[..n_read as usize]);
+            // Yield cooperativo entre reads.
+            yield_cooperative();
+            continue;
         }
-    }
 
-    let text_ptr = alloc_text(&line);
-    if text_ptr == 0 {
-        return alloc_result_box(1, error_text("falha na alocação"));
-    }
+        if n_read == 0 {
+            // EOF — se buffer tem dados, retorna como linha parcial.
+            if !inner.line_buf.is_empty() {
+                let line = std::mem::take(&mut inner.line_buf);
+                let line = if line.ends_with(b"\r") {
+                    &line[..line.len() - 1]
+                } else {
+                    &line
+                };
+                let text_ptr = alloc_text(std::str::from_utf8(line).unwrap_or(""));
+                if text_ptr == 0 {
+                    return alloc_result_box(1, error_text("falha na alocação"));
+                }
+                return alloc_result_box(0, text_ptr);
+            }
+            return alloc_result_box(1, error_text("EOF"));
+        }
 
-    alloc_result_box(0, text_ptr)
+        // n_read < 0 — erro.
+        let err = std::io::Error::last_os_error().raw_os_error().unwrap_or(0);
+        if is_would_block(err) {
+            // Sem dados e sem linha completa — suspender fiber.
+            if !suspend_waiting_on_file(handle) {
+                return alloc_result_box(1, error_text("WOULDBLOCK sem fiber"));
+            }
+            // Fiber resumido — tentar novamente.
+            continue;
+        }
+
+        // Erro real.
+        return alloc_result_box(1, error_text(&format!("erro de leitura: {err}")));
+    }
 }
 
 /// Escreve Text (C string) no arquivo.
+///
+/// Usa `raw_write` direto no FD. Se o FD é non-blocking e o buffer está
+/// cheio (EAGAIN), suspende o fiber via `WaitingOnSelect`.
 ///
 /// `data_ptr` é um ponteiro Text (C string nulo-terminada).
 ///
@@ -513,35 +701,22 @@ pub unsafe extern "C" fn kata_rt_file_write_text(handle: i64, data_ptr: i64) -> 
         None => return alloc_result_box(1, error_text("handle inválido")),
     };
 
-    // Verifica que o modo permite escrita.
-    // stdio read-only (stdin) usa mensagem "not writable".
-    match inner.io.mode {
-        IoMode::Write | IoMode::Append | IoMode::ReadWrite | IoMode::Create => {}
-        _ => {
-            let msg = if inner.is_stdio {
-                "not writable"
-            } else {
-                "modo não permite escrita"
-            };
-            return alloc_result_box(1, error_text(msg));
-        }
+    if let Err(e) = check_write_mode(inner) {
+        return alloc_result_box(1, e);
     }
 
     if data_ptr == 0 {
-        // Nothing to write — Ok(Unit).
-        return alloc_result_box(0, 0);
+        return alloc_result_box(0, 0); // Ok(Unit) — nothing to write
     }
 
-    // Text é C string — lê até o null terminator.
     let data = unsafe { CStr::from_ptr(data_ptr as *const c_char) };
     let bytes = data.to_bytes();
 
-    // BufReader::get_mut() dá acesso ao File subjacente para escrita.
-    let file = inner.buf_reader.get_mut();
-    match file.write_all(bytes) {
-        Ok(_) => alloc_result_box(0, 0), // Ok(Unit)
-        Err(e) => alloc_result_box(1, error_text(&format!("erro de escrita: {e}"))),
+    if bytes.is_empty() {
+        return alloc_result_box(0, 0);
     }
+
+    write_all_fd(inner, handle, bytes)
 }
 
 /// Escreve Bytes (blob com header de len) no arquivo.
@@ -560,49 +735,75 @@ pub unsafe extern "C" fn kata_rt_file_write_bytes(handle: i64, data_ptr: i64) ->
         None => return alloc_result_box(1, error_text("handle inválido")),
     };
 
-    // Verifica que o modo permite escrita.
-    // stdio read-only (stdin) usa mensagem "not writable".
-    match inner.io.mode {
-        IoMode::Write | IoMode::Append | IoMode::ReadWrite | IoMode::Create => {}
-        _ => {
-            let msg = if inner.is_stdio {
-                "not writable"
-            } else {
-                "modo não permite escrita"
-            };
-            return alloc_result_box(1, error_text(msg));
-        }
+    if let Err(e) = check_write_mode(inner) {
+        return alloc_result_box(1, e);
     }
 
     if data_ptr == 0 {
-        // Nothing to write — Ok(Unit).
         return alloc_result_box(0, 0);
     }
 
-    // Bytes tem header: len (i64) no offset 0, data no offset 8.
     let len = unsafe { std::ptr::read_unaligned(data_ptr as *const i64) };
     if len <= 0 {
-        return alloc_result_box(0, 0); // Ok(Unit) — nothing to write
+        return alloc_result_box(0, 0);
     }
 
     let data_slice =
         unsafe { std::slice::from_raw_parts((data_ptr as *const u8).add(8), len as usize) };
 
-    // BufReader::get_mut() dá acesso ao File subjacente para escrita.
-    let file = inner.buf_reader.get_mut();
-    match file.write_all(data_slice) {
-        Ok(_) => alloc_result_box(0, 0), // Ok(Unit)
-        Err(e) => alloc_result_box(1, error_text(&format!("erro de escrita: {e}"))),
-    }
+    write_all_fd(inner, handle, data_slice)
 }
 
-/// Fecha o arquivo e libera o FileInner via drop_in_place.
+/// Loop de escrita com `raw_write` e suspensão cooperativa em EAGAIN.
+///
+/// Escreve até todos os bytes serem enviados. Se o FD é non-blocking e o
+/// buffer está cheio (EAGAIN), suspende o fiber via `WaitingOnSelect`.
+fn write_all_fd(inner: &mut FileInner, handle: i64, data: &[u8]) -> i64 {
+    let mut written = 0usize;
+
+    while written < data.len() {
+        let n_written = raw_write(inner.fd, data[written..].as_ptr(), data.len() - written);
+
+        if n_written > 0 {
+            written += n_written as usize;
+            continue;
+        }
+
+        if n_written == 0 {
+            return alloc_result_box(1, error_text("write retornou 0"));
+        }
+
+        // n_written < 0 — erro.
+        let err = std::io::Error::last_os_error().raw_os_error().unwrap_or(0);
+        if is_would_block(err) {
+            // Buffer cheio — suspender fiber.
+            let suspended = crate::fiber::with_suspend(|suspend| {
+                suspend.suspend(crate::fiber::YieldReason::WaitingOnSelect {
+                    channel_handles: Vec::new(),
+                    file_handles: vec![handle],
+                    socket_handles: Vec::new(),
+                    deadline: None,
+                });
+            });
+            if suspended.is_none() {
+                return alloc_result_box(1, error_text("WOULDBLOCK sem fiber"));
+            }
+            // Fiber resumido — tentar novamente.
+            continue;
+        }
+
+        // Erro real (EPIPE, etc).
+        return alloc_result_box(1, error_text(&format!("erro de escrita: {err}")));
+    }
+
+    alloc_result_box(0, 0) // Ok(Unit)
+}
+
+/// Fecha o arquivo via `close_fd` no FD bruto.
 ///
 /// Idempotente: se chamado múltiplas vezes (ex: close explícito + epílogo),
 /// o campo `closed` no FileInner garante que o FD só é fechado uma vez.
-/// O `drop_in_place` roda o Drop do FileInner (fecha FD via drop de
-/// BufReader→File, libera String do path) sem chamar dealloc — a memória
-/// permanece na root_arena até o teardown do processo.
+/// A memória do FileInner permanece na arena até o teardown do processo.
 ///
 /// # Safety
 /// `handle` deve ser um handle válido (ou 0 — no-op).
@@ -618,13 +819,10 @@ pub unsafe extern "C" fn kata_rt_file_close(handle: i64) {
         return;
     }
     inner.closed = true;
-    // Remove do registry antes de drop (evita dangling no OPEN_FILES/FIBER_OPEN_FILES).
+    // Remove do registry antes de close (evita dangling no OPEN_FILES/FIBER_OPEN_FILES).
     unregister_file_handle(handle);
     crate::scheduler::FIBER_OPEN_FILES.with(|r| r.borrow_mut().retain(|&h| h != handle));
-    // drop_in_place roda o Drop de FileInner (fecha BufReader→FD, libera String)
-    // sem chamar dealloc — a memória será liberada quando a arena
-    // for destruída.
-    unsafe {
-        std::ptr::drop_in_place(handle as *mut FileInner);
-    }
+    // Fecha o FD via syscall direta. A memória do FileInner permanece na
+    // arena até o teardown.
+    close_fd(inner.fd);
 }
