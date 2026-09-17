@@ -93,11 +93,3 @@ refere-se a, permitindo remover overloads não-usadas antes do codegen.
 - **`select_arms_different_types`** — test placeholder em
   `kata-inference/tests/csp_typeck.rs:215`, depende de T0 unification.
   Corpo vazio, sem assertions.
-- **Qualificação obrigatória em conflito de variantes** — quando duas
-  variantes de mesmo nome existem em enums diferentes (ex: `Err` em
-  `Result` e outro enum), `resolve_unqual_variant` já detecta e exige
-  qualificação. Mas não usa hint de tipo contextual (ret_ty, `?`,
-  ascription) para disambiguar automaticamente. Patterns de match não
-  têm esse problema (`scrutinee_ty` disambigua). Melhoria: passar hint
-  de tipo para `resolve_unqual_variant` para resolver ambiguidade por
-  contexto em vez de exigir qualificação manual.
