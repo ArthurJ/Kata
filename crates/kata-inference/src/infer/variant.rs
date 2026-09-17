@@ -55,37 +55,31 @@ fn build_fixed_payload(text: &str, ty: &Ty, span: Span) -> TypedExpr {
     }
 }
 
-/// Resolve variante desqualificada em posição de expressão.
+/// Extrai o nome de um enum de um hint de tipo contextual.
 ///
-/// Quando `env.lookup(name)` falha, tenta o EnumRegistry: se `name` é variante
-/// unitária de exatamente 1 enum, produz `VariantQual`. Se múltiplos enums têm
-/// a variante, erro de ambiguidade. Se 0, `UnboundName`. Se tem payload, erro
-/// (precisa de Apply: `Ok 42`, não `Ok` sozinho).
-pub(crate) fn resolve_unqual_variant(
+/// Para disambiguar **qual enum** tem uma variante ambígua, só precisamos
+/// do nome do enum no hint. `Ty::Generic("Result", [Int, Text])` → `"Result"`.
+/// `Ty::Sum("Boolean")` → `"Boolean"`. Outros tipos não carregam nome de
+/// enum → `None` (hint ignorado, comportamento de ambiguidade original).
+pub(crate) fn enum_name_from_hint(hint: Option<&Ty>) -> Option<&str> {
+    match hint? {
+        Ty::Generic(name, _) => Some(name.as_str()),
+        Ty::Sum(name) => Some(name.as_str()),
+        _ => None,
+    }
+}
+
+/// Resolve uma variante desqualificada usando o enum já identificado.
+///
+/// Corpo comum aos caminhos de 1 candidato (sem ambiguidade) e de
+/// filtragem por hint (ambiguidade resolvida). `enum_name` já está
+/// determinado — só constrói o TypedExpr apropriado.
+fn resolve_variant(
+    enum_name: &str,
     name: &str,
     span: &Span,
     ctx: &InferCtx,
 ) -> InferResult<(Ty, TypedExprKind)> {
-    let candidates = ctx.enum_registry.find_enums_with_variant(name);
-    if candidates.is_empty() {
-        return Err(MiddleError::UnboundName {
-            name: name.to_string(),
-            span: (*span).into(),
-            suggestion: None,
-        });
-    }
-    if candidates.len() > 1 {
-        return Err(MiddleError::UnboundName {
-            suggestion: None,
-            name: format!(
-                "variante '{name}' é ambígua — existe em: {}. Qualifique (ex: {}::{name})",
-                candidates.join(", "),
-                candidates[0]
-            ),
-            span: (*span).into(),
-        });
-    }
-    let enum_name = candidates[0];
     // Variante constante: OK sem args constrói com valor fixo.
     if let Some(fixed_text) = ctx.enum_registry.fixed_value(enum_name, name) {
         let tag = ctx
@@ -147,4 +141,61 @@ pub(crate) fn resolve_unqual_variant(
             },
         ))
     }
+}
+
+/// Resolve variante desqualificada em posição de expressão.
+///
+/// Quando `env.lookup(name)` falha, tenta o EnumRegistry: se `name` é variante
+/// unitária de exatamente 1 enum, produz `VariantQual`. Se múltiplos enums têm
+/// a variante, usa o `hint` de tipo contextual para filtrar candidatos pelo
+/// enum esperado. Se o hint filtra para 1, resolve; se filtra para 0, erro de
+/// incompatibilidade (não ambiguidade); se não há hint, erro de ambiguidade.
+/// Se 0 candidatos, `UnboundName`. Se tem payload, erro (precisa de Apply).
+pub(crate) fn resolve_unqual_variant(
+    name: &str,
+    span: &Span,
+    ctx: &InferCtx,
+    hint: Option<&Ty>,
+) -> InferResult<(Ty, TypedExprKind)> {
+    let candidates = ctx.enum_registry.find_enums_with_variant(name);
+    if candidates.is_empty() {
+        return Err(MiddleError::UnboundName {
+            name: name.to_string(),
+            span: (*span).into(),
+            suggestion: None,
+        });
+    }
+    if candidates.len() == 1 {
+        return resolve_variant(candidates[0], name, span, ctx);
+    }
+    // 2+ candidatos: tentar filtragem por hint contextual.
+    if let Some(expected) = enum_name_from_hint(hint) {
+        if let Some(&matched) = candidates.iter().find(|c| **c == expected) {
+            // Hint filtrou para 1 — resolve com este enum.
+            return resolve_variant(matched, name, span, ctx);
+        } else {
+            // Hint aponta para enum que não tem esta variante —
+            // incompatibilidade de tipo, não ambiguidade.
+            let variants = ctx.enum_registry.variants_of(expected);
+            return Err(MiddleError::UnboundName {
+                suggestion: None,
+                name: format!(
+                    "o contexto espera {expected}, mas '{name}' não é variante de {expected}. \
+                     Variantes de {expected}: {}",
+                    variants.join(", ")
+                ),
+                span: (*span).into(),
+            });
+        }
+    }
+    // Sem hint ou hint não carrega nome de enum — ambiguidade original.
+    Err(MiddleError::UnboundName {
+        suggestion: None,
+        name: format!(
+            "variante '{name}' é ambígua — existe em: {}. Qualifique (ex: {}::{name})",
+            candidates.join(", "),
+            candidates[0]
+        ),
+        span: (*span).into(),
+    })
 }

@@ -239,8 +239,9 @@ pub(crate) fn infer_expr_hinted(
                 (ty, TypedExprKind::Ident { name: name.clone() })
             } else {
                 // Caminho 2: variante unitária desqualificada (ex: `True`,
-                // `None`, `Vermelho`). Busca no EnumRegistry.
-                match resolve_unqual_variant(name, span, ctx) {
+                // `None`, `Vermelho`). Busca no EnumRegistry, usando o hint
+                // de tipo contextual para disambiguar ambiguidades.
+                match resolve_unqual_variant(name, span, ctx, hint) {
                     Ok(result) => result,
                     Err(MiddleError::UnboundName {
                         name: ref err_name, ..

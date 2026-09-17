@@ -463,7 +463,7 @@ pub(crate) fn infer_apply(
 
     // Não encontrado em DispatchTable nem TypeEnv.
     // Fallback: pode ser variante com payload desqualificada (ex: `Ok 42`,
-    // `Some 42`). Busca no EnumRegistry.
+    // `Some 42`). Busca no EnumRegistry, usando o hint para disambiguar.
     let candidates = ctx.enum_registry.find_enums_with_variant(&func_name);
     if candidates.len() == 1 {
         let enum_name = candidates[0];
@@ -487,6 +487,42 @@ pub(crate) fn infer_apply(
         }
     }
     if candidates.len() > 1 {
+        // Tentar filtragem por hint contextual.
+        if let Some(expected) = super::variant::enum_name_from_hint(hint) {
+            if let Some(&enum_name) = candidates.iter().find(|c| **c == expected) {
+                if ctx
+                    .enum_registry
+                    .payload_ty(enum_name, &func_name)
+                    .is_some()
+                {
+                    return infer_variant_construct(
+                        &VariantCall {
+                            enum_name,
+                            variant: &func_name,
+                            module_path: None,
+                            args,
+                            span,
+                        },
+                        env,
+                        ctx,
+                        hint,
+                    );
+                }
+            } else {
+                // Hint aponta para enum que não tem esta variante —
+                // incompatibilidade de tipo.
+                let variants = ctx.enum_registry.variants_of(expected);
+                return Err(MiddleError::UnboundName {
+                    suggestion: None,
+                    name: format!(
+                        "o contexto espera {expected}, mas '{func_name}' não é variante de \
+                         {expected}. Variantes de {expected}: {}",
+                        variants.join(", ")
+                    ),
+                    span: callee.span.into(),
+                });
+            }
+        }
         return Err(MiddleError::UnboundName {
             suggestion: None,
             name: format!(

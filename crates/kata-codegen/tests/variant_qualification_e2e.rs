@@ -264,3 +264,153 @@ main!()"#;
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
     assert_eq!(untag_smi(raw), 42);
 }
+
+// ── Disambiguação por hint contextual (PRD-variant-hint-disambig) ──────
+
+/// Variante ambígua `Ok` (em `Result` e `MeuResult`) resolvida por hint
+/// de retorno da assinatura. O tipo de retorno `Result::(Int, Text)`
+/// filtra os candidatos para apenas `Result`.
+#[test]
+fn hint_retorno_resolve_variante_ambigua() {
+    let src = r#"enum MeuResult
+    Ok(Int)
+    Falhou
+
+ok_id :: Int => Result::(Int, Text)
+lambda x: Ok x
+
+action main => Int
+    match (ok_id 42)
+        Ok v: v
+        Err _: 0
+main!()"#;
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::Prim(PrimTy::Int));
+    assert_eq!(untag_smi(raw), 42);
+}
+
+/// Variante ambígua `Ok` sem hint (lambda anônimo sem assinatura)
+/// continua ambígua — erro esperado.
+#[test]
+fn sem_hint_variante_ambigua_continua_erro() {
+    let src = r#"enum MeuResult
+    Ok(Int)
+    Falhou
+
+action main => Int
+    let r := Ok 42
+    match r
+        Ok v: v
+        Falhou: 0
+main!()"#;
+    let err = infer_src_err(src);
+    assert!(
+        matches!(err, MiddleError::UnboundName { .. }),
+        "esperado UnboundName (ambiguidade), recebido: {err:?}"
+    );
+    if let MiddleError::UnboundName { name, .. } = err {
+        assert!(
+            name.contains("ambígua"),
+            "mensagem deve mencionar ambiguidade: {name}"
+        );
+    }
+}
+
+/// Variante `Ok` ambígua com hint apontando para enum que não tem `Ok`.
+/// Hint é `Optional::(Int)`, mas `Ok` não é variante de `Optional`.
+/// Erro esperado: incompatibilidade (não ambiguidade).
+#[test]
+fn hint_incompativel_variante_nao_do_enum() {
+    let src = r#"enum MeuResult
+    Ok(Int)
+    Falhou
+
+bad :: Optional::(Int) => Optional::(Int)
+lambda x: Ok x
+"#;
+    let err = infer_src_err(src);
+    assert!(
+        matches!(err, MiddleError::UnboundName { .. }),
+        "esperado UnboundName, recebido: {err:?}"
+    );
+    if let MiddleError::UnboundName { name, .. } = err {
+        // Não deve dizer "ambígua" — deve dizer incompatibilidade
+        assert!(
+            !name.contains("ambígua"),
+            "não é ambiguidade, é incompatibilidade: {name}"
+        );
+        assert!(
+            name.contains("Optional"),
+            "mensagem deve mencionar Optional: {name}"
+        );
+    }
+}
+
+/// Variante unitária ambígua `Falhou` (em `MeuResult` e `OutroEnum`)
+/// resolvida por hint de retorno.
+#[test]
+fn hint_retorno_resolve_variante_unitaria_ambigua() {
+    let src = r#"enum MeuResult
+    Ok(Int)
+    Falhou
+
+enum OutroEnum
+    Falhou
+    Coisa
+
+falhou_id :: MeuResult => MeuResult
+lambda x: Falhou
+
+action main => Int
+    match (falhou_id (MeuResult::Ok 42))
+        MeuResult::Ok v: v
+        MeuResult::Falhou: 99
+main!()"#;
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::Prim(PrimTy::Int));
+    // falhou_id sempre retorna Falhou → match cai no braço Falhou: 99
+    assert_eq!(untag_smi(raw), 99);
+}
+
+/// Apply com payload: `Ok 42` ambíguo (2 enums) resolvido por hint
+/// de retorno da função nomeada.
+#[test]
+fn hint_retorno_resolve_apply_ambiguo() {
+    let src = r#"enum MeuResult
+    Ok(Int)
+    Falhou
+
+wrap :: Int => Result::(Int, Text)
+lambda x: Ok x
+
+action main => Int
+    match (wrap 42)
+        Ok v: v
+        Err _: 0
+main!()"#;
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::Prim(PrimTy::Int));
+    assert_eq!(untag_smi(raw), 42);
+}
+
+/// Propagação de hint por argumento de função: `Ok 42` como argumento
+/// de função que espera `Result::(Int, Text)` filtra a ambiguidade.
+#[test]
+fn hint_argumento_resolve_variante_ambigua() {
+    let src = r#"enum MeuResult
+    Ok(Int)
+    Falhou
+
+consume :: Result::(Int, Text) => Int
+lambda r:
+    match r
+        Ok v: v
+        Err _: 0
+
+action main => Int
+    consume (Ok 42)
+main!()"#;
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::Prim(PrimTy::Int));
+    assert_eq!(untag_smi(raw), 42);
+}
