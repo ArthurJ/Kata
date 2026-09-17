@@ -1,6 +1,6 @@
 # TODO — Kata-Lang
 
-Único arquivo de pendências. Atualizado 2026-09-17.
+Único arquivo de pendências. Atualizado 2026-09-17 (auditoria: EOF/ReadResult resolvido e removido).
 
 ---
 
@@ -20,17 +20,6 @@ não elimina o blocking da chamada de connect em si.
 (retorna EINPROGRESS) → suspender fiber → scheduler faz poll por POLLOUT →
 resume e verifica `SO_ERROR` via `getsockopt`. Elimina o busy-wait e torna o
 timeout configurável.
-
-#### EOF representado como `Err("EOF")`
-
-EOF é terminação normal, não erro. Confluir EOF com erro de leitura força o
-caller a distinguir casos por string-matching: `Err("EOF")` (normal) vs
-`Err("erro de leitura")` (falha real). Sem distinção tipada entre graceful
-close e I/O error.
-
-**Caminho:** `ReadResult(T)` tri-valorado: `Data(T)` | `Error(Text)` | `Eof`.
-Ver PRD-io-result. Impacto: stdlib (`core.kata`), FFI de read/readline
-(File e Socket), testes E2E que fazem match em `Err _`.
 
 ### 🟡 Médio
 
