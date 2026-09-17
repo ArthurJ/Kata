@@ -163,7 +163,8 @@ pub(crate) fn lower_expr(
                         .global_value(ctx.module.target_config().pointer_type(), func_gv);
                     // ABI uniformizada: função nomeada como valor também é
                     // box_ptr (sem captures — n_captures=0).
-                    let box_ptr = super::closure::alloc_capture_box(func_ptr, &[], ctx)?;
+                    let box_ptr =
+                        super::closure::alloc_capture_box(func_ptr, &[], expr.escape, ctx)?;
                     return Ok(box_ptr);
                 }
             }
@@ -555,7 +556,7 @@ pub(crate) fn lower_expr(
             // onde as variáveis capturadas existem no var_map. Isto resolve
             // o bug de closure escape via return: o box_ptr carrega fn_ptr
             // + captures, independente de quem chama depois.
-            let box_ptr = super::closure::alloc_capture_box(func_ptr, captures, ctx)?;
+            let box_ptr = super::closure::alloc_capture_box(func_ptr, captures, expr.escape, ctx)?;
             Ok(box_ptr)
         }
 

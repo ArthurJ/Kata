@@ -6,6 +6,7 @@ use cranelift_codegen::ir::types::F64;
 use cranelift_codegen::ir::types::I64;
 use cranelift_codegen::ir::{AbiParam, InstBuilder, MemFlagsData, Signature};
 use cranelift_codegen::isa::CallConv;
+use kata_core::escape::EscapeTarget;
 use kata_core::ty::Ty;
 use kata_inference::{CaptureInfo, TypedExpr, TypedExprKind};
 
@@ -429,21 +430,14 @@ pub(crate) fn lower_closure(
 pub(crate) fn alloc_capture_box(
     func_ptr: cranelift_codegen::ir::Value,
     captures: &[CaptureInfo],
+    escape: EscapeTarget,
     ctx: &mut LowerCtx,
 ) -> Result<cranelift_codegen::ir::Value, super::CodegenError> {
     let flags = MemFlagsData::new();
 
     let rt_val = ctx.rt.unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
 
-    let get_root_ref = ctx
-        .ffi_refs
-        .get("kata_rt_get_root_arena_handle")
-        .copied()
-        .ok_or_else(|| super::CodegenError::FfiSymbolNotFound {
-            symbol: "kata_rt_get_root_arena_handle".into(),
-        })?;
-    let root_inst = ctx.builder.ins().call(get_root_ref, &[rt_val]);
-    let capture_arena = ctx.builder.inst_results(root_inst)[0];
+    let capture_arena = crate::lowering::escape_arena::arena_handle_for_escape(escape, ctx);
 
     let alloc_arc_ref = ctx.ffi_refs.get("kata_rt_alloc_arc").ok_or_else(|| {
         super::CodegenError::FfiSymbolNotFound {
