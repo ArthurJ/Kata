@@ -323,11 +323,7 @@ main!()"#
     );
     let (raw, ty) = eval_src(&src);
     assert_eq!(ty, Ty::int(), "deve retornar Int");
-    assert_eq!(
-        untag_smi(raw),
-        3,
-        "deve contar 3 linhas antes de Eof"
-    );
+    assert_eq!(untag_smi(raw), 3, "deve contar 3 linhas antes de Eof");
     let _ = std::fs::remove_file(&path);
 }
 

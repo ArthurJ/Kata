@@ -88,30 +88,15 @@ pub extern "C" fn kata_rt_incref(box_ptr: i64) -> i64 {
 
 /// Decrementa o refcount de um CaptureBox.
 ///
-/// Quando o refcount chega a 0, o box é liberado individualmente da root
-/// arena. Precisa de `rt` para acessar `root_arena_handle` e `arena_dealloc`.
+/// ARC vestigial — o refcount nasce em 1 e nunca muda na prática. Esta
+/// função é mantida temporariamente para compatibilidade do interp, mas
+/// o dealloc individual é no-op (arenas Bump não suportam dealloc).
+/// Será removida na Fase 5 do PRD-arena-unification.
 #[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_decref(rt: i64, box_ptr: i64) -> i64 {
-    if box_ptr == 0 {
-        return 0;
-    }
-    unsafe {
-        let ptr = box_ptr as *mut u8;
-        let refcount_ptr = ptr.add(8) as *mut i64;
-        let count = std::ptr::read_unaligned(refcount_ptr);
-        if count > 0 {
-            let new_count = count - 1;
-            std::ptr::write_unaligned(refcount_ptr, new_count);
-            if new_count == 0 {
-                let n_captures = std::ptr::read_unaligned(ptr.add(N_CAPTURES_OFFSET) as *mut i64);
-                let size = HEADER_SIZE as i64 + n_captures * 8;
-                let root_arena = crate::arena::kata_rt_get_root_arena_handle(rt);
-                if root_arena != 0 {
-                    crate::arena::kata_rt_arena_dealloc(rt, root_arena, box_ptr, size);
-                }
-            }
-        }
-    }
+pub extern "C" fn kata_rt_decref(_rt: i64, box_ptr: i64) -> i64 {
+    // No-op: Bump arena não suporta dealloc individual.
+    // O refcount é vestigial (sempre 1, nunca incrementado).
+    let _ = box_ptr;
     0
 }
 

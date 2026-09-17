@@ -15,7 +15,7 @@
 
 use std::cell::Cell;
 
-use crate::arena::{Arena, ArenaKind, TrackedArena};
+use crate::arena::{Arena, ArenaKind};
 use crate::marshal::TypeShape;
 use crate::scheduler::Scheduler;
 
@@ -29,9 +29,9 @@ pub const DEFAULT_DEPTH_LIMIT: u32 = 1000;
 pub struct Runtime {
     /// Scheduler de fibers. Antes em `SCHEDULER: RefCell<Option<Scheduler>>` TLS.
     pub(crate) scheduler: Scheduler,
-    /// Pool de arenas (Bump + Tracked). Antes em `ARENAS: RefCell<Vec<ArenaKind>>` TLS.
+    /// Pool de arenas (todas Bump). Antes em `ARENAS: RefCell<Vec<ArenaKind>>` TLS.
     pub(crate) arenas: Vec<ArenaKind>,
-    /// Handle (índice em `arenas`) da root arena (Tracked). Antes em
+    /// Handle (índice em `arenas`) da root arena (Bump). Antes em
     /// `ROOT_ARENA_HANDLE: Cell<i64>` TLS.
     pub root_arena_handle: i64,
     /// Type shapes para marshalling. Antes em `TYPE_TABLE: RefCell<Vec<TypeShape>>` TLS.
@@ -49,13 +49,11 @@ pub struct Runtime {
 }
 
 impl Runtime {
-    /// Cria um novo Runtime com scheduler vazio e root arena (Tracked) alocada.
+    /// Cria um novo Runtime com scheduler vazio e root arena (Bump) alocada.
     ///
-    /// A root arena é criada diretamente via `TrackedArena::new()` — não chama
-    /// a FFI `kata_rt_arena_create_tracked` (que precisaria de `rt` que ainda
-    /// não existe durante a construção).
+    /// A root arena é criada diretamente via `Arena::new()` (Bump).
     pub fn new() -> Self {
-        let arenas: Vec<ArenaKind> = vec![ArenaKind::Tracked(TrackedArena::new())];
+        let arenas: Vec<ArenaKind> = vec![ArenaKind::Bump(Arena::new())];
         let root_arena_handle = 0; // índice da primeira arena no pool
 
         // Scheduler::new() não cria mais a root arena — recebe o handle.
@@ -79,13 +77,6 @@ impl Runtime {
         id
     }
 
-    /// Cria uma arena Tracked no pool e retorna o handle (índice).
-    pub fn arena_create_tracked(&mut self) -> i64 {
-        let id = self.arenas.len() as i64;
-        self.arenas.push(ArenaKind::Tracked(TrackedArena::new()));
-        id
-    }
-
     /// Aloca `size` bytes (align 8) na arena do handle. Retorna ptr ou 0.
     pub fn arena_alloc(&mut self, handle: i64, size: i64) -> i64 {
         if size <= 0 {
@@ -99,9 +90,9 @@ impl Runtime {
         if idx >= self.arenas.len() {
             return 0;
         }
-        let ptr = match &mut self.arenas[idx] {
-            ArenaKind::Bump(a) => a.alloc(layout),
-            ArenaKind::Tracked(t) => t.alloc(layout),
+        let ptr = {
+            let ArenaKind::Bump(a) = &mut self.arenas[idx];
+            a.alloc(layout)
         };
         if ptr.is_null() {
             0
@@ -114,25 +105,6 @@ impl Runtime {
         }
     }
 
-    /// Libera um bloco individualmente da arena Tracked do handle.
-    /// No-op para arenas Bump (bumpalo não suporta dealloc individual).
-    pub fn arena_dealloc(&mut self, handle: i64, ptr: i64, size: i64) {
-        if handle < 0 || ptr == 0 || size <= 0 {
-            return;
-        }
-        let layout = match std::alloc::Layout::from_size_align(size as usize, 8) {
-            Ok(l) => l,
-            Err(_) => return,
-        };
-        let idx = handle as usize;
-        if idx >= self.arenas.len() {
-            return;
-        }
-        if let ArenaKind::Tracked(t) = &mut self.arenas[idx] {
-            t.dealloc(ptr as *mut u8, layout);
-        }
-    }
-
     /// Reseta SÓ a arena do handle (libera a memória daquela arena).
     pub fn arena_destroy(&mut self, handle: i64) {
         if handle < 0 {
@@ -140,27 +112,8 @@ impl Runtime {
         }
         let idx = handle as usize;
         if let Some(a) = self.arenas.get_mut(idx) {
-            match a {
-                ArenaKind::Bump(b) => b.reset(),
-                ArenaKind::Tracked(t) => t.destroy(),
-            }
-        }
-    }
-
-    /// Retorna (alloc_count, dealloc_count) da arena Tracked do handle.
-    pub fn arena_stats(&self, handle: i64) -> i64 {
-        if handle < 0 {
-            return 0;
-        }
-        let idx = handle as usize;
-        if idx >= self.arenas.len() {
-            return 0;
-        }
-        match &self.arenas[idx] {
-            ArenaKind::Tracked(t) => {
-                ((t.dealloc_count as i64) << 32) | (t.alloc_count as i64 & 0xFFFF_FFFF)
-            }
-            _ => 0,
+            let ArenaKind::Bump(b) = a;
+            b.reset();
         }
     }
 

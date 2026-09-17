@@ -108,10 +108,9 @@ fn create_tcp_listener(addr: &str) -> i64 {
 /// 5. `getsockopt(SO_ERROR)` — verifica se conectou ou erro
 ///
 /// **Alocação na fiber arena:** todos os Result boxes e textos de erro são
-/// alocados na fiber arena (Bump) em vez da root_arena (Tracked). A
-/// TrackedArena usa `std::alloc::alloc` que, quando chamada de dentro de
-/// uma FFI executada pelo JIT, corrompe intermitentemente a heap do
-/// processo. A Bump arena (bumpalo) não tem esse problema.
+/// alocados na fiber arena (Bump) em vez da root_arena. A root_arena
+/// também é Bump, mas a fiber arena é resetada quando o fiber termina —
+/// liberação mais frequente, menor footprint.
 #[cfg(unix)]
 fn create_tcp_connected(addr: &str) -> i64 {
     let sock_addr: SocketAddr = match addr.parse() {
@@ -166,12 +165,12 @@ fn create_tcp_connected(addr: &str) -> i64 {
     alloc_err_fiber("connect falhou: timeout após retries")
 }
 
-/// Aloca um bloco na fiber arena (Bump) em vez da root_arena (Tracked).
+/// Aloca um bloco na fiber arena (Bump) em vez da root_arena.
 ///
-/// A TrackedArena corrompe intermitentemente a heap quando chamada de
-/// dentro de FFIs executadas pelo JIT. A Bump arena (bumpalo) é segura.
+/// A fiber arena é resetada quando o fiber termina — liberação mais
+/// frequente que a root_arena (que só é destruída no teardown do Runtime).
 /// Se a fiber arena não estiver disponível (fora de fiber), fallback
-/// para a root_arena.
+/// para a root_arena (também Bump).
 #[cfg(unix)]
 fn fiber_alloc(size: i64) -> i64 {
     let rt = crate::arena::rt_ptr();
@@ -185,7 +184,7 @@ fn fiber_alloc(size: i64) -> i64 {
     if fiber_arena > 0 {
         return crate::arena::kata_rt_arena_alloc(rt, fiber_arena, size);
     }
-    // Fallback: root_arena (Tracked — pode corromper, mas só se sem fiber).
+    // Fallback: root_arena (Bump — sem fiber ativo).
     let root_arena = crate::arena::kata_rt_get_root_arena_handle(rt);
     crate::arena::kata_rt_arena_alloc(rt, root_arena, size)
 }
@@ -281,7 +280,10 @@ fn tcp_connect_nonblocking(sock_addr: &SocketAddr) -> ConnectResult {
     };
 
     if fd < 0 {
-        return ConnectResult::Error(format!("socket() falhou: {}", std::io::Error::last_os_error()));
+        return ConnectResult::Error(format!(
+            "socket() falhou: {}",
+            std::io::Error::last_os_error()
+        ));
     }
 
     // 2. connect() non-blocking.
@@ -348,7 +350,10 @@ fn tcp_connect_nonblocking(sock_addr: &SocketAddr) -> ConnectResult {
         if rc < 0 {
             // Erro no getsockopt — não devemos chegar aqui.
             close_fd(fd);
-            return ConnectResult::Error(format!("getsockopt falhou: {}", std::io::Error::last_os_error()));
+            return ConnectResult::Error(format!(
+                "getsockopt falhou: {}",
+                std::io::Error::last_os_error()
+            ));
         }
 
         if so_error == 0 {
@@ -370,7 +375,10 @@ fn tcp_connect_nonblocking(sock_addr: &SocketAddr) -> ConnectResult {
     if err == libc::ECONNREFUSED {
         return ConnectResult::Refused;
     }
-    ConnectResult::Error(format!("connect falhou: {}", std::io::Error::last_os_error()))
+    ConnectResult::Error(format!(
+        "connect falhou: {}",
+        std::io::Error::last_os_error()
+    ))
 }
 
 /// Aceita uma conexão no listener (non-blocking com suspensão cooperativa).

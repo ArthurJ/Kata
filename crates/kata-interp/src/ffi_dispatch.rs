@@ -452,7 +452,6 @@ pub(crate) fn ffi_dispatch(
 
         // ── Arena create/destroy ─────────────────────────────
         "kata_rt_arena_create" => Ok(rt::kata_rt_arena_create(rt_ptr)),
-        "kata_rt_arena_create_tracked" => Ok(rt::kata_rt_arena_create_tracked(rt_ptr)),
         "kata_rt_arena_destroy" => {
             rt::kata_rt_arena_destroy(rt_ptr, args[0]);
             Ok(0)

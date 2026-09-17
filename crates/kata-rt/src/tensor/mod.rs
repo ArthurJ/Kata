@@ -904,7 +904,6 @@ pub extern "C" fn kata_rt_tensor_sub(
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_tensor_free(_ptr: i64) {
     // Arena bump: liberação é bulk via arena_destroy.
-    // Tracked arena: não rastreamos tensors individualmente ainda.
 }
 
 /// Constrói uma matriz identidade n×n.

@@ -234,11 +234,7 @@ pub(crate) fn raw_read_file(fd: i32, buf: *mut u8, len: usize) -> isize {
         // ERROR_HANDLE_EOF (38) ou ERROR_BROKEN_PIPE (109) = EOF (0).
         // Outros = erro (-1).
         let err = unsafe { win32::GetLastError() };
-        if err == 38 || err == 109 {
-            0
-        } else {
-            -1
-        }
+        if err == 38 || err == 109 { 0 } else { -1 }
     }
 }
 
@@ -261,11 +257,7 @@ pub(crate) fn raw_write_file(fd: i32, buf: *const u8, len: usize) -> isize {
             std::ptr::null_mut(),
         )
     };
-    if rc != 0 {
-        bytes_written as isize
-    } else {
-        -1
-    }
+    if rc != 0 { bytes_written as isize } else { -1 }
 }
 
 /// Fecha um file handle.

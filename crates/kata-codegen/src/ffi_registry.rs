@@ -154,15 +154,6 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
         "kata_rt_arena_destroy",
         rt::kata_rt_arena_destroy as *const u8,
     );
-    // Arena Tracked — root arena para valores ARC-managed
-    builder.symbol(
-        "kata_rt_arena_create_tracked",
-        rt::kata_rt_arena_create_tracked as *const u8,
-    );
-    builder.symbol(
-        "kata_rt_arena_dealloc",
-        rt::kata_rt_arena_dealloc as *const u8,
-    );
     builder.symbol(
         "kata_rt_get_root_arena_handle",
         rt::kata_rt_get_root_arena_handle as *const u8,

@@ -624,10 +624,8 @@ impl Scheduler {
 
         // Destruir a arena do fiber via pool direto.
         if let Some(a) = arenas.get_mut(arena_handle as usize) {
-            match a {
-                ArenaKind::Bump(b) => b.reset(),
-                ArenaKind::Tracked(t) => t.destroy(),
-            }
+            let ArenaKind::Bump(b) = a;
+            b.reset();
         }
         // Drop manual do fiber.
         // SAFETY: fiber completou (completed=true), não está suspenso.
