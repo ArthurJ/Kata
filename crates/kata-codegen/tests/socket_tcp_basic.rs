@@ -136,7 +136,7 @@ fn socket_tcp_listen_connect_roundtrip() {
     let result := open!(SocketKind::TCP(addr), SocketMode::Listener)
     match result
       Ok listener:
-        let client := listen!(listener)
+        let client := accept!(listener)
         match client
           Ok conn:
             let dados := read!(conn, 100)
@@ -200,7 +200,7 @@ fn socket_tcp_echo_server() {
     let result := open!(SocketKind::TCP(addr), SocketMode::Listener)
     match result
       Ok listener:
-        let client := listen!(listener)
+        let client := accept!(listener)
         match client
           Ok conn:
             let dados := read!(conn, 100)
@@ -276,7 +276,7 @@ fn socket_close_epilogo() {
     let result := open!(SocketKind::TCP(addr), SocketMode::Listener)
     match result
       Ok listener:
-        let client := listen!(listener)
+        let client := accept!(listener)
         match client
           Ok conn:
             # Não chama close!(conn) — epílogo deve fechar

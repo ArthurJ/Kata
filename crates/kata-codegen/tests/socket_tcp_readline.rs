@@ -130,7 +130,7 @@ fn socket_readline_single_line() {
     let result := open!(SocketKind::TCP(addr), SocketMode::Listener)
     match result
       Ok listener:
-        let client := listen!(listener)
+        let client := accept!(listener)
         match client
           Ok conn:
             let line := readline!(conn)
@@ -198,7 +198,7 @@ fn socket_readline_multiple_lines() {
     let result := open!(SocketKind::TCP(addr), SocketMode::Listener)
     match result
       Ok listener:
-        let client := listen!(listener)
+        let client := accept!(listener)
         match client
           Ok conn:
             let line1 := readline!(conn)
@@ -272,7 +272,7 @@ fn socket_readline_eof_partial() {
     let result := open!(SocketKind::TCP(addr), SocketMode::Listener)
     match result
       Ok listener:
-        let client := listen!(listener)
+        let client := accept!(listener)
         match client
           Ok conn:
             let line := readline!(conn)

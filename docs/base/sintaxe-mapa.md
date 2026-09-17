@@ -359,7 +359,7 @@ conectar_servidor!()
 - **Argumentos**: Toda Action recebe exatamente um argumento estruturado. **Posicional** `!(` — tupla explícita: `f!(1, 2)`, `f!()` (sem args), `f!({\"k\": v})` (dict como valor posicional). **Nomeado** `!{` — dict nomeado: `f!{"x": 1 "y": 2}` (chaves são nomes de params, reordenadas no prólogo). A disambiguação é sintática (`!(` vs `!{`), sem guard de tipo. **Default args**: se a action declara defaults via dict-template (`action f{x::Int: _, y::Int: 5}`), o prólogo preenche faltantes com defaults do template. `f!{"x": 1}` → y=5 (default). `f!(1)` posicional também → y=5. Omitir obrigatório (`_`) → erro.
 - **Relações**:
   - Algumas Actions são builtins do compilador (`fork!`, `panic!`, `assert!`), outras são stdlib (`echo!`), mas todas seguem a mesma sintaxe `!`.
-  - Actions de I/O no prelude: `open!`, `listen!`, `read!`, `write!`, `close!` para File e Socket (ver seção 22.4).
+  - Actions de I/O no prelude: `open!`, `accept!`, `read!`, `write!`, `close!` para File e Socket (ver seção 22.4).
   - Interage com `?` e `|` no tratamento de erro.
   - **First-class**: `worker_a` sem `!()` é uma referência (valor do tipo `Action(Int) -> Unit`). `worker_a!(42)` é invocação. Ver secção `Action(Params) -> Ret` acima.
 

@@ -1157,8 +1157,8 @@ enum SocketMode
 @ffi("kata_rt_socket_open")
 action open (kind::SocketKind, mode::SocketMode) => Result::(Socket, Text)
 
-@ffi("kata_rt_socket_listen")
-action listen (listener::Socket) => Result::(Socket, Text)
+@ffi("kata_rt_socket_accept")
+action accept (listener::Socket) => Result::(Socket, Text)
 
 @ffi("kata_rt_socket_read")
 action read (s::Socket) => ReadResult::(Bytes)

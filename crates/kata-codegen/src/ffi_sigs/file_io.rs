@@ -63,7 +63,7 @@ pub(crate) fn sig_for(sym: FfiSymbol) -> Option<Signature> {
             sig.returns.push(AbiParam::new(I64)); // Result box ptr
         }
         // socket_listen: (listener_handle) -> i64 (Result box)
-        FfiSymbol::SocketListen => {
+        FfiSymbol::SocketAccept => {
             sig.params.push(AbiParam::new(I64)); // listener_handle
             sig.returns.push(AbiParam::new(I64)); // Result box ptr
         }

@@ -119,7 +119,7 @@ fn socket_unix_listen_connect_roundtrip() {
     let result := open!(SocketKind::Unix(path), SocketMode::Listener)
     match result
       Ok listener:
-        let client := listen!(listener)
+        let client := accept!(listener)
         match client
           Ok conn:
             let dados := read!(conn, 100)

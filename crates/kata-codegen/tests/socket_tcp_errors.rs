@@ -151,7 +151,7 @@ main!()"#
 /// `listen!` em um socket Connected deve retornar Err (não aceita conexões).
 ///
 /// O main abre um listener, fork um cliente que conecta e fecha, o main
-/// aceita a conexão (produzindo um socket Connected) e tenta `listen!(conn)`
+/// aceita a conexão (produzindo um socket Connected) e tenta `accept!(conn)`
 /// — deve retornar Err imediatamente. Sem canal: o main retorna o resultado
 /// diretamente, evitando o deadlock do `channel!()` (rendezvous) onde
 /// `tx <! -1` bloqueia se o main ainda não chegou em `rx !> result`.
@@ -176,10 +176,10 @@ action main => Int
     match result
       Ok listener:
         fork!(cliente, ("{addr}"))
-        let client := listen!(listener)
+        let client := accept!(listener)
         match client
           Ok conn:
-            let bad := listen!(conn)
+            let bad := accept!(conn)
             match bad
               Ok _:
                 close!(conn)
@@ -195,7 +195,7 @@ main!()"#
     let (raw, _ty) = eval_src(&src);
     assert_ne!(raw, DEADLOCK_SENTINEL, "não deve deadlockar");
     let val = untag_smi(raw);
-    assert_eq!(val, -1, "listen em socket conectado deve retornar Err");
+    assert_eq!(val, -1, "accept em socket conectado deve retornar Err");
 }
 
 // ═══════════════════════════════════════════════════════════════════

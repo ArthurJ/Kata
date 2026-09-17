@@ -448,8 +448,8 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
     // Socket I/O
     builder.symbol("kata_rt_socket_open", rt::kata_rt_socket_open as *const u8);
     builder.symbol(
-        "kata_rt_socket_listen",
-        rt::kata_rt_socket_listen as *const u8,
+        "kata_rt_socket_accept",
+        rt::kata_rt_socket_accept as *const u8,
     );
     builder.symbol("kata_rt_socket_read", rt::kata_rt_socket_read as *const u8);
     builder.symbol(
@@ -870,7 +870,7 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         Stderr,
         // Socket I/O
         SocketOpen,
-        SocketListen,
+        SocketAccept,
         SocketRead,
         SocketReadChunk,
         SocketReadline,

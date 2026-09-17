@@ -48,7 +48,7 @@ kata_rt_run: deadlock: 1 fibers bloqueados sem progresso
 ### 2.2. Impacto
 
 Qualquer programa Kata5 que envie `-1` (Int negativo comum — código de erro,
-sentinela de "não encontrado", resultado de `listen!(conn)`) por `channel!()`
+sentinela de "não encontrado", resultado de `accept!(conn)`) por `channel!()`
 ou `queue!()` deadlocka. O bug é do runtime, não do código do usuário.
 
 ### 2.3. Por que só canal é afetado

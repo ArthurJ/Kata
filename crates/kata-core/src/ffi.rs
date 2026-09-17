@@ -384,8 +384,8 @@ pub enum FfiSymbol {
     // ── Socket I/O ─────────────────────────────────────────────────
     /// `kata_rt_socket_open(kind_box, mode_box) -> i64` — cria socket, retorna Result box.
     SocketOpen,
-    /// `kata_rt_socket_listen(listener_handle) -> i64` — accept, retorna Result box.
-    SocketListen,
+    /// `kata_rt_socket_accept(listener_handle) -> i64` — accept, retorna Result box.
+    SocketAccept,
     /// `kata_rt_socket_read(handle) -> i64` — lê todo o disponível, retorna Result box.
     SocketRead,
     /// `kata_rt_socket_read_chunk(handle, n) -> i64` — lê até n bytes, retorna Result box.
@@ -695,7 +695,7 @@ impl FfiSymbol {
             FfiSymbol::Stderr => "kata_rt_stderr",
             // Socket I/O
             FfiSymbol::SocketOpen => "kata_rt_socket_open",
-            FfiSymbol::SocketListen => "kata_rt_socket_listen",
+            FfiSymbol::SocketAccept => "kata_rt_socket_accept",
             FfiSymbol::SocketRead => "kata_rt_socket_read",
             FfiSymbol::SocketReadChunk => "kata_rt_socket_read_chunk",
             FfiSymbol::SocketReadline => "kata_rt_socket_readline",
@@ -952,7 +952,7 @@ impl FfiSymbol {
             FfiSymbol::Stderr => Ty::int(),
             // Socket I/O — retornam i64 (Result box ptr) ou Unit (close)
             FfiSymbol::SocketOpen => Ty::int(),
-            FfiSymbol::SocketListen => Ty::int(),
+            FfiSymbol::SocketAccept => Ty::int(),
             FfiSymbol::SocketRead => Ty::int(),
             FfiSymbol::SocketReadChunk => Ty::int(),
             FfiSymbol::SocketReadline => Ty::int(),
@@ -1224,7 +1224,7 @@ impl FfiSymbol {
             FfiSymbol::Stderr,
             // Socket I/O
             FfiSymbol::SocketOpen,
-            FfiSymbol::SocketListen,
+            FfiSymbol::SocketAccept,
             FfiSymbol::SocketRead,
             FfiSymbol::SocketReadChunk,
             FfiSymbol::SocketReadline,

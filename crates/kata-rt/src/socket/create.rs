@@ -1,4 +1,4 @@
-//! Criação de sockets — FFI `kata_rt_socket_open` + `kata_rt_socket_listen`.
+//! Criação de sockets — FFI `kata_rt_socket_open` + `kata_rt_socket_accept`.
 //!
 //! Cria listeners TCP/Unix e sockets conectados, com retry cooperativo
 //! para conectados (o servidor fork pode não ter feito listen ainda).
@@ -171,7 +171,7 @@ fn create_tcp_connected(addr: &str) -> i64 {
 /// # Safety
 /// `listener_handle` deve ser um handle válido criado por `kata_rt_socket_open`.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn kata_rt_socket_listen(listener_handle: i64) -> i64 {
+pub unsafe extern "C" fn kata_rt_socket_accept(listener_handle: i64) -> i64 {
     let inner = match super::socket_from_handle(listener_handle) {
         Some(s) => s,
         None => return alloc_result_box(1, error_text("handle inválido")),

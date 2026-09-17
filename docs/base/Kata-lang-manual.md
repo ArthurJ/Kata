@@ -3439,7 +3439,7 @@ registrando o rastro no escalonador.
 
 `Socket` é um tipo opaco intrínseco (`Ty::Socket`) — handle para socket
 TCP ou Unix domain aberto. O usuário não enxerga fields nem constrói
-`Socket` diretamente; o único modo de obter um é via `open!` ou `listen!`.
+`Socket` diretamente; o único modo de obter um é via `open!` ou `accept!`.
 
 **Enums do prelude:**
 
@@ -3468,7 +3468,7 @@ close (s::Socket) => Unit
 
 - **`open!` despacha por kind × mode** (4 paths: TCP listener, TCP
   connected, Unix listener, Unix connected).
-- **`listen!` opera sobre listener** — retorna socket `Connected` do
+- **`accept!` opera sobre listener** — retorna socket `Connected` do
   cliente aceito. O listener continua passivo.
 - **`read!` tem 2 overloads por aridade** — `read(s)` (slurp) e
   `read(s, n)` (chunk de até n bytes). Mesma convenção de File.
@@ -3490,7 +3490,7 @@ close (s::Socket) => Unit
 
 | Operação | `Listener` | `Connected` |
 |---|---|---|
-| `listen!` (aceitar) | ✅ | ❌ `Err` |
+| `accept!` (aceitar) | ✅ | ❌ `Err` |
 | `read!` | ❌ `Err` | ✅ |
 | `write!` | ❌ `Err` | ✅ |
 

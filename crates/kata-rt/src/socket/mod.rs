@@ -16,7 +16,7 @@
 //!
 //! FFI:
 //! - `kata_rt_socket_open(kind_box, mode_box) -> result_box` — Result::(Socket, Text)
-//! - `kata_rt_socket_listen(listener_handle) -> result_box` — Result::(Socket, Text)
+//! - `kata_rt_socket_accept(listener_handle) -> result_box` — Result::(Socket, Text)
 //! - `kata_rt_socket_read(handle) -> result_box` — Result::(Bytes, Text)
 //! - `kata_rt_socket_read_chunk(handle, n) -> result_box` — Result::(Bytes, Text)
 //! - `kata_rt_socket_readline(handle) -> result_box` — Result::(Text, Text)
@@ -31,7 +31,7 @@ pub(crate) mod select;
 
 // Re-exports da camada de FFI — `lib.rs` continua importando os mesmos
 // símbolos C-ABI.
-pub use create::{kata_rt_socket_listen, kata_rt_socket_open};
+pub use create::{kata_rt_socket_accept, kata_rt_socket_open};
 pub use io::{
     kata_rt_socket_close, kata_rt_socket_read, kata_rt_socket_read_chunk, kata_rt_socket_readline,
     kata_rt_socket_write_bytes, kata_rt_socket_write_text,

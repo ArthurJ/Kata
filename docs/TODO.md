@@ -41,18 +41,6 @@ trampoline/scheduler ou usar um canal lateral (e.g. célula
 
 ### 🟢 Baixo
 
-#### `listen!` deveria ser `accept!`
-
-`open!(SocketKind::TCP(addr), SocketMode::Listener)` já faz bind + listen.
-`listen!(socket)` aceita uma conexão e retorna um novo socket Connected. O
-nome viola décadas de convenção de sockets — "listen" marca o socket como
-passivo, "accept" espera por conexão. Toda a literatura de sockets usa
-"accept" para esta operação.
-
-**Caminho:** renomear `listen!` → `accept!` em stdlib (`core.kata`), FFI
-(`kata_rt_socket_listen` → `kata_rt_socket_accept`), codegen
-(`ffi_sigs/file_io.rs`, `ffi_registry.rs`), e testes E2E.
-
 #### Tree-shaking por instância de família polimórfica
 
 O tree-shaking remove funções por **nome** — se uma função com overloads

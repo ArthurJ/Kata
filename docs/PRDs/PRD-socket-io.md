@@ -69,7 +69,7 @@ pub enum Ty {
 
 O usuário não enxerga fields, não faz pattern matching na estrutura, não
 constrói `Socket` diretamente. O único modo de obter um `Socket` é via
-`open!` (que retorna `Result::(Socket, Text)`), `listen!` (que retorna
+`open!` (que retorna `Result::(Socket, Text)`), `accept!` (que retorna
 `Result::(Socket, Text)` a partir de um listener), ou `connect!` (que
 retorna `Result::(Socket, Text)`).
 
@@ -99,14 +99,14 @@ enum SocketMode
 
 | Variante | Semântica | Syscalls | Operações válidas |
 |---|---|---|---|
-| `Listener` | Cria listener: binda no endereço e espera conexões | `socket() + bind() + listen()` | `listen!` apenas |
+| `Listener` | Cria listener: binda no endereço e espera conexões | `socket() + bind() + listen()` | `accept!` apenas |
 | `Connected` | Conecta a um endereço remoto | `socket() + connect()` | `read!`, `readline!`, `write!`, `close!` |
 
 Não há `Read`/`Write`/`ReadWrite` como em `FileMode` porque:
 
 - Todo socket conectado (TCP/Unix stream) é **full-duplex** — lê e
   escreve simultaneamente, por definição. Não há "socket só de leitura".
-- O listener não transporta dados — só aceita conexões via `listen!`.
+- O listener não transporta dados — só aceita conexões via `accept!`.
 - `shutdown(2)` existe (fecha uma direção) mas é operação destrutiva,
   não modo de abertura.
 
@@ -174,7 +174,7 @@ action echo (msg::SHOW, s::Socket) => Unit
 - **`read` tem 2 overloads por aridade** — `read(s)` (slurp) e
   `read(s, n)` (chunk). Monomorphizador resolve por nome+aridade, igual
   a File.
-- **`listen!` opera sobre listener.** Retorna um socket `Connected` (o
+- **`accept!` opera sobre listener.** Retorna um socket `Connected` (o
   do cliente que chegou). O listener continua `Listener` — pode aceitar
   múltiplas conexões.
 - **Non-blocking:** todo socket conectado é non-blocking
@@ -186,7 +186,7 @@ O runtime valida o modo antes de cada operação:
 
 | Operação | `Listener` | `Connected` |
 |---|---|---|
-| `listen!` (aceitar) | ✅ | ❌ `Err("socket conectado não aceita conexões")` |
+| `accept!` (aceitar) | ✅ | ❌ `Err("socket conectado não aceita conexões")` |
 | `read!` | ❌ `Err("socket listener não suporta read")` | ✅ |
 | `readline!` | ❌ `Err("socket listener não suporta readline")` | ✅ |
 | `write!` | ❌ `Err("socket listener não suporta write")` | ✅ |
@@ -201,7 +201,7 @@ action servidor (addr::Text) => Unit
     match result
       Result::Ok listener:
         loop
-          let client := listen!(listener)
+          let client := accept!(listener)
           match client
             Result::Ok conn:
               fork!(handle_client, (conn,))
@@ -242,7 +242,7 @@ action servidor_unix (path::Text) => Unit
     let result := open!(SocketKind::Unix(path), SocketMode::Listener)
     match result
       Result::Ok listener:
-        let client := listen!(listener)
+        let client := accept!(listener)
         match client
           Result::Ok conn: echo!("conectado!", conn)
           Result::Err msg: echo!(msg)
@@ -749,8 +749,8 @@ Total: 1372 passed, 0 failed, 5 ignored.
 | `SocketKind` enum | `TCP(Text)` + `Unix(Text)` | Payload carrega o endereço |
 | `SocketMode` enum | `Listener` + `Connected` | Descreve o estado resultante |
 | `open!(kind, mode)` | Única action de criação | Despacha por kind × mode (4 paths) |
-| `listen!(listener)` | Aceita conexão | Retorna socket Connected do cliente |
-| Listener não transporta dados | Só `listen!` é válido | Listener é passivo |
+| `accept!(listener)` | Aceita conexão | Retorna socket Connected do cliente |
+| Listener não transporta dados | Só `accept!` é válido | Listener é passivo |
 | Connected é full-duplex | `read!` + `write!` | TCP/Unix stream são bidirecionais |
 | Non-blocking obrigatório | `fcntl O_NONBLOCK` na criação | Scheduler cooperativo via poll |
 | `SocketInner` separada | Não generaliza `FileInner` | Structs diferentes demais |
@@ -779,7 +779,7 @@ Total: 1372 passed, 0 failed, 5 ignored.
 | `io_handle_vars` generalizado | ✅ Implementado | Commit `6784b24` |
 | Scheduler com socket FDs no poll unificado | ✅ Implementado | Commit `d10b338` |
 | `select` com sockets (arrays separados) | ✅ Implementado | Commit `14a1d46` |
-| `socket_connected_listen_fails` | ✅ Corrigido | Teste reescrito sem `channel!()` — main é o servidor, `fork!` do cliente, `listen!(conn)` retorna Err diretamente. Commit `5fbe32f` |
+| `socket_connected_listen_fails` | ✅ Corrigido | Teste reescrito sem `channel!()` — main é o servidor, `fork!` do cliente, `accept!(conn)` retorna Err diretamente. Commit `5fbe32f` |
 | `write` em `select` (POLLOUT) | ✅ Verificado — não é bug | Scheduler já usa `POLLIN \| POLLOUT` em `collect_socket_fds`, `try_select_sockets` e `wake_pass`. Comentário stale corrigido. Commit `5fbe32f` |
 | `SO_REUSEADDR` | ✅ Hardcoded em listeners TCP | Decisão 12.2 fechada |
 | `readline` em socket | ✅ Implementado | `readline!(s::Socket) => Result::(Text, Text)` — buffer parcial persistente em `SocketInner.line_buf`. 3 testes E2E |
@@ -793,7 +793,7 @@ Total: 1372 passed, 0 failed, 5 ignored.
 
 ### 12.1. `accept` em `select` (futuro)
 
-Hoje `listen!(listener)` é bloqueante cooperativo (suspende fiber,
+Hoje `accept!(listener)` é bloqueante cooperativo (suspende fiber,
 scheduler poll). No futuro, `accept(listener) !> conn: body` dentro de
 `select` permitiria um servidor esperar conexões e dados de sockets
 existentes simultaneamente. Segue o padrão previsto no PRD-select-io

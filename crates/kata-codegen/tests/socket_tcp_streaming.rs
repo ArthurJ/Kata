@@ -131,7 +131,7 @@ action servidor (addr::Text, tx::Sender::Int) => Unit
     let result := open!(SocketKind::TCP(addr), SocketMode::Listener)
     match result
       Ok listener:
-        let client := listen!(listener)
+        let client := accept!(listener)
         match client
           Ok conn:
             let c1 := read!(conn, 4)
@@ -211,7 +211,7 @@ action servidor (addr::Text, tx::Sender::Int) => Unit
   let result := open!(SocketKind::TCP(addr), SocketMode::Listener)
   match result
     Ok listener:
-      let client := listen!(listener)
+      let client := accept!(listener)
       match client
         Ok conn: fazer_select!(conn, tx)
         Err _: tx <! -2
@@ -286,7 +286,7 @@ action servidor (addr::Text, rx::Receiver::Int, tx_result::Sender::Int) => Unit
   let result := open!(SocketKind::TCP(addr), SocketMode::Listener)
   match result
     Ok listener:
-      let client := listen!(listener)
+      let client := accept!(listener)
       match client
         Ok conn: fazer_select!(conn, rx, tx_result)
         Err _: tx_result <! -2
