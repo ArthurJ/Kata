@@ -2,10 +2,9 @@
 
 ## Status
 
-**Status:** 🔴 Pendente
+**Status:** ✅ Completo
 **Data:** 2026-09-17
-**Depende de:** PRD-cooperative-io (I/O cooperativo — yield entre chunks, modelo non-blocking com `raw_read`/`raw_write`)
-**Resolve:** TODO.md item 🔴#2 (EOF representado como `Err("EOF")`)
+**Resolve:** TODO.md item 🔴#2 (EOF representado como `Err("EOF")`) — removido do TODO após auditoria
 
 ## 1. Objetivo
 
