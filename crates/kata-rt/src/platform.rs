@@ -254,12 +254,14 @@ pub(crate) fn tcp_listener_into_fd(listener: std::net::TcpListener) -> i32 {
 }
 
 #[cfg(unix)]
+#[allow(dead_code)]
 pub(crate) fn tcp_stream_fd(stream: &std::net::TcpStream) -> i32 {
     use std::os::unix::io::AsRawFd;
     stream.as_raw_fd()
 }
 
 #[cfg(unix)]
+#[allow(dead_code)]
 pub(crate) fn tcp_stream_into_fd(stream: std::net::TcpStream) -> i32 {
     use std::os::unix::io::IntoRawFd;
     stream.into_raw_fd()
