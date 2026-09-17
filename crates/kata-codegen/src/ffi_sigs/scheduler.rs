@@ -54,22 +54,6 @@ pub(crate) fn sig_for(sym: FfiSymbol) -> Option<Signature> {
             sig.params.push(AbiParam::new(I64)); // arena_handle
             sig.returns.push(AbiParam::new(I64)); // box_ptr
         }
-        // incref: (box_ptr) -> 0
-        FfiSymbol::IncRef => {
-            sig.params.push(AbiParam::new(I64)); // box_ptr
-            sig.returns.push(AbiParam::new(I64));
-        }
-        // A2: decref: (rt, box_ptr) -> 0
-        FfiSymbol::DecRef => {
-            sig.params.push(AbiParam::new(I64)); // rt
-            sig.params.push(AbiParam::new(I64)); // box_ptr
-            sig.returns.push(AbiParam::new(I64));
-        }
-        // arc_fn_ptr: (box_ptr) -> fn_ptr
-        FfiSymbol::ArcFnPtr => {
-            sig.params.push(AbiParam::new(I64)); // box_ptr
-            sig.returns.push(AbiParam::new(I64)); // fn_ptr
-        }
         // A2: spawn_process: (rt, fn_ptr, args_ptr, arena) -> void (fire-and-forget)
         FfiSymbol::SpawnProcess => {
             sig.params.push(AbiParam::new(I64)); // rt

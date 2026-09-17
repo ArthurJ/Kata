@@ -454,7 +454,7 @@ pub(crate) fn define_function_body(
             let flags = MemFlagsData::new();
             for (i, cap) in captures.iter().enumerate() {
                 let clif_ty = super::resolve_clif_ty(&cap.ty, struct_registry);
-                let offset = (24 + i * 8) as i32;
+                let offset = (16 + i * 8) as i32;
                 let val = lower.builder.ins().load(clif_ty, flags, box_ptr, offset);
                 lower.new_var(&cap.name, clif_ty);
                 let var = *lower

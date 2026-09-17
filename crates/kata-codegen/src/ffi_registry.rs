@@ -185,9 +185,6 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
     );
     // Arc<T> / CaptureBox
     builder.symbol("kata_rt_alloc_arc", rt::kata_rt_alloc_arc as *const u8);
-    builder.symbol("kata_rt_incref", rt::kata_rt_incref as *const u8);
-    builder.symbol("kata_rt_decref", rt::kata_rt_decref as *const u8);
-    builder.symbol("kata_rt_arc_fn_ptr", rt::kata_rt_arc_fn_ptr as *const u8);
     // Collections
     builder.symbol("kata_rt_list_nil", rt::kata_rt_list_nil as *const u8);
     builder.symbol("kata_rt_list_cons", rt::kata_rt_list_cons as *const u8);
@@ -720,10 +717,7 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         ArenaCreate,
         ArenaAlloc,
         ArenaDestroy,
-        ArenaCreateTracked,
-        ArenaDealloc,
         GetRootArenaHandle,
-        ArenaStats,
         StoreSumResult,
         SumTagInt,
         Panic,
@@ -735,9 +729,6 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         SetTestTimeout,
         Sleep,
         AllocArc,
-        IncRef,
-        DecRef,
-        ArcFnPtr,
         // Collections
         ListNil,
         ListCons,

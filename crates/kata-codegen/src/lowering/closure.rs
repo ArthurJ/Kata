@@ -425,8 +425,8 @@ pub(crate) fn lower_closure(
 /// 2. Preenche o array com os valores das captures (lidos do var_map).
 /// 3. Chama `kata_rt_alloc_arc(fn_ptr, array_ptr, n_captures, arena)` → `box_ptr`.
 ///
-/// O CaptureBox contém: fn_ptr (offset 0), refcount=1 (offset 8),
-/// n_captures (offset 16), captures[0..n] (offset 24+).
+/// O CaptureBox contém: fn_ptr (offset 0), n_captures (offset 8),
+/// captures[0..n] (offset 16+).
 pub(crate) fn alloc_capture_box(
     func_ptr: cranelift_codegen::ir::Value,
     captures: &[CaptureInfo],

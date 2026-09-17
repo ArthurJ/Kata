@@ -55,7 +55,7 @@ pub use rational::rat_from_text;
 // C-ABI kata_rt_* no próprio text.rs os usam internamente).
 
 // Re-exports de funções C-ABI para o codegen registrar no JIT.
-pub use arc::{kata_rt_alloc_arc, kata_rt_arc_fn_ptr, kata_rt_decref, kata_rt_incref};
+pub use arc::kata_rt_alloc_arc;
 pub use arena::{
     kata_rt_arena_alloc, kata_rt_arena_create, kata_rt_arena_destroy,
     kata_rt_get_root_arena_handle, set_rt_ptr,

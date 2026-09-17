@@ -25,24 +25,9 @@ pub(crate) fn sig_for(sym: FfiSymbol) -> Option<Signature> {
             sig.params.push(AbiParam::new(I64)); // rt
             sig.params.push(AbiParam::new(I64)); // arena
         }
-        FfiSymbol::ArenaCreateTracked => {
-            sig.params.push(AbiParam::new(I64)); // rt
-            sig.returns.push(AbiParam::new(I64)); // handle
-        }
-        FfiSymbol::ArenaDealloc => {
-            sig.params.push(AbiParam::new(I64)); // rt
-            sig.params.push(AbiParam::new(I64)); // handle
-            sig.params.push(AbiParam::new(I64)); // ptr
-            sig.params.push(AbiParam::new(I64)); // size
-        }
         FfiSymbol::GetRootArenaHandle => {
             sig.params.push(AbiParam::new(I64)); // rt
             sig.returns.push(AbiParam::new(I64)); // root_arena handle
-        }
-        FfiSymbol::ArenaStats => {
-            sig.params.push(AbiParam::new(I64)); // rt
-            sig.params.push(AbiParam::new(I64)); // handle
-            sig.returns.push(AbiParam::new(I64)); // packed (alloc_count, dealloc_count)
         }
         // ── Sum (i64, i64, i64) → i64, (i64) → i64 ──
         // Pré-11: store_sum_result recebe arena_handle como 3º param.

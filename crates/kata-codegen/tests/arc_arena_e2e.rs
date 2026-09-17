@@ -1,12 +1,12 @@
-//! Testes E2E do ARC Arena (Fio 16, Fase 7).
+//! Testes E2E do CaptureBox (arena unificada).
 //!
 //! Pipeline completo: lex → parse → resolve → infer → optimize → codegen → JIT.
 //! Cada teste compila um programa Kata com operações CSP que exercitam o
-//! sistema ARC (alloc tracked, incref, decref, deallocation individual).
+//! CaptureBox (alloc em arena Bump, sem refcount).
 //!
 //! Estes testes verificam:
 //! 1. Valores compostos (List, Tuple) enviados por canal sobrevivem ao sender
-//! 2. Primitivos (Int) continuam funcionando sem overhead de ARC
+//! 2. Primitivos (Int) continuam funcionando sem overhead
 //! 3. Múltiplos sends/receives não corrompem memória
 
 use kata_codegen::{jit_eval, leak_rt_ptr};

@@ -213,7 +213,7 @@ pub(crate) fn define_kata_action(
             );
         }
 
-        // Define o epilogue_block: decref de ARC vars + return_.
+        // Define o epilogue_block: return_.
         lower.builder.switch_to_block(epilogue_block);
         lower.builder.seal_block(epilogue_block);
         let result = lower.builder.block_params(epilogue_block)[0];

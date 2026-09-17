@@ -1,32 +1,26 @@
-//! Arc<T> — CaptureBox para closures com captura.
+//! CaptureBox para closures com captura.
 //!
 //! `kata_rt_alloc_arc(rt, fn_ptr, captures_ptr, n_captures, arena_handle)` aloca
 //! um CaptureBox na arena especificada. O box contém:
 //!
 //! ```text
 //! offset 0:  fn_ptr (i64) — ponteiro da função JIT
-//! offset 8:  refcount (i64) — contagem de referências (sempre ≥1)
-//! offset 16: n_captures (i64) — número de captures (para dealloc)
-//! offset 24: captures[0] (i64)
-//! offset 32: captures[1] (i64)
+//! offset 8:  n_captures (i64) — número de captures
+//! offset 16: captures[0] (i64)
+//! offset 24: captures[1] (i64)
 //! ...
-//! offset 24 + (n-1)*8: captures[n-1]
+//! offset 16 + (n-1)*8: captures[n-1]
 //! ```
 //!
-//! `kata_rt_incref(box_ptr)` incrementa o refcount.
-//! `kata_rt_decref(rt, box_ptr)` decrementa o refcount. Quando chega a 0,
-//! o box é liberado individualmente da root arena via
-//! `kata_rt_arena_dealloc(rt, root_arena_handle, box_ptr, size)`.
-//!
-//! A2: `kata_rt_alloc_arc` e `kata_rt_decref` agora recebem `rt` porque
-//! acessam o pool de arenas via `Runtime`.
+//! Sem refcount — arenas Bump não suportam dealloc individual. O box
+//! sobrevive até a arena ser resetada (fiber termina) ou destruída (teardown).
 
 /// Offset do `n_captures` no header do CaptureBox.
-const N_CAPTURES_OFFSET: usize = 16;
+const N_CAPTURES_OFFSET: usize = 8;
 /// Offset do primeiro capture no CaptureBox.
-const CAPTURES_OFFSET: usize = 24;
-/// Tamanho do header (fn_ptr + refcount + n_captures).
-const HEADER_SIZE: usize = 24;
+const CAPTURES_OFFSET: usize = 16;
+/// Tamanho do header (fn_ptr + n_captures).
+const HEADER_SIZE: usize = 16;
 
 /// Aloca um CaptureBox na arena especificada e retorna o ponteiro.
 ///
@@ -56,7 +50,6 @@ pub extern "C" fn kata_rt_alloc_arc(
     unsafe {
         let ptr = box_ptr as *mut u8;
         std::ptr::write_unaligned(ptr as *mut i64, fn_ptr);
-        std::ptr::write_unaligned(ptr.add(8) as *mut i64, 1);
         std::ptr::write_unaligned(ptr.add(N_CAPTURES_OFFSET) as *mut i64, n_captures);
 
         if n_captures > 0 && captures_ptr != 0 {
@@ -70,41 +63,4 @@ pub extern "C" fn kata_rt_alloc_arc(
     }
 
     box_ptr
-}
-
-/// Incrementa o refcount de um CaptureBox. Não precisa de `rt`.
-#[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_incref(box_ptr: i64) -> i64 {
-    if box_ptr == 0 {
-        return 0;
-    }
-    unsafe {
-        let refcount_ptr = (box_ptr as *mut u8).add(8) as *mut i64;
-        let count = std::ptr::read_unaligned(refcount_ptr);
-        std::ptr::write_unaligned(refcount_ptr, count + 1);
-    }
-    0
-}
-
-/// Decrementa o refcount de um CaptureBox.
-///
-/// ARC vestigial — o refcount nasce em 1 e nunca muda na prática. Esta
-/// função é mantida temporariamente para compatibilidade do interp, mas
-/// o dealloc individual é no-op (arenas Bump não suportam dealloc).
-/// Será removida na Fase 5 do PRD-arena-unification.
-#[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_decref(_rt: i64, box_ptr: i64) -> i64 {
-    // No-op: Bump arena não suporta dealloc individual.
-    // O refcount é vestigial (sempre 1, nunca incrementado).
-    let _ = box_ptr;
-    0
-}
-
-/// Extrai o fn_ptr de um CaptureBox (lê os primeiros 8 bytes). Não precisa de `rt`.
-#[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_arc_fn_ptr(box_ptr: i64) -> i64 {
-    if box_ptr == 0 {
-        return 0;
-    }
-    unsafe { std::ptr::read_unaligned(box_ptr as *const i64) }
 }

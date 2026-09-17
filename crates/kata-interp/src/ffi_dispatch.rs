@@ -397,9 +397,6 @@ pub(crate) fn ffi_dispatch(
         "kata_rt_alloc_arc" => Ok(rt::kata_rt_alloc_arc(
             rt_ptr, args[0], args[1], args[2], arena,
         )),
-        "kata_rt_incref" => Ok(rt::kata_rt_incref(args[0])),
-        "kata_rt_decref" => Ok(rt::kata_rt_decref(rt_ptr, args[0])),
-        "kata_rt_arc_fn_ptr" => Ok(rt::kata_rt_arc_fn_ptr(args[0])),
 
         // ── Timer ────────────────────────────────────────────
         "kata_rt_timer_now" => Ok(rt::kata_rt_timer_now()),

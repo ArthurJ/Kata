@@ -88,14 +88,8 @@ pub enum FfiSymbol {
     ArenaCreate,
     ArenaAlloc,
     ArenaDestroy,
-    /// `kata_rt_arena_create_tracked() -> handle` — cria arena Tracked.
-    ArenaCreateTracked,
-    /// `kata_rt_arena_dealloc(handle, ptr, size) -> void` — dealloc individual.
-    ArenaDealloc,
-    /// `kata_rt_get_root_arena_handle() -> handle` — lê TLS root arena.
+    /// `kata_rt_get_root_arena_handle() -> handle` — lê root arena handle.
     GetRootArenaHandle,
-    /// `kata_rt_arena_stats(handle) -> i64` — (alloc_count, dealloc_count) packed.
-    ArenaStats,
 
     // ── Sum ──────────────────────────────────────
     /// `kata_rt_store_sum_result(tag, payload) -> ptr` — aloca box Sum.
@@ -127,12 +121,6 @@ pub enum FfiSymbol {
     // ── Arc<T> / CaptureBox ───────────────────────
     /// `kata_rt_alloc_arc(fn_ptr, captures_ptr, n_captures) -> box_ptr`
     AllocArc,
-    /// `kata_rt_incref(box_ptr) -> 0` — incrementa refcount.
-    IncRef,
-    /// `kata_rt_decref(box_ptr) -> 0` — decrementa refcount.
-    DecRef,
-    /// `kata_rt_arc_fn_ptr(box_ptr) -> fn_ptr` — extrai fn_ptr do box.
-    ArcFnPtr,
 
     // ── Collections ───────────────────────────
     /// `kata_rt_list_nil() -> ptr` — retorna 0 (null = Nil).
@@ -370,7 +358,7 @@ pub enum FfiSymbol {
     FileWriteText,
     /// `kata_rt_file_write_bytes(handle, data_ptr) -> i64` — escreve Bytes (blob com header de len), retorna Result box ARC.
     FileWriteBytes,
-    /// `kata_rt_file_close(handle) -> ()` — fecha arquivo (decref ARC).
+    /// `kata_rt_file_close(handle) -> ()` — fecha arquivo.
     FileClose,
 
     // ── stdio: stdin/stdout/stderr como File ───────────────────────
@@ -554,10 +542,7 @@ impl FfiSymbol {
             FfiSymbol::ArenaCreate => "kata_rt_arena_create",
             FfiSymbol::ArenaAlloc => "kata_rt_arena_alloc",
             FfiSymbol::ArenaDestroy => "kata_rt_arena_destroy",
-            FfiSymbol::ArenaCreateTracked => "kata_rt_arena_create_tracked",
-            FfiSymbol::ArenaDealloc => "kata_rt_arena_dealloc",
             FfiSymbol::GetRootArenaHandle => "kata_rt_get_root_arena_handle",
-            FfiSymbol::ArenaStats => "kata_rt_arena_stats",
             FfiSymbol::StoreSumResult => "kata_rt_store_sum_result",
             FfiSymbol::SumTagInt => "kata_rt_sum_tag_int",
             FfiSymbol::Panic => "kata_rt_panic",
@@ -570,9 +555,6 @@ impl FfiSymbol {
             FfiSymbol::SetTestTimeout => "kata_rt_set_test_timeout",
             FfiSymbol::Sleep => "kata_rt_sleep",
             FfiSymbol::AllocArc => "kata_rt_alloc_arc",
-            FfiSymbol::IncRef => "kata_rt_incref",
-            FfiSymbol::DecRef => "kata_rt_decref",
-            FfiSymbol::ArcFnPtr => "kata_rt_arc_fn_ptr",
             // Collections
             FfiSymbol::ListNil => "kata_rt_list_nil",
             FfiSymbol::ListCons => "kata_rt_list_cons",
@@ -818,12 +800,9 @@ impl FfiSymbol {
             FfiSymbol::Print | FfiSymbol::Println => Ty::Unit,
             FfiSymbol::Input => Ty::text(),
             // Arena
-            FfiSymbol::ArenaCreate | FfiSymbol::ArenaAlloc | FfiSymbol::ArenaCreateTracked => {
-                Ty::int()
-            }
-            FfiSymbol::ArenaDestroy | FfiSymbol::ArenaDealloc => Ty::Unit,
+            FfiSymbol::ArenaCreate | FfiSymbol::ArenaAlloc => Ty::int(),
+            FfiSymbol::ArenaDestroy => Ty::Unit,
             FfiSymbol::GetRootArenaHandle => Ty::int(),
-            FfiSymbol::ArenaStats => Ty::int(),
             // Sum
             FfiSymbol::StoreSumResult | FfiSymbol::SumTagInt => Ty::int(),
             // Control flow — panic retorna Unit (aborta antes, mas o tipo é Unit)
@@ -838,8 +817,7 @@ impl FfiSymbol {
             FfiSymbol::SetTestTimeout => Ty::Unit,
             FfiSymbol::Sleep => Ty::Unit,
             // Arc<T> / CaptureBox
-            FfiSymbol::AllocArc | FfiSymbol::ArcFnPtr => Ty::int(),
-            FfiSymbol::IncRef | FfiSymbol::DecRef => Ty::int(),
+            FfiSymbol::AllocArc => Ty::int(),
             // Collections — todas retornam I64 (ptr ou valor i64)
             FfiSymbol::ListNil => Ty::int(),
             FfiSymbol::ListCons => Ty::int(),
@@ -1083,10 +1061,7 @@ impl FfiSymbol {
             FfiSymbol::ArenaCreate,
             FfiSymbol::ArenaAlloc,
             FfiSymbol::ArenaDestroy,
-            FfiSymbol::ArenaCreateTracked,
-            FfiSymbol::ArenaDealloc,
             FfiSymbol::GetRootArenaHandle,
-            FfiSymbol::ArenaStats,
             FfiSymbol::StoreSumResult,
             FfiSymbol::SumTagInt,
             FfiSymbol::Panic,
@@ -1099,9 +1074,6 @@ impl FfiSymbol {
             FfiSymbol::SetTestTimeout,
             FfiSymbol::Sleep,
             FfiSymbol::AllocArc,
-            FfiSymbol::IncRef,
-            FfiSymbol::DecRef,
-            FfiSymbol::ArcFnPtr,
             // Collections
             FfiSymbol::ListNil,
             FfiSymbol::ListCons,
