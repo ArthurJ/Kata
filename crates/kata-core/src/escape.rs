@@ -12,8 +12,6 @@
 /// Determina em qual arena o codegen aloca o valor:
 /// - `Local` → `fiber_arena` (liberada quando o fiber termina)
 /// - `Caller` → `caller_arena` (arena do pai direto)
-/// - `Heap` → `root_arena` (TrackedArena — sobrevive a todos os fibers,
-///   dealloc individual quando ARC refcount → 0)
 ///
 /// Pré- (sem canais), os únicos casos são:
 /// - Função pura / entry point → `Caller` (sem fiber_arena, usa caller_arena)
@@ -28,17 +26,10 @@
 ///   ancestor) de sender e receiver
 /// - Logo `caller_arena` cobre o lifetime de ambos: o pai só morre
 ///   depois de todos os filhos (structured concurrency)
-/// - `Heap` (root_arena) seria conservador demais — subiria a alocação
-///   até a raiz desnecessariamente
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EscapeTarget {
     /// Valor local ao fiber — aloca em `fiber_arena`.
     Local,
     /// Valor escapa para o caller — aloca em `caller_arena`.
     Caller,
-    /// Valor escapa para a root_arena (sobrevive a todos os fibers,
-    /// dealloc individual quando ARC refcount → 0). Usado em casos
-    /// onde `Caller` não é suficiente (ex: closures com capture que
-    /// ultrapassam o lifetime do caller direto).
-    Heap,
 }

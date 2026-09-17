@@ -83,18 +83,6 @@ pub(crate) fn lower_action_call(
             EscapeTarget::Caller => ctx
                 .caller_arena
                 .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
-            EscapeTarget::Heap => {
-                // Heap escape: args devem sobreviver ao fiber — usar root_arena.
-                let get_root = ctx
-                    .ffi_refs
-                    .get("kata_rt_get_root_arena_handle")
-                    .copied()
-                    .ok_or_else(|| super::CodegenError::FfiSymbolNotFound {
-                        symbol: "kata_rt_get_root_arena_handle".into(),
-                    })?;
-                let root_inst = ctx.builder.ins().call(get_root, &[rt_val]);
-                ctx.builder.inst_results(root_inst)[0]
-            }
         };
         let arg_values = [rt_val, fiber_arena_val, caller_arena_val, args_ptr];
         // 3. call_indirect — assinatura Action ABI: (I64, I64, I64, I64) -> I64

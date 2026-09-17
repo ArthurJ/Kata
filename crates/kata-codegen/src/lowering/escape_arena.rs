@@ -1,13 +1,9 @@
 //! Helper centralizado para seleção de arena baseada em `EscapeTarget`.
 //!
-//! `Local` → fiber_arena, `Caller`/`Heap` → caller_arena (ou root_arena
-//! via `kata_rt_get_root_arena_handle` se caller_arena não disponível).
-//!
-//! Não há mais distinção entre `Heap` e `Caller` na alocação — ambas
-//! usam `kata_rt_arena_alloc` (sem header ARC). O modelo de memória
-//! atual usa arenas bump para todos os valores, com cleanup automático
-//! quando a arena é resetada. File handles recevem close explícito
-//! (ou automático no epílogo da action).
+//! `Local` → fiber_arena, `Caller` → caller_arena.
+//! O modelo de memória usa arenas bump para todos os valores, com cleanup
+//! automático quando a arena é resetada. File handles recebem close
+//! explícito (ou automático no epílogo da action).
 
 use cranelift_codegen::ir::InstBuilder;
 use cranelift_codegen::ir::types::I64;
@@ -30,19 +26,6 @@ pub(crate) fn arena_handle_for_escape(
         EscapeTarget::Caller => ctx
             .caller_arena
             .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
-        EscapeTarget::Heap => {
-            let get_root_ref = ctx
-                .ffi_refs
-                .get("kata_rt_get_root_arena_handle")
-                .copied()
-                .ok_or_else(|| super::CodegenError::FfiSymbolNotFound {
-                    symbol: "kata_rt_get_root_arena_handle".into(),
-                })
-                .expect("kata_rt_get_root_arena_handle must be registered");
-            let rt_val = ctx.rt.unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
-            let root_inst = ctx.builder.ins().call(get_root_ref, &[rt_val]);
-            ctx.builder.inst_results(root_inst)[0]
-        }
     }
 }
 
