@@ -365,7 +365,7 @@ escopo, não há "downstream" para proteger contra override.
   prefixo) produz erro. Arquivo compila sem erro nos dois primeiros
   casos.
 
-### Fase 2: Metadados de diagnóstico
+### Fase 2: Metadados de diagnóstico — COMPLETA (commit `21c3ce9c`)
 
 - Macro procedural `#[diagnostic(code, severity, severity_adjustable)]`
 - `severity` pode ser `deny`, `warn`, ou `allow`
