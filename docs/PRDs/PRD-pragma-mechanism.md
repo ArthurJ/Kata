@@ -381,7 +381,7 @@ escopo, não há "downstream" para proteger contra override.
   com sugestão. `#!deny` em diagnóstico deny-default → warning de
   redundância.
 
-### Fase 3: Migração `@test` → `#!test`
+### Fase 3: Migração `@test` → `#!test` — COMPLETA (commit `cbe6e069`)
 
 - `#!test("desc")` e `#!test{desc, args, timeout}` sem `expects` →
   marker puro, processado como `TestSpec`
