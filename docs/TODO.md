@@ -96,11 +96,6 @@ refere-se a, permitindo remover overloads não-usadas antes do codegen.
 
 ## Futuro
 
-- **Sistema de supressão de diagnóstico** — braço de match redundante
-  agora é erro (decisão 8 do PRD-exaustividade-aninhada); `otherwise`
-  inútil é isento, mas patterns não-otherwise redundantes com intenção
-  documentada precisam de via de escape (`@allow redundant`?). Projetar
-  sintaxe e escopo de supressão.
 - **`select_arms_different_types`** — test placeholder em
   `kata-inference/tests/csp_typeck.rs:215`, depende de T0 unification.
   Corpo vazio, sem assertions.
