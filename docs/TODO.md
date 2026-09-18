@@ -7,6 +7,34 @@
 ## Pendentes
 ### 🟡 Médio
 
+#### `@test{expects}` com args Int causa SIGSEGV
+
+`@test{desc: "...", expects: "...", args: (0)}` numa action que retorna
+`Result::(Int, MeuErro)` crasha com misaligned pointer dereference (exit
+139). O mesmo padrão com `args: ("texto")` (Text) e
+`Result::(Text, MeuErro)` funciona normalmente.
+
+**Reprodução:**
+```kata
+enum MeuErro
+    ValidacaoFail
+
+@test{desc: "valida", expects: "ValidacaoFail", policy: prefix, args: (0)}
+action valida (x::Int) => Result::(Int, MeuErro)
+    Result::Err MeuErro::ValidacaoFail
+valida!(0)
+```
+→ SIGSEGV no `kata test`.
+
+**Impacto:** testes `@test{expects}` com actions Int são impossíveis.
+Workaround: usar args Text e retorno `Result::(Text, _)`.
+
+**Caminho:** o crash acontece no codegen do wrapper de `expects` — provável
+problema de SMI double-tagging ou layout de CaptureBox no path de
+marshalling de Int args. Investigar `jit_tests` / `TestWrapper` no
+codegen, comparar com o path de Text args (que funciona). Verificar se
+o wrapper lê o payload de `Err` com o type_shape correto para Int.
+
 #### `private_type.kata` — family_extension_invalid
 
 `Internal implements NUM` estende a família `NonZero`, mas o predicado
