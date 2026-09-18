@@ -294,8 +294,8 @@ fn serialize_value(
         }
         Ty::Function(_params, _ret) => {
             // Closure — CaptureBox na arena.
-            // Layout: fn_ptr (offset 0), refcount (offset 8),
-            // n_captures (offset 16), captures[0..n] (offset 24+).
+            // Layout: fn_ptr (offset 0), n_captures (offset 8),
+            // captures[0..n] (offset 16+).
             //
             // fn_ptr é ponteiro absoluto para código JIT (páginas leaked
             // permanecem mapeadas) — não precisa rebase.
@@ -308,16 +308,14 @@ fn serialize_value(
             } else {
                 let ptr = raw as *const u8;
                 let fn_ptr = unsafe { read_i64_at(ptr, 0) };
-                let refcount = unsafe { read_i64_at(ptr, 8) };
-                let n_captures = unsafe { read_i64_at(ptr, 16) };
+                let n_captures = unsafe { read_i64_at(ptr, 8) };
 
                 ser.write_i64(fn_ptr);
-                ser.write_i64(refcount);
                 ser.write_i64(n_captures);
 
                 let n = n_captures as usize;
                 for i in 0..n {
-                    let cap = unsafe { read_i64_at(ptr, 24 + i * 8) };
+                    let cap = unsafe { read_i64_at(ptr, 16 + i * 8) };
                     ser.write_i64(cap);
                 }
             }
