@@ -159,6 +159,7 @@ fn action_decl_no_params_no_ret() {
             param_defaults: _,
             ret,
             directives,
+            pragmas: _,
             body,
         } => {
             assert_eq!(name, "greet");
@@ -201,6 +202,7 @@ fn action_decl_with_params_and_ret() {
             param_defaults: _,
             ret,
             directives,
+            pragmas: _,
             body,
         } => {
             assert_eq!(name, "greet");

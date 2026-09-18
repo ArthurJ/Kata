@@ -128,9 +128,25 @@ fn t7_multiple_pragmas_collected() {
 
 #[test]
 fn t8_pragma_test_marker_produces_test_spec() {
-    let pragmas = parse_pragma(&format!("#!test(\"soma correta\")\n{MINIMAL_PROG}"));
-    assert_eq!(pragmas.len(), 1);
-    match &pragmas[0] {
+    // #!test antes de uma action — anexa à ActionDecl.
+    let src = "#!test(\"soma correta\")\naction foo => Int\n    42\n";
+    let tokens = lex(src).expect("lex failed");
+    let module = parse(tokens).expect("parse failed");
+    // #!test não vai para Module.pragmas — vai para ActionDecl.pragmas.
+    assert!(
+        module.pragmas.is_empty(),
+        "#!test should be attached to ActionDecl, not Module.pragmas"
+    );
+    let action = module
+        .items
+        .iter()
+        .find_map(|i| match &i.node {
+            Item::ActionDecl { pragmas, .. } => Some(pragmas),
+            _ => None,
+        })
+        .expect("should have an ActionDecl");
+    assert_eq!(action.len(), 1);
+    match &action[0] {
         Pragma::TestSpec(ts) => {
             assert_eq!(ts.desc, "soma correta");
             assert!(ts.args.is_empty());
@@ -142,11 +158,21 @@ fn t8_pragma_test_marker_produces_test_spec() {
 
 #[test]
 fn t9_pragma_test_with_timeout() {
-    let pragmas = parse_pragma(&format!(
-        "#!test{{desc: \"com timeout\", timeout: 5000}}\n{MINIMAL_PROG}"
-    ));
-    assert_eq!(pragmas.len(), 1);
-    match &pragmas[0] {
+    // #!test{desc: "...", timeout: N} antes de uma action.
+    let src = "#!test{desc: \"com timeout\", timeout: 5000}\naction foo => Int\n    42\n";
+    let tokens = lex(src).expect("lex failed");
+    let module = parse(tokens).expect("parse failed");
+    assert!(module.pragmas.is_empty());
+    let action = module
+        .items
+        .iter()
+        .find_map(|i| match &i.node {
+            Item::ActionDecl { pragmas, .. } => Some(pragmas),
+            _ => None,
+        })
+        .expect("should have an ActionDecl");
+    assert_eq!(action.len(), 1);
+    match &action[0] {
         Pragma::TestSpec(ts) => {
             assert_eq!(ts.desc, "com timeout");
             assert_eq!(ts.timeout, Some(5000));

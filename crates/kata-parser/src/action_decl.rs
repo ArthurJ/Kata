@@ -12,7 +12,7 @@
 //!
 //! A forma posicional legada (`action nome (T1 T2) -> Ret`) foi removida.
 
-use kata_ast::{ActionStmt, Directive, Expr, Item, Spanned, Token, TypeExpr};
+use kata_ast::{ActionStmt, Directive, Expr, Item, Pragma, Spanned, Token, TypeExpr};
 use kata_diagnostics::FrontendError;
 
 use crate::CasingPattern;
@@ -24,6 +24,7 @@ impl Parser {
     pub(crate) fn parse_action_decl(
         &mut self,
         directives: Vec<Directive>,
+        pragmas: Vec<Pragma>,
     ) -> Result<Item, FrontendError> {
         self.expect(&Token::Action, "`action`")?;
         let name = match self.peek() {
@@ -213,6 +214,7 @@ impl Parser {
             param_defaults,
             ret,
             directives,
+            pragmas,
             body,
         })
     }

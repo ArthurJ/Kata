@@ -20,7 +20,15 @@ impl Parser {
 
             // Collect pragmas (zero or more #!token ... prefixes)
             let pragmas = self.parse_pragmas()?;
-            all_pragmas.extend(pragmas);
+
+            // Separar TestSpec (anexa à action seguinte) dos demais
+            // (DiagnosticControl etc. vão para Module.pragmas, processados
+            // pela Fase 2). TestSpec é o único pragma que precisa de
+            // associação posicional com a action.
+            let (test_pragmas, other_pragmas): (Vec<_>, Vec<_>) = pragmas
+                .into_iter()
+                .partition(|p| matches!(p, kata_ast::Pragma::TestSpec(_)));
+            all_pragmas.extend(other_pragmas);
 
             // Skip statement separators that may appear after pragmas
             while matches!(self.peek(), Token::StmtSep) {
@@ -38,6 +46,9 @@ impl Parser {
 
             // Now parse the item
             if matches!(self.peek(), Token::Eof) {
+                // Pragmas órfãos (sem item seguinte) — TestSpec sem action
+                // é erro, mas por ora vão para all_pragmas (serão ignorados).
+                all_pragmas.extend(test_pragmas);
                 break;
             }
 
@@ -57,7 +68,7 @@ impl Parser {
                     items.push(Spanned::new(item, item_start));
                 }
                 Token::Action => {
-                    let item = self.parse_action_decl(directives)?;
+                    let item = self.parse_action_decl(directives, test_pragmas)?;
                     items.push(Spanned::new(item, item_start));
                 }
                 Token::Directive => {
@@ -161,7 +172,12 @@ impl Parser {
 
             // Collect pragmas (zero or more #!token ... prefixes)
             let pragmas = self.parse_pragmas()?;
-            all_pragmas.extend(pragmas);
+
+            // Separar TestSpec (anexa à action) dos demais (vão para Module.pragmas).
+            let (test_pragmas, other_pragmas): (Vec<_>, Vec<_>) = pragmas
+                .into_iter()
+                .partition(|p| matches!(p, kata_ast::Pragma::TestSpec(_)));
+            all_pragmas.extend(other_pragmas);
 
             // Skip statement separators that may appear after pragmas
             while matches!(self.peek(), Token::StmtSep) {
@@ -177,6 +193,7 @@ impl Parser {
             }
 
             if matches!(self.peek(), Token::Eof) {
+                all_pragmas.extend(test_pragmas);
                 break;
             }
 
@@ -196,7 +213,7 @@ impl Parser {
                     items.push(Spanned::new(item, item_start));
                 }
                 Token::Action => {
-                    let item = self.parse_action_decl(directives)?;
+                    let item = self.parse_action_decl(directives, test_pragmas)?;
                     items.push(Spanned::new(item, item_start));
                 }
                 Token::Directive => {
@@ -273,7 +290,11 @@ impl Parser {
                     continue;
                 }
             };
-            all_pragmas.extend(pragmas);
+            // Separar TestSpec (anexa à action) dos demais (vão para Module.pragmas).
+            let (test_pragmas, other_pragmas): (Vec<_>, Vec<_>) = pragmas
+                .into_iter()
+                .partition(|p| matches!(p, kata_ast::Pragma::TestSpec(_)));
+            all_pragmas.extend(other_pragmas);
 
             // Skip statement separators that may appear after pragmas
             while matches!(self.peek(), Token::StmtSep) {
@@ -296,6 +317,7 @@ impl Parser {
             }
 
             if matches!(self.peek(), Token::Eof) {
+                all_pragmas.extend(test_pragmas);
                 break;
             }
 
@@ -324,7 +346,7 @@ impl Parser {
                         self.sync_to_stmt_sep();
                     }
                 },
-                Token::Action => match self.parse_action_decl(directives) {
+                Token::Action => match self.parse_action_decl(directives, test_pragmas) {
                     Ok(item) => items.push(Spanned::new(item, item_start)),
                     Err(e) => {
                         errors.push(e);
