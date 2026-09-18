@@ -39,14 +39,14 @@ fn run_kata(path: &str) -> (String, String, i32) {
 
 #[test]
 fn e2e_stacking_enter_exit() {
-    let src = r#"directive trace_enter{when: Hook::Enter, on: Target::Any}
+    let src = r#"directive enter_hook{when: Hook::Enter, on: Target::Any}
     echo!("ENTER")
 
-directive trace_exit{when: Hook::Exit, on: Target::Any}
+directive exit_hook{when: Hook::Exit, on: Target::Any}
     echo!("EXIT")
 
-@trace_enter
-@trace_exit
+@enter_hook
+@exit_hook
 action compute(x :: Int) => Int
     + x 2
 
@@ -73,17 +73,17 @@ echo!(compute!(5))"#;
 
 #[test]
 fn e2e_stacking_three_directives() {
-    let src = r#"directive log_enter{when: Hook::Enter, on: Target::Any}
+    let src = r#"directive enter_hook{when: Hook::Enter, on: Target::Any}
     echo!("ENTER")
 
-directive log_exit{when: Hook::Exit, on: Target::Any}
+directive exit_hook{when: Hook::Exit, on: Target::Any}
     echo!("EXIT")
 
 directive gate{when: Hook::ShortCircuit, on: Target::Action}
     None
 
-@log_enter
-@log_exit
+@enter_hook
+@exit_hook
 @gate
 action compute(x :: Int) => Int
     + x 1
@@ -111,13 +111,13 @@ echo!(compute!(10))"#;
 
 #[test]
 fn e2e_shortcircuit_inner_exit_outer() {
-    let src = r#"directive log_exit{when: Hook::Exit, on: Target::Any}
+    let src = r#"directive exit_hook{when: Hook::Exit, on: Target::Any}
     echo!(_return)
 
 directive gate{when: Hook::ShortCircuit, on: Target::Action}
     Some(999)
 
-@log_exit
+@exit_hook
 @gate
 action compute(x :: Int) => Int
     + x 1
@@ -140,13 +140,13 @@ echo!(compute!(10))"#;
 
 #[test]
 fn e2e_shortcircuit_inner_exit_outer_proceeds() {
-    let src = r#"directive log_exit{when: Hook::Exit, on: Target::Any}
+    let src = r#"directive exit_hook{when: Hook::Exit, on: Target::Any}
     echo!(_return)
 
 directive gate{when: Hook::ShortCircuit, on: Target::Action}
     None
 
-@log_exit
+@exit_hook
 @gate
 action compute(x :: Int) => Int
     + x 1

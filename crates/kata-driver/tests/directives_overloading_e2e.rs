@@ -39,17 +39,17 @@ fn run_kata(path: &str) -> (String, String, i32) {
 
 #[test]
 fn e2e_overloading_enter_action_and_function() {
-    let src = r#"directive trace{when: Hook::Enter, on: Target::Action}
+    let src = r#"directive hook{when: Hook::Enter, on: Target::Action}
     echo!("action-enter")
 
-directive trace{when: Hook::Enter, on: Target::Function}
+directive hook{when: Hook::Enter, on: Target::Function}
     let _ := _name
 
-@trace
+@hook
 action act(x :: Int) => Int
     + x 1
 
-@trace
+@hook
 double :: Int => Int
 lambda x: * x 2
 
@@ -77,14 +77,14 @@ echo!(double 10)"#;
 
 #[test]
 fn e2e_overloading_any_matches_both() {
-    let src = r#"directive trace{when: Hook::Exit, on: Target::Any}
+    let src = r#"directive hook{when: Hook::Exit, on: Target::Any}
     let _ := _return
 
-@trace
+@hook
 action act(x :: Int) => Int
     + x 1
 
-@trace
+@hook
 double :: Int => Int
 lambda x: * x 2
 
@@ -109,13 +109,13 @@ echo!(double 10)"#;
 
 #[test]
 fn e2e_overloading_duplicate_error() {
-    let src = r#"directive trace{when: Hook::Enter, on: Target::Action}
+    let src = r#"directive hook{when: Hook::Enter, on: Target::Action}
     echo!("first")
 
-directive trace{when: Hook::Enter, on: Target::Action}
+directive hook{when: Hook::Enter, on: Target::Action}
     echo!("second")
 
-@trace
+@hook
 action act(x :: Int) => Int
     + x 1
 
@@ -136,13 +136,13 @@ echo!(act!(5))"#;
 
 #[test]
 fn e2e_overloading_different_hooks_coexist() {
-    let src = r#"directive trace{when: Hook::Enter, on: Target::Any}
+    let src = r#"directive hook{when: Hook::Enter, on: Target::Any}
     echo!("ENTER")
 
-directive trace{when: Hook::Exit, on: Target::Any}
+directive hook{when: Hook::Exit, on: Target::Any}
     echo!("EXIT")
 
-@trace
+@hook
 action act(x :: Int) => Int
     + x 1
 

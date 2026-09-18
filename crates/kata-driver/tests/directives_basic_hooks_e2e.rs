@@ -38,10 +38,10 @@ fn run_kata(path: &str) -> (String, String, i32) {
 
 #[test]
 fn e2e_enter_action_prints_name() {
-    let src = r#"directive trace_enter{when: Hook::Enter, on: Target::Action}
+    let src = r#"directive enter_hook{when: Hook::Enter, on: Target::Action}
     echo!(_name)
 
-@trace_enter
+@enter_hook
 action greet(name :: Text) => Unit
     echo!("hello")
 
@@ -63,10 +63,10 @@ greet!("world")"#;
 
 #[test]
 fn e2e_enter_action_args() {
-    let src = r#"directive trace_args{when: Hook::Enter, on: Target::Action}
+    let src = r#"directive enter_hook{when: Hook::Enter, on: Target::Action}
     echo!(_args.0)
 
-@trace_args
+@enter_hook
 action add(a :: Int, b :: Int) => Int
     + a b
 
@@ -89,10 +89,10 @@ echo!(add!(3, 4))"#;
 
 #[test]
 fn e2e_exit_action_observes_result() {
-    let src = r#"directive trace_exit{when: Hook::Exit, on: Target::Any}
+    let src = r#"directive exit_hook{when: Hook::Exit, on: Target::Any}
     echo!(_return)
 
-@trace_exit
+@exit_hook
 action double(x :: Int) => Int
     * x 2
 

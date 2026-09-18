@@ -40,19 +40,19 @@ fn run_kata(path: &str) -> (String, String, i32) {
 // ── Test 21: @log{msg: Text, when: "enter"} em função pura com _args ─
 
 #[test]
-fn e2e_trace_args_function_pure() {
+fn e2e_enter_args_function_pure() {
     // Função pura com diretiva Enter: _log_publish! é FFI direta (não bloqueia).
     // Não podemos verificar o log (precisa de consumidor log_recv!()),
     // mas verificamos que a função compila e executa corretamente.
-    let src = r#"directive trace_test{when: Hook::Enter, on: Target::Function, msg: Text}
+    let src = r#"directive log_msg{when: Hook::Enter, on: Target::Function, msg: Text}
     _log_publish!(_log_tag(LogLevel::Info), format!(_msg, (_name,)))
 
-@trace_test{msg: "entering {}", when: "enter"}
+@log_msg{msg: "entering {}", when: "enter"}
 dobro :: Int => Int
 lambda n: * n 2
 
 echo!(dobro 21)"#;
-    let path = write_temp_kata("e2e_trace_args_fn", src);
+    let path = write_temp_kata("e2e_enter_args_fn", src);
     let (stdout, stderr, code) = run_kata(&path);
     assert_eq!(code, 0, "exit 0 - stderr: {stderr}");
     assert!(
@@ -64,16 +64,16 @@ echo!(dobro 21)"#;
 // ── Test 22: @log{msg: Text, when: "enter"} em action com _args ────
 
 #[test]
-fn e2e_trace_args_action() {
-    let src = r#"directive trace_test{when: Hook::Enter, on: Target::Action, msg: Text}
+fn e2e_enter_args_action() {
+    let src = r#"directive log_msg{when: Hook::Enter, on: Target::Action, msg: Text}
     echo!(format!(_msg, (_name,)))
 
-@trace_test{msg: "action {}", when: "enter"}
+@log_msg{msg: "action {}", when: "enter"}
 action processar(x :: Int) => Int
     + x 1
 
 echo!(processar!(5))"#;
-    let path = write_temp_kata("e2e_trace_args_act", src);
+    let path = write_temp_kata("e2e_enter_args_act", src);
     let (stdout, stderr, code) = run_kata(&path);
     assert_eq!(code, 0, "exit 0 - stderr: {stderr}");
     assert!(
@@ -89,24 +89,24 @@ echo!(processar!(5))"#;
 // ── Test 23: Despacho por arg_keys — msg vs msg+topic ───────────────
 
 #[test]
-fn e2e_trace_dispatch_by_arg_keys() {
-    let src = r#"directive trace_test{when: Hook::Enter, on: Target::Action, msg: Text}
+fn e2e_dispatch_by_arg_keys() {
+    let src = r#"directive log_msg{when: Hook::Enter, on: Target::Action, msg: Text}
     echo!(format!(_msg, (_name,)))
 
-directive trace_test{when: Hook::Enter, on: Target::Action, msg: Text, topic: Text}
+directive log_msg{when: Hook::Enter, on: Target::Action, msg: Text, topic: Text}
     echo!(format!(_msg, (_name,)))
 
-@trace_test{msg: "simple {}", when: "enter"}
+@log_msg{msg: "simple {}", when: "enter"}
 action sem_topic(x :: Int) => Int
     + x 1
 
-@trace_test{msg: "with topic {}", when: "enter", topic: "audit"}
+@log_msg{msg: "with topic {}", when: "enter", topic: "audit"}
 action com_topic(x :: Int) => Int
     + x 2
 
 echo!(sem_topic!(10))
 echo!(com_topic!(20))"#;
-    let path = write_temp_kata("e2e_trace_dispatch", src);
+    let path = write_temp_kata("e2e_dispatch_by_arg_keys", src);
     let (stdout, stderr, code) = run_kata(&path);
     assert_eq!(code, 0, "exit 0 - stderr: {stderr}");
     assert!(
@@ -122,17 +122,17 @@ echo!(com_topic!(20))"#;
 // ── Test 24: Exit hook com args do site ─────────────────────────────
 
 #[test]
-fn e2e_trace_exit_args_function() {
+fn e2e_exit_args_function() {
     // Exit em função pura: _log_publish! com _return. Verifica que compila e executa.
-    let src = r#"directive trace_test{when: Hook::Exit, on: Target::Function, msg: Text}
+    let src = r#"directive log_msg{when: Hook::Exit, on: Target::Function, msg: Text}
     _log_publish!(_log_tag(LogLevel::Info), format!(_msg, (_name, _return)))
 
-@trace_test{msg: "exit {} -> {}", when: "exit"}
+@log_msg{msg: "exit {} -> {}", when: "exit"}
 inc :: Int => Int
 lambda n: + n 1
 
 echo!(inc 41)"#;
-    let path = write_temp_kata("e2e_trace_exit_fn", src);
+    let path = write_temp_kata("e2e_exit_args_fn", src);
     let (stdout, stderr, code) = run_kata(&path);
     assert_eq!(code, 0, "exit 0 - stderr: {stderr}");
     assert!(
@@ -152,7 +152,7 @@ dobra :: Int => Int
 lambda n: * n 2
 
 echo!(dobra 21)"#;
-    let path = write_temp_kata("e2e_trace_stdlib_fn", src);
+    let path = write_temp_kata("e2e_log_stdlib_fn", src);
     let (stdout, stderr, code) = run_kata(&path);
     assert_eq!(code, 0, "exit 0 - stderr: {stderr}");
     assert!(
@@ -170,7 +170,7 @@ inc :: Int => Int
 lambda n: + n 1
 
 echo!(inc 41)"#;
-    let path = write_temp_kata("e2e_trace_stdlib_exit", src);
+    let path = write_temp_kata("e2e_log_stdlib_exit", src);
     let (stdout, stderr, code) = run_kata(&path);
     assert_eq!(code, 0, "exit 0 - stderr: {stderr}");
     assert!(
@@ -189,7 +189,7 @@ action processar(x :: Int) => Int
     + x 1
 
 echo!(processar!(5))"#;
-    let path = write_temp_kata("e2e_trace_stdlib_act", src);
+    let path = write_temp_kata("e2e_log_stdlib_act", src);
     let (stdout, stderr, code) = run_kata(&path);
     assert_eq!(code, 0, "exit 0 - stderr: {stderr}");
     assert!(

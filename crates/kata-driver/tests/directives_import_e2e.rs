@@ -15,9 +15,9 @@ fn kata_bin() -> String {
 
 // ── Test 20: Importação — diretiva exportada de outro módulo ─────────
 //
-// Cria dois arquivos: tracing_mod.kata (exportador) e main_import.kata
-// (importador). O importador usa `import tracing_mod.trace_enter` e aplica
-// `@trace_enter` numa action. O driver resolve o import, carrega o módulo
+// Cria dois arquivos: hooks_mod.kata (exportador) e main_import.kata
+// (importador). O importador usa `import hooks_mod.enter_hook` e aplica
+// `@enter_hook` numa action. O driver resolve o import, carrega o módulo
 // exportador, mescla o DirectiveRegistry, e o desugaring inlinea a diretiva.
 
 #[test]
@@ -26,13 +26,13 @@ fn e2e_import_directive() {
     fs::create_dir_all(&dir).expect("criar temp dir");
 
     // Módulo exportador: define e exporta a diretiva
-    let mod_path = dir.join("tracing_mod.kata");
+    let mod_path = dir.join("hooks_mod.kata");
     fs::write(
         &mod_path,
-        r#"directive trace_enter{when: Hook::Enter, on: Target::Action}
+        r#"directive enter_hook{when: Hook::Enter, on: Target::Action}
     echo!("imported-enter")
 
-export trace_enter"#,
+export enter_hook"#,
     )
     .expect("escrever modulo exportador");
 
@@ -40,9 +40,9 @@ export trace_enter"#,
     let main_path = dir.join("main_import.kata");
     fs::write(
         &main_path,
-        r#"import tracing_mod.(trace_enter)
+        r#"import hooks_mod.(enter_hook)
 
-@trace_enter
+@enter_hook
 action greet(name :: Text) => Unit
     echo!("hello")
 

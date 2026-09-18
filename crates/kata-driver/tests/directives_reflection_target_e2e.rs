@@ -39,12 +39,12 @@ fn run_kata(path: &str) -> (String, String, i32) {
 
 #[test]
 fn e2e_reflection_vars() {
-    let src = r#"directive trace_meta{when: Hook::Enter, on: Target::Action}
+    let src = r#"directive reflect{when: Hook::Enter, on: Target::Action}
     echo!(_name)
     echo!(_arity)
     echo!(_is_action)
 
-@trace_meta
+@reflect
 action greet(name :: Text) => Unit
     echo!("hello")
 
@@ -70,10 +70,10 @@ greet!("world")"#;
 
 #[test]
 fn e2e_enter_function() {
-    let src = r#"directive trace_fn{when: Hook::Enter, on: Target::Function}
+    let src = r#"directive enter_fn{when: Hook::Enter, on: Target::Function}
     let _ := _name
 
-@trace_fn
+@enter_fn
 double :: Int => Int
 lambda x: * x 2
 
@@ -93,10 +93,10 @@ echo!(double 10)"#;
 
 #[test]
 fn e2e_target_mismatch_action_on_function() {
-    let src = r#"directive trace_act{when: Hook::Enter, on: Target::Action}
+    let src = r#"directive enter_act{when: Hook::Enter, on: Target::Action}
     echo!(_name)
 
-@trace_act
+@enter_act
 double :: Int => Int
 lambda x: * x 2
 
@@ -117,10 +117,10 @@ echo!(double 10)"#;
 
 #[test]
 fn e2e_target_mismatch_function_on_action() {
-    let src = r#"directive trace_fn{when: Hook::Enter, on: Target::Function}
+    let src = r#"directive enter_fn{when: Hook::Enter, on: Target::Function}
     let _ := _name
 
-@trace_fn
+@enter_fn
 action greet(name :: Text) => Unit
     echo!("hello")
 
