@@ -138,7 +138,34 @@ pub(crate) fn infer_action(
                     entries,
                     &typed,
                 )?,
-                _ => typed,
+                // Normaliza Grouping → Tuple de 1 elemento (mesma lógica do
+                // action_call.rs). `(42)` é Grouping, não Tuple — o codegen do
+                // wrapper espera um ponteiro para tupla na arena, e Grouping
+                // lowera como a expressão interna (SMI), causando SIGSEGV.
+                crate::typed::TypedExprKind::Grouping { inner } => {
+                    let inner = inner.clone();
+                    TypedExpr {
+                        ty: Ty::Tuple(vec![inner.node.ty.clone()]),
+                        kind: TypedExprKind::Tuple {
+                            elements: vec![*inner],
+                        },
+                        span: typed.span,
+                        tail_pos: typed.tail_pos,
+                        escape: typed.escape,
+                    }
+                }
+                // Não-Tuple, não-Unit, não-Grouping, não-DictLit → wrap em
+                // Tuple de 1 elemento (mesma lógica do action_call.rs).
+                TypedExprKind::Tuple { .. } | TypedExprKind::Unit => typed,
+                _ => TypedExpr {
+                    ty: Ty::Tuple(vec![typed.ty.clone()]),
+                    kind: TypedExprKind::Tuple {
+                        elements: vec![Spanned::new(typed.clone(), args_expr.span)],
+                    },
+                    span: typed.span,
+                    tail_pos: typed.tail_pos,
+                    escape: typed.escape,
+                },
             };
             Some(Spanned::new(typed, args_expr.span))
         } else {

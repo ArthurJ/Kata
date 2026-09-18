@@ -98,6 +98,63 @@ soma!(1, 2)"#,
     assert_eq!(code, 0, "exit 0 — stdout: {stdout}");
 }
 
+// ── Teste 2b: @test com 1 arg Int (grouping, não tuple) — sucesso ──
+
+/// `@test{args: (42)}` com 1 param Int. O parser entrega Grouping (não
+/// Tuple) para 1 elemento sem vírgula. O inference deve normalizar
+/// Grouping → Tuple de 1 elemento para que o codegen do wrapper aloce
+/// a tupla na arena e passe um ponteiro válido como args_ptr.
+/// Regressão: antes da correção, isto causava SIGSEGV (exit 139).
+#[test]
+fn test_com_1_arg_int_grouping_passa() {
+    let path = write_temp_kata(
+        "test_com_1_arg_int_grouping_passa",
+        r#"@test{desc: "identidade", args: (42)}
+action ident (x::Int) => Int
+    x
+ident!(1)"#,
+    );
+
+    let (stdout, code) = run_kata_test(&path);
+
+    assert!(
+        stdout.contains("[PASS]"),
+        "deve ter [PASS] — stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("1 passed"),
+        "deve ter 1 passed — stdout: {stdout}"
+    );
+    assert_eq!(code, 0, "exit 0 — stdout: {stdout}");
+}
+
+// ── Teste 2c: @test com 1 arg Int + expects (caso do TODO) — sucesso ──
+
+/// `@test{args: (0), expects: "ValidacaoFail"}` com action que retorna
+/// `Result::(Int, MeuErro)`. Regressão do bug reportado em TODO.md:
+/// SIGSEGV no `kata test` quando args Int causa misaligned pointer deref.
+#[test]
+fn test_com_1_arg_int_expects_passa() {
+    let path = write_temp_kata(
+        "test_com_1_arg_int_expects_passa",
+        r#"enum MeuErro
+    ValidacaoFail
+
+@test{desc: "valida", expects: "ValidacaoFail", policy: prefix, args: (0)}
+action valida (x::Int) => Result::(Int, MeuErro)
+    Result::Err MeuErro::ValidacaoFail
+valida!(0)"#,
+    );
+
+    let (stdout, code) = run_kata_test(&path);
+
+    assert!(
+        stdout.contains("[PASS]"),
+        "deve ter [PASS] — stdout: {stdout}"
+    );
+    assert_eq!(code, 0, "exit 0 — stdout: {stdout}");
+}
+
 // ── Teste 3: @test com timeout — falha por timeout ──
 
 /// Action com loop infinito e `@test{timeout: 100}` — thread OS spawna,

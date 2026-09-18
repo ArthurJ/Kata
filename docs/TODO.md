@@ -1,39 +1,30 @@
 # TODO — Kata-Lang
 
-Único arquivo de pendências. Atualizado 2026-09-18 (refined_collections.kata resolvido: colisão de nomes na monomorfização de show genérico; exemplos de módulos removidos).
+Único arquivo de pendências. Atualizado 2026-09-18 (SIGSEGV de @test args Int resolvido: normalização Grouping→Tuple em action_infer.rs; discussão sobre sintaxe de action call adicionada ao Futuro).
 
 ---
 
-## Pendentes
-### 🟡 Médio
+## Resolvidos
+### ✅ `@test{expects}` com args Int causa SIGSEGV
 
-#### `@test{expects}` com args Int causa SIGSEGV
+**Causa raiz:** `@test{args: (42)}` era parseado como `Grouping(IntLit 42)`,
+não `Tuple([IntLit 42])`. O codegen do wrapper lowera Grouping como a
+expressão interna (SMI), passando o SMI como `args_ptr`. A action faz
+`load(I64, args_ptr, 0)` — dereferencia o SMI como ponteiro → SIGSEGV.
 
-`@test{desc: "...", expects: "...", args: (0)}` numa action que retorna
-`Result::(Int, MeuErro)` crasha com misaligned pointer dereference (exit
-139). O mesmo padrão com `args: ("texto")` (Text) e
-`Result::(Text, MeuErro)` funciona normalmente.
+O mesmo bug não afeta `args: (42,)` (Tuple explícita), `args: (3, 4)`
+(2+ elementos), `args: ("texto")` (TextLit produz ponteiro válido), ou
+actions sem args. Funções puras e patterns não são afetados — Grouping
+em funções é transparente (descascado pelo inference), e patterns
+desembrulham `(x)` para `x` no parser.
 
-**Reprodução:**
-```kata
-enum MeuErro
-    ValidacaoFail
+**Correção:** normalização `Grouping → Tuple de 1` em `action_infer.rs`,
+mesma lógica que já existia em `action_call.rs:168-191`. A normalização
+está duplicada em 4 pontos (action_call, action_infer, csp_concurrency,
+log_builtins) — ver item no Futuro sobre centralização.
 
-@test{desc: "valida", expects: "ValidacaoFail", policy: prefix, args: (0)}
-action valida (x::Int) => Result::(Int, MeuErro)
-    Result::Err MeuErro::ValidacaoFail
-valida!(0)
-```
-→ SIGSEGV no `kata test`.
-
-**Impacto:** testes `@test{expects}` com actions Int são impossíveis.
-Workaround: usar args Text e retorno `Result::(Text, _)`.
-
-**Caminho:** o crash acontece no codegen do wrapper de `expects` — provável
-problema de SMI double-tagging ou layout de CaptureBox no path de
-marshalling de Int args. Investigar `jit_tests` / `TestWrapper` no
-codegen, comparar com o path de Text args (que funciona). Verificar se
-o wrapper lê o payload de `Err` com o type_shape correto para Int.
+Testes de regressão: `test_com_1_arg_int_grouping_passa` e
+`test_com_1_arg_int_expects_passa` em `test_runner_e2e.rs`.
 
 #### `private_type.kata` — family_extension_invalid
 
@@ -95,6 +86,26 @@ refere-se a, permitindo remover overloads não-usadas antes do codegen.
 ---
 
 ## Futuro
+
+- **Sintaxe de action call: posicional vs nomeado** — discutir remover a
+  forma posicional `f!(x, y)` e manter apenas `f!{a: x, b: y}` (dict
+  nomeado). Motivação: diferenciação sintática entre funções (`f x y`,
+  curried) e actions (`f!{a: x, b: y}`, nomeado) — hoje ambas usam
+  parênteses, diferindo só pelo ``. A mudança eliminaria a ambiguidade
+  Grouping/Tuple no path de action calls (4 pontos de normalização
+  duplicados: action_call.rs, action_infer.rs, csp_concurrency.rs,
+  log_builtins.rs). Contras: migração de ~416 calls posicionais e
+  verbosidade para 1 arg (`echo!{msg: x}` vs `echo!(x)`). Alternativa:
+  açúcar sintático para aridade 0 (`f!()`) e 1 (`f!(x)` ≡ `f!{param: x}`
+  usando o primeiro param da action), mantendo `!{` obrigatório para 2+.
+  Decisão pendente — precisa avaliar ergonomia vs consistência.
+
+- **Centralizar normalização Grouping→Tuple** — mesmo sem decisão sobre a
+  sintaxe de action call, a normalização `Grouping → Tuple de 1` está
+  duplicada em 4 pontos (action_call.rs:168, action_infer.rs:141,
+  csp_concurrency.rs:134, log_builtins.rs:153). Extrair para função única
+  e chamar de todos os sites, evitando divergência silenciosa (o bug do
+  SIGSEGV foi causado por exatamente esse tipo de divergência).
 
 - **`select_arms_different_types`** — test placeholder em
   `kata-inference/tests/csp_typeck.rs:215`, depende de T0 unification.
