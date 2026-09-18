@@ -199,7 +199,45 @@ pub fn lex_with_recovery(source: &str) -> (Vec<TokenWithSpan>, Vec<FrontendError
                 }
                 continue;
             }
-            // `#` sem `{` — comentário de linha, consome até \n ou EOF
+            // `#!` inicia pragma — pseudo-comentário preservado no AST.
+            // O lexer produz `Token::Pragma { token, raw }` onde `token`
+            // é o primeiro token após `#!` (até whitespace, `(`, `{`, ou
+            // newline) e `raw` é o restante da linha (payload livre).
+            if lex.peek() == Some('!') {
+                let start = lex.save_pos();
+                lex.advance(); // consome '#'
+                lex.advance(); // consome '!'
+                // Pula whitespace entre `#!` e o token
+                while matches!(lex.ch, Some(' ') | Some('\t')) {
+                    lex.advance();
+                }
+                // Captura o token: caracteres até whitespace, `(`, `{`, ou newline
+                let token_start = lex.pos;
+                while let Some(ch) = lex.ch {
+                    if ch == '\n' || ch == ' ' || ch == '\t' || ch == '(' || ch == '{' {
+                        break;
+                    }
+                    lex.advance();
+                }
+                let pragma_token = lex.source[token_start..lex.pos].to_string();
+                // Captura o restante da linha como raw payload (até newline)
+                let raw_start = lex.pos;
+                while lex.ch.is_some() && lex.ch != Some('\n') {
+                    lex.advance();
+                }
+                let raw = lex.source[raw_start..lex.pos].trim().to_string();
+                let span = lex.span_from(&start);
+                tokens.push(TokenWithSpan {
+                    token: Token::Pragma {
+                        token: pragma_token,
+                        raw,
+                    },
+                    span,
+                });
+                line_has_content = true;
+                continue;
+            }
+            // `#` sem `{` e sem `!` — comentário de linha, consome até \n ou EOF
             while lex.ch.is_some() && lex.ch != Some('\n') {
                 lex.advance();
             }

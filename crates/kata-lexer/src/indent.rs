@@ -52,12 +52,19 @@ pub(crate) fn process_indent(
                     }
                     // Após `}#`, pode haver mais conteúdo na mesma linha.
                     // Se for whitespace, o loop de indent reinicia.
-                    // Se for `\n` ou EOF, cai nos braços abaixo.
+                    // Se for `\\n` ou EOF, cai nos braços abaixo.
                     // Se for código, o `_` braço break.
                     indent = 0;
                     continue;
                 }
-                // `#` sem `{` — linha de comentário, pula até \n inclusive
+                // `#!` inicia pragma — não é comentário, é conteúdo.
+                // O loop principal do lexer produzirá `Token::Pragma`.
+                // Trata como conteúdo: break para que o loop principal
+                // processe o `#!`.
+                if lex.peek() == Some('!') {
+                    break;
+                }
+                // `#` sem `{` e sem `!` — linha de comentário, pula até \\n inclusive
                 while lex.ch.is_some() && lex.ch != Some('\n') {
                     lex.advance();
                 }

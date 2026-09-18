@@ -66,7 +66,7 @@ pub fn resolve_embeds(
     }
 
     if ctx.errors.is_empty() {
-        Ok((Module { items }, ctx.deps))
+        Ok((Module { items, pragmas: Vec::new() }, ctx.deps))
     } else {
         Err(ctx.errors)
     }
@@ -89,7 +89,7 @@ pub(crate) fn resolve_embeds_stdlib(
     }
 
     if ctx.errors.is_empty() {
-        Ok((Module { items }, ctx.deps))
+        Ok((Module { items, pragmas: Vec::new() }, ctx.deps))
     } else {
         Err(ctx.errors)
     }

@@ -193,6 +193,7 @@ impl InterpReplSession {
         // Carregar imports
         let import_module = Module {
             items: self.items.clone(),
+            pragmas: Vec::new(),
         };
         let has_imports = import_module
             .items
@@ -207,6 +208,7 @@ impl InterpReplSession {
             // Apenas declarações — valida com typeck sem executar.
             let full_module = Module {
                 items: self.items.clone(),
+                pragmas: Vec::new(),
             };
             match self.run_pipeline_typed_for_decls(&full_module) {
                 Ok(_) => Ok(()),
@@ -219,6 +221,7 @@ impl InterpReplSession {
         } else {
             let full_module = Module {
                 items: self.items.clone(),
+                pragmas: Vec::new(),
             };
             match self.run_pipeline_interp(&full_module) {
                 Ok(result) => {
@@ -292,7 +295,7 @@ impl InterpReplSession {
             items.push(Spanned::new(Item::EntryExpr(spanned), Span::synthetic()));
             items
         };
-        let module = Module { items };
+        let module = Module { items, pragmas: Vec::new() };
         self.run_pipeline_typed(&module)?;
         Ok(())
     }
@@ -527,6 +530,7 @@ impl InterpReplSession {
 
         let import_module = Module {
             items: self.items.clone(),
+            pragmas: Vec::new(),
         };
         let has_imports = import_module
             .items
@@ -542,6 +546,7 @@ impl InterpReplSession {
         if !has_entry {
             let full_module = Module {
                 items: self.items.clone(),
+                pragmas: Vec::new(),
             };
             match self.run_pipeline_typed_for_decls(&full_module) {
                 Ok(_) => {
@@ -557,6 +562,7 @@ impl InterpReplSession {
         } else {
             let full_module = Module {
                 items: self.items.clone(),
+                pragmas: Vec::new(),
             };
             match self.run_pipeline_interp(&full_module) {
                 Ok(result) => {
@@ -585,7 +591,7 @@ impl InterpReplSession {
                 items.extend(module.items);
             }
         }
-        Module { items }
+        Module { items, pragmas: Vec::new() }
     }
 
     /// Constrói Module para `:env` — items acumulados + entry sintético `0`.
@@ -602,7 +608,7 @@ impl InterpReplSession {
             let spanned = Spanned::new(zero, Span::synthetic());
             items.push(Spanned::new(Item::EntryExpr(spanned), Span::synthetic()));
         }
-        Module { items }
+        Module { items, pragmas: Vec::new() }
     }
 }
 

@@ -165,6 +165,7 @@ impl ReplSession {
         // acumulados), carregar todos os módulos importados e atualizar o cache.
         let import_module = Module {
             items: self.items.clone(),
+            pragmas: Vec::new(),
         };
         let has_imports = import_module
             .items
@@ -181,6 +182,7 @@ impl ReplSession {
             // Apenas declarações — valida com typeck sem executar.
             let full_module = Module {
                 items: self.items.clone(),
+                pragmas: Vec::new(),
             };
             match self.run_pipeline_typed_for_decls(&full_module) {
                 Ok(_) => {
@@ -197,6 +199,7 @@ impl ReplSession {
             // Constrói Module com todos os items acumulados (incluindo os do arquivo).
             let full_module = Module {
                 items: self.items.clone(),
+                pragmas: Vec::new(),
             };
 
             match self.run_pipeline_eval(&full_module) {

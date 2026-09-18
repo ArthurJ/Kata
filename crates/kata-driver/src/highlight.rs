@@ -130,6 +130,9 @@ fn token_color(token: &Token) -> Option<&'static str> {
 
         // ── Tokens sintéticos e EOF — não colorir ──────────
         Token::Indent | Token::Dedent | Token::StmtSep | Token::Eof => None,
+
+        // ── Pragmas — colorir como comentário/metadata ─────
+        Token::Pragma { .. } => Some(BRIGHT_BLACK),
     }
 }
 

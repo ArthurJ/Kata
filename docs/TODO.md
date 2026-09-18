@@ -38,6 +38,15 @@ trampoline/scheduler ou usar um canal lateral (e.g. célula
 
 ### 🟢 Baixo
 
+#### Remover diretivas `@trace_*`
+
+Diretivas `@trace_enter`, `@trace_args`, `@trace_exit`, `@trace_meta`,
+`@trace_fn`, `@trace_act`, `@log_enter`, `@log_exit` são hooks de
+tracing de depuração que inserem código no codegen. Avaliar se ainda
+são usadas ou se foram substituídas por mecanismos melhores
+(`@log{when: "enter"}`, etc.). Se obsoletas, remover do parser, AST,
+codegen, e testes.
+
 #### Tree-shaking por instância de família polimórfica
 
 O tree-shaking remove funções por **nome** — se uma função com overloads

@@ -531,10 +531,14 @@ pub struct ActionStmt {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Module {
     pub items: Vec<Spanned<crate::item::Item>>,
+    /// Pragmas `#!` de top-level que não foram anexados a items
+    /// (ex: pragmas órfãos no fim do arquivo). Pragmas anexados a
+    /// items específicos serão distribuídos em fases posteriores.
+    pub pragmas: Vec<crate::item::Pragma>,
 }
 
 impl Module {
     pub fn new(items: Vec<Spanned<crate::item::Item>>) -> Self {
-        Module { items }
+        Module { items, pragmas: Vec::new() }
     }
 }

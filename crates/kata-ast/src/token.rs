@@ -157,6 +157,15 @@ pub enum Token {
     /// O lexer produz `At` e o parser constrói `Directive`.
     At,
 
+    // ── Pragmas ────────────────────────────────────────
+    /// `#!<token> <payload>` — pseudo-comentário preservado no AST.
+    /// `token` é o primeiro token após `#!` (até whitespace, `(`, `{`, ou
+    /// newline). `raw` é o restante da linha (payload livre).
+    /// O parser faz dispatch por `token`: tokens conhecidos viram nós
+    /// estruturados (`DiagnosticControl`, `TestSpec`); tokens externos
+    /// com prefixo viram `UnknownPragma`.
+    Pragma { token: String, raw: String },
+
     // ── Tokens sintéticos (indent-sensitive) ───────────
     /// Indica aumento de indentação
     Indent,
@@ -280,6 +289,7 @@ impl std::fmt::Display for Token {
             Token::Semicolon => write!(f, ";"),
             Token::Colon => write!(f, ":"),
             Token::At => write!(f, "@"),
+            Token::Pragma { token, raw } => write!(f, "#!{token} {raw}"),
             Token::Indent => write!(f, "<INDENT>"),
             Token::Dedent => write!(f, "<DEDENT>"),
             Token::StmtSep => write!(f, "<STMT_SEP>"),

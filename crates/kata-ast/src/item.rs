@@ -272,3 +272,73 @@ pub struct ExportItem {
     /// Itens reexportados (quando reexport_from é Some).
     pub reexport_items: Option<Vec<String>>,
 }
+
+// ── Pragmas (`#!`) ──────────────────────────────────────────────
+
+/// Pseudo-comentário `#!<token> <payload>` preservado no AST.
+///
+/// O parser faz dispatch por token: tokens conhecidos do compilador
+/// viram nós estruturados (`DiagnosticControl`, `TestSpec`); tokens
+/// externos com prefixo viram `UnknownPragma`.
+///
+/// Escopo posicional: `#!` em início de linha aplica à declaração
+/// inteira; inline aplica à unidade sintática da linha.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Pragma {
+    /// `#!allow <code>`, `#!warn <code>`, `#!deny <code>` — controle
+    /// de diagnóstico. Ajusta a severity de um diagnóstico ajustável.
+    DiagnosticControl(DiagnosticControl),
+    /// `#!test("desc")` ou `#!test{desc, args, timeout}` — marker
+    /// para o test runner. Sem `expects` — não gera wrapper.
+    TestSpec(TestSpec),
+    /// `#!<prefixo>-<resto> <payload>` — pragma de ferramenta externa.
+    /// O compilador preserva mas não processa; ferramentas consomem
+    /// via API filtrando por prefixo.
+    UnknownPragma(UnknownPragma),
+}
+
+/// `#!allow`/`#!warn`/`#!deny <diagnostic_code>`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DiagnosticControl {
+    pub level: DiagnosticLevel,
+    /// Código do diagnóstico (ex: `type.incomplete_interface`).
+    pub code: String,
+    /// Span do `#!` para diagnósticos.
+    pub span: Span,
+}
+
+/// Nível de severidade ajustado por pragma.
+#[derive(Debug, Clone, PartialEq)]
+pub enum DiagnosticLevel {
+    /// `#!allow` — silencia o diagnóstico.
+    Allow,
+    /// `#!warn` — emite como warning.
+    Warn,
+    /// `#!deny` — eleva a erro.
+    Deny,
+}
+
+/// `#!test("desc")` ou `#!test{desc, args, timeout}` — marker puro.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TestSpec {
+    pub desc: String,
+    /// Args posicionais para passar à action (vazio = sem args).
+    pub args: Vec<crate::expr::Expr>,
+    /// Timeout em ms (None = sem timeout).
+    pub timeout: Option<u64>,
+    /// Span do `#!test` para diagnósticos.
+    pub span: Span,
+}
+
+/// `#!<prefixo>-<resto> <payload>` — pragma externo preservado.
+#[derive(Debug, Clone, PartialEq)]
+pub struct UnknownPragma {
+    /// Token completo (ex: `bench-config`).
+    pub token: String,
+    /// Prefixo da ferramenta (ex: `bench`).
+    pub prefix: String,
+    /// Payload bruto (resto da linha após o token).
+    pub raw: String,
+    /// Span do `#!` para diagnósticos.
+    pub span: Span,
+}

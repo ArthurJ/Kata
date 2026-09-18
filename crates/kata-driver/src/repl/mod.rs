@@ -251,6 +251,7 @@ impl ReplSession {
         // qualquer linha, e o ModuleLoader é idempotente (cache interno).
         let import_module = Module {
             items: self.items.clone(),
+            pragmas: Vec::new(),
         };
         let has_imports = import_module
             .items
@@ -266,6 +267,7 @@ impl ReplSession {
             // Valida com pipeline_typed para verificar consistência.
             let full_module = Module {
                 items: self.items.clone(),
+                pragmas: Vec::new(),
             };
             match self.run_pipeline_typed_for_decls(&full_module) {
                 Ok(_) => Ok(()),
@@ -305,7 +307,7 @@ impl ReplSession {
                             Item::EntryExpr(*value.clone()),
                             Span::synthetic(),
                         ));
-                        let val_module = Module { items: val_items };
+                        let val_module = Module { items: val_items, pragmas: Vec::new() };
                         if let Ok(val_result) = self.run_pipeline_eval(&val_module) {
                             // Tentar congelar como literal escalar.
                             if let Some(literal) =
@@ -379,7 +381,7 @@ impl ReplSession {
                 items.extend(module.items);
             }
         }
-        Module { items }
+        Module { items, pragmas: Vec::new() }
     }
 
     /// Constrói Module para `:env` — items acumulados + entry sintético `0`.
@@ -400,7 +402,7 @@ impl ReplSession {
             let spanned = Spanned::new(zero, Span::synthetic());
             items.push(Spanned::new(Item::EntryExpr(spanned), Span::synthetic()));
         }
-        Module { items }
+        Module { items, pragmas: Vec::new() }
     }
 
     /// Resolve @embed_text/@embed_bytes no módulo, substituindo por literais.
@@ -455,7 +457,7 @@ impl ReplSession {
             items.push(Spanned::new(Item::EntryExpr(spanned), Span::synthetic()));
             items
         };
-        let module = Module { items };
+        let module = Module { items, pragmas: Vec::new() };
         self.run_pipeline_typed(&module)?;
         Ok(())
     }
@@ -649,6 +651,7 @@ impl ReplSession {
     fn build_eval_module(&self, items: &[Spanned<Item>]) -> Module {
         Module {
             items: self.build_eval_items(items),
+            pragmas: Vec::new(),
         }
     }
 

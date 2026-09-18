@@ -9,12 +9,22 @@ use crate::expressions::parse_expr;
 impl Parser {
     pub(crate) fn parse_module(&mut self) -> Result<Module, FrontendError> {
         let mut items: Vec<Spanned<Item>> = Vec::new();
+        let mut all_pragmas: Vec<kata_ast::Pragma> = Vec::new();
 
         while !self.at_eof() {
             // Skip leading statement separators
             if matches!(self.peek(), Token::StmtSep) {
                 self.advance();
                 continue;
+            }
+
+            // Collect pragmas (zero or more #!token ... prefixes)
+            let pragmas = self.parse_pragmas()?;
+            all_pragmas.extend(pragmas);
+
+            // Skip statement separators that may appear after pragmas
+            while matches!(self.peek(), Token::StmtSep) {
+                self.advance();
             }
 
             // Collect directives (zero or more @name ... prefixes)
@@ -128,7 +138,7 @@ impl Parser {
             }
         }
 
-        Ok(Module { items })
+        Ok(Module { items, pragmas: all_pragmas })
     }
 
     /// Parse apenas declarações — skipa entry exprs e top-level lets.
@@ -140,12 +150,22 @@ impl Parser {
     /// skipado até o próximo `StmtSep` ou `Eof`.
     pub(crate) fn parse_module_decls_only(&mut self) -> Result<Module, FrontendError> {
         let mut items: Vec<Spanned<Item>> = Vec::new();
+        let mut all_pragmas: Vec<kata_ast::Pragma> = Vec::new();
 
         while !self.at_eof() {
             // Skip leading statement separators
             if matches!(self.peek(), Token::StmtSep) {
                 self.advance();
                 continue;
+            }
+
+            // Collect pragmas (zero or more #!token ... prefixes)
+            let pragmas = self.parse_pragmas()?;
+            all_pragmas.extend(pragmas);
+
+            // Skip statement separators that may appear after pragmas
+            while matches!(self.peek(), Token::StmtSep) {
+                self.advance();
             }
 
             // Collect directives (zero or more @name ... prefixes)
@@ -223,7 +243,7 @@ impl Parser {
             }
         }
 
-        Ok(Module { items })
+        Ok(Module { items, pragmas: all_pragmas })
     }
 
     /// Parse module com error recovery de top-level items.
@@ -235,12 +255,29 @@ impl Parser {
     pub(crate) fn parse_module_with_recovery(&mut self) -> (Module, Vec<FrontendError>) {
         let mut items: Vec<Spanned<Item>> = Vec::new();
         let mut errors: Vec<FrontendError> = Vec::new();
+        let mut all_pragmas: Vec<kata_ast::Pragma> = Vec::new();
 
         while !self.at_eof() {
             // Skip leading statement separators
             if matches!(self.peek(), Token::StmtSep) {
                 self.advance();
                 continue;
+            }
+
+            // Collect pragmas (zero or more #!token ... prefixes)
+            let pragmas = match self.parse_pragmas() {
+                Ok(p) => p,
+                Err(e) => {
+                    errors.push(e);
+                    self.sync_to_stmt_sep();
+                    continue;
+                }
+            };
+            all_pragmas.extend(pragmas);
+
+            // Skip statement separators that may appear after pragmas
+            while matches!(self.peek(), Token::StmtSep) {
+                self.advance();
             }
 
             // Collect directives (zero or more @name ... prefixes)
@@ -391,7 +428,7 @@ impl Parser {
             }
         }
 
-        (Module { items }, errors)
+        (Module { items, pragmas: all_pragmas }, errors)
     }
 
     /// Sincroniza: avança tokens até o próximo `StmtSep` ou `Eof`.
