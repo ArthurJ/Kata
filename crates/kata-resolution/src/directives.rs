@@ -3,7 +3,7 @@
 //! Extrai `TestSpec` e `TimerSpec` das diretivas AST, validando tipos dos
 //! argumentos e coletando erros em `Vec<ResolveError>`.
 
-use kata_ast::{Directive, DirectiveArg, Expr};
+use kata_ast::{Directive, DirectiveArg, Expr, Pragma, Spanned};
 
 use super::types::{
     DirectiveDef, DirectiveKey, Hook, MatchPolicy, ResolveError, Target, TestSpec, TimerSpec,
@@ -403,4 +403,62 @@ fn parse_target(enum_name: &str, variant: &str) -> Option<Target> {
         "Any" => Some(Target::Any),
         _ => None,
     }
+}
+
+/// Extrai `TestSpec` (resolution) dos pragmas `#!test` (AST) anexados à action.
+///
+/// `#!test("desc")` e `#!test{desc, args, timeout}` são markers puros —
+/// não têm `expects` nem `policy` (esses permanecem `@test{expects}`).
+/// Converte AST `TestSpec` (desc, args, timeout) em resolution `TestSpec`
+/// (desc, args como Option<Spanned<Expr>>, timeout como Option<i64>).
+pub(crate) fn extract_pragma_test_specs(pragmas: &[Pragma]) -> Vec<TestSpec> {
+    pragmas
+        .iter()
+        .filter_map(|p| match p {
+            Pragma::TestSpec(ast_spec) => {
+                let desc = if ast_spec.desc.is_empty() {
+                    None
+                } else {
+                    Some(ast_spec.desc.clone())
+                };
+
+                // Converte args: Vec<Expr> → Option<Spanned<Expr>>.
+                // Se vazio, None. Se 1 elemento, wrap em Spanned. Se 2+,
+                // wrap em Tuple.
+                let args = if ast_spec.args.is_empty() {
+                    None
+                } else if ast_spec.args.len() == 1 {
+                    // Single arg — wrap no Spanned do próprio expr.
+                    // O AST TestSpec não guarda Spanned<Expr> individuais,
+                    // então usamos o span do pragma como fallback.
+                    Some(Spanned::new(
+                        ast_spec.args[0].clone(),
+                        ast_spec.span,
+                    ))
+                } else {
+                    // Múltiplos args — wrap em Tuple.
+                    let elements: Vec<Spanned<Expr>> = ast_spec
+                        .args
+                        .iter()
+                        .map(|e| Spanned::new(e.clone(), ast_spec.span))
+                        .collect();
+                    Some(Spanned::new(
+                        Expr::Tuple { elements },
+                        ast_spec.span,
+                    ))
+                };
+
+                let timeout = ast_spec.timeout.map(|t| t as i64);
+
+                Some(TestSpec {
+                    desc,
+                    args,
+                    timeout,
+                    expects: None,
+                    policy: None,
+                })
+            }
+            _ => None,
+        })
+        .collect()
 }

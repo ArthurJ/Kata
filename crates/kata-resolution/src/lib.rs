@@ -21,7 +21,10 @@ pub use types::*;
 pub use merge_imports::merge_imports;
 pub use module_loader::{ImportedModule, LoadError, ModuleLoader};
 
-use directives::{extract_arg_keys, extract_site_when, extract_test_specs, extract_timer_spec};
+use directives::{
+    extract_arg_keys, extract_pragma_test_specs, extract_site_when, extract_test_specs,
+    extract_timer_spec,
+};
 
 use kata_ast::{Item, Module};
 use kata_core::{StructKey, Ty, TypeEnv};
@@ -414,6 +417,7 @@ fn resolve_inner(
                 param_defaults,
                 ret,
                 directives: action_dirs,
+                pragmas: action_pragmas,
                 body,
             } => {
                 // Converte TypeExpr → Ty para os parâmetros e retorno.
@@ -501,7 +505,12 @@ fn resolve_inner(
                 // @test("desc") — forma curta: desc é o primeiro posicional.
                 // @test{desc: "...", args: (1,2), timeout: 5000, expects: "Panic: msg"}
                 //   — forma dict: chaves nomeadas.
-                let tests = extract_test_specs(action_dirs, name, &mut errors);
+                let mut tests = extract_test_specs(action_dirs, name, &mut errors);
+
+                // Extrai casos de teste dos pragmas #!test anexados à action.
+                // #!test("desc") e #!test{desc, args, timeout} — marker puro,
+                // sem expects/policy (esses permanecem @test{expects}).
+                tests.extend(extract_pragma_test_specs(&action_pragmas));
 
                 // Se tem @ffi e body vazio → Action FFI builtin.
                 // Produz uma Signature com is_action = true para o DispatchTable.

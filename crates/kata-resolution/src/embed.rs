@@ -127,6 +127,7 @@ fn walk_item(item: Spanned<Item>, ctx: &mut EmbedCtx) -> Spanned<Item> {
             param_defaults,
             ret,
             directives,
+            pragmas,
             body,
         } => {
             let param_defaults = param_defaults
@@ -144,6 +145,7 @@ fn walk_item(item: Spanned<Item>, ctx: &mut EmbedCtx) -> Spanned<Item> {
                 param_defaults,
                 ret,
                 directives,
+                pragmas,
                 body,
             }
         }
