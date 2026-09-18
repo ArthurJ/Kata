@@ -12,8 +12,10 @@ mod doctest;
 mod highlight;
 mod imports;
 mod pipeline;
+mod pragma_processing;
 mod repl;
 mod test_runner;
+mod test_utils;
 
 /// CLI do compilador Kata.
 #[derive(Parser)]
@@ -283,6 +285,11 @@ fn run_pipeline_with_file_inner(
     })()
     .map_err(crate::print_pipeline_errors)?;
 
+    // Imprimir warnings de pragmas rebaixados (#!warn) sem abortar.
+    for w in &compiled.pragma_warnings {
+        eprintln!("{w:?}");
+    }
+
     let ty = compiled.entry_ty();
     let raw = compiled.jit_eval(emit_ir)?;
 
@@ -309,6 +316,11 @@ fn run_pipeline_interp(source: &str, file_path: Option<&str>) -> miette::Result<
             .interpret()
     })()
     .map_err(crate::print_pipeline_errors)?;
+
+    // Imprimir warnings de pragmas rebaixados (#!warn) sem abortar.
+    for w in &interp_module.pragma_warnings {
+        eprintln!("{w:?}");
+    }
 
     let ty = interp_module.entry_ty();
     let raw = interp_module.interp_eval()?;

@@ -26,14 +26,14 @@ use kata_comptime::run_comptime_pass;
 use kata_core::ty::Ty;
 use kata_inference::infer_module;
 use kata_lexer::lex_with_recovery;
-use kata_monomorph::{MonoModule, monomorphize};
+use kata_monomorph::{monomorphize, MonoModule};
 use kata_optimizer::optimize;
 use kata_parser::{parse_decls_only, parse_with_arity_recovery, parse_with_recovery, scan_lambdas};
-use kata_resolution::{ModuleLoader, ResolvedModule, extract_arities, resolve_with_prelude};
+use kata_resolution::{extract_arities, resolve_with_prelude, ModuleLoader, ResolvedModule};
 use kata_tree_shaking::{tree_shake, tree_shake_preserve_tests};
 
 use crate::imports;
-use crate::{IntoReport, merge_resolved};
+use crate::{merge_resolved, IntoReport};
 
 // ── Erros ─────────────────────────────────────────────────
 
@@ -113,6 +113,8 @@ pub(crate) struct CompiledModule {
     pub depth_limit: Option<u32>,
     source: String,
     file_path: Option<String>,
+    /// Warnings de pragmas rebaixados (#!warn) coletados no pipeline.
+    pub pragma_warnings: Vec<miette::Report>,
 }
 
 impl CompiledModule {
@@ -178,6 +180,8 @@ pub(crate) struct InterpModule {
     pub inner: kata_inference::TypedModule,
     /// Enum registry do módulo — para mapear tag → nome de variante em show.
     pub enum_registry: kata_core::EnumRegistry,
+    /// Warnings de pragmas rebaixados (#!warn) coletados no pipeline.
+    pub pragma_warnings: Vec<miette::Report>,
 }
 
 impl InterpModule {
@@ -246,6 +250,13 @@ pub(crate) struct Pipeline {
     depth_limit: Option<u32>,
     /// Arquivos embutidos via @embed_text/@embed_bytes (para dependências).
     embed_deps: Vec<std::path::PathBuf>,
+    /// Overrides de severity vindos de pragmas `#!allow`/`#!warn`/`#!deny`.
+    /// Construído em `parse()` a partir de `module.pragmas`.
+    pragma_overrides: kata_diagnostics::PragmaOverrides,
+    /// Warnings coletados pelo filtro de pragmas (`#!warn` rebaixa
+    /// erros ajustáveis para warnings). Impressos no final do pipeline
+    /// sem abortar a compilação.
+    pragma_warnings: Vec<miette::Report>,
 }
 
 impl Pipeline {
@@ -263,6 +274,8 @@ impl Pipeline {
             mono: None,
             depth_limit: None,
             embed_deps: Vec::new(),
+            pragma_overrides: kata_diagnostics::PragmaOverrides::new(),
+            pragma_warnings: Vec::new(),
         }
     }
 
@@ -352,6 +365,18 @@ impl Pipeline {
                 .collect());
         }
 
+        // Processar pragmas `#!` — validar e construir overrides.
+        // Pragmas inválidos (código inexistente, não-ajustável) são
+        // erros; pragmas redundantes são warnings. Ambos são
+        // reportados imediatamente.
+        let registry = kata_diagnostics::DiagnosticRegistry::new();
+        let (pragma_errors, overrides) =
+            crate::pragma_processing::process_pragmas(&module.pragmas, &registry);
+        if !pragma_errors.is_empty() {
+            return Err(pragma_errors);
+        }
+        self.pragma_overrides = overrides;
+
         self.module = Some(module);
         Ok(self)
     }
@@ -401,9 +426,14 @@ impl Pipeline {
             Some(&prelude.type_env),
         )
         .map_err(|e| {
-            e.into_iter()
+            let reports: Vec<_> = e
+                .into_iter()
                 .map(|re| re.into_report_with_source(&self.source, self.file_path.as_deref()))
-                .collect::<Vec<_>>()
+                .collect();
+            let (errs, warns) =
+                crate::pragma_processing::filter_errors(reports, &self.pragma_overrides);
+            self.pragma_warnings.extend(warns);
+            errs
         })?;
         let mut resolved = merge_resolved(prelude, user);
         resolved.embed_dependencies.append(&mut self.embed_deps);
@@ -416,10 +446,16 @@ impl Pipeline {
             &resolved.enum_registry,
         );
         if !orphan_errors.is_empty() {
-            return Err(orphan_errors
+            let reports: Vec<_> = orphan_errors
                 .into_iter()
                 .map(|re| re.into_report_with_source(&self.source, self.file_path.as_deref()))
-                .collect());
+                .collect();
+            let (errs, warns) =
+                crate::pragma_processing::filter_errors(reports, &self.pragma_overrides);
+            self.pragma_warnings.extend(warns);
+            if !errs.is_empty() {
+                return Err(errs);
+            }
         }
 
         self.imports = imports;
@@ -471,9 +507,28 @@ impl Pipeline {
         }
         let resolved = &resolved; // re-borrow como imutável
 
-        let mut typed = infer_module(module, resolved).map_err(|e| {
-            one_err(e.into_report_with_source(&self.source, self.file_path.as_deref()))
-        })?;
+        let mut typed = match infer_module(module, resolved) {
+            Ok(t) => t,
+            Err(e) => {
+                let report = e.into_report_with_source(&self.source, self.file_path.as_deref());
+                let (errs, warns) =
+                    crate::pragma_processing::filter_errors(vec![report], &self.pragma_overrides);
+                self.pragma_warnings.extend(warns);
+                if errs.is_empty() {
+                    // Pragma `#!allow` ou `#!warn` silenciou/rebaixou o
+                    // erro, mas infer_module retornou Err — não temos
+                    // TAST. Imprimir warnings coletados e abortar.
+                    for w in &self.pragma_warnings {
+                        eprintln!("{w:?}");
+                    }
+                    return Err(vec![miette::Report::msg(
+                        "pragma silenced a fatal error — cannot continue without TAST",
+                    )]);
+                } else {
+                    return Err(errs);
+                }
+            }
+        };
 
         // Injetar constants importadas como ConstantBinding no TypedModule.
         // O valor já está avaliado (literal/snapshot) — o comptime pass
@@ -610,6 +665,7 @@ impl Pipeline {
         Ok(InterpModule {
             inner: mono.inner,
             enum_registry,
+            pragma_warnings: self.pragma_warnings,
         })
     }
 
@@ -638,6 +694,7 @@ impl Pipeline {
             depth_limit: self.depth_limit,
             source: self.source,
             file_path: self.file_path,
+            pragma_warnings: self.pragma_warnings,
         })
     }
 }

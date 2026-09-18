@@ -8,6 +8,10 @@
 
 pub(crate) mod frontend;
 pub(crate) mod middleend;
+pub(crate) mod registry;
 
 pub use frontend::{FrontendError, MietteSpan};
 pub use middleend::MiddleError;
+pub use registry::{
+    DefaultSeverity, DiagnosticMeta, DiagnosticRegistry, PragmaError, PragmaOverrides,
+};
