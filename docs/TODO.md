@@ -1,28 +1,11 @@
 # TODO — Kata-Lang
 
-Único arquivo de pendências. Atualizado 2026-09-17 (auditoria: connect TCP non-blocking resolvido e removido; 5 exemplos pré-existentes catalogados).
+Único arquivo de pendências. Atualizado 2026-09-18 (refined_collections.kata resolvido: colisão de nomes na monomorfização de show genérico; exemplos de módulos removidos).
 
 ---
 
 ## Pendentes
 ### 🟡 Médio
-
-#### Exemplos de módulos quebram ao rodar diretamente (3 arquivos)
-
-`imports.kata`, `mock_math.kata`, `prelude_user.kata` falham com
-`módulo não encontrado` ou `nome não vinculado` quando executados via
-`kata run` isoladamente. Os três são arquivos de módulo auxiliares,
-não entry points standalone — `imports.kata` depende de `mock_math`
-no mesmo diretório, e os outros dois usam `export` que não resolve
-sem o módulo importador.
-
-**Impacto:** `kata run examples/modules/imports.kata` não encontra
-`modules.mock_math` (path resolution relativo). Os outros dois não
-fazem sentido como entry point.
-
-**Caminho:** (a) adicionar `--module-path` ao `kata run` para resolver
-imports relativos, ou (b) marcar esses arquivos como não-executáveis
-no harness de exemplos (só compilam, não rodam).
 
 #### `private_type.kata` — family_extension_invalid
 
@@ -36,20 +19,6 @@ mal escrito) ou uma limitação real do family refinement.
 **Caminho:** revisar o predicado `NonZero` e o tipo `Internal` no
 exemplo. Se o exemplo está correto, investigar por que o family
 checker rejeita a extensão.
-
-#### `refined_collections.kata` — codegen.unsupported: Closure sem ffi_symbol
-
-`show_A_Int` (função de show gerada para tipo refinado) não é
-lowered corretamente — o codegen encontra uma `Closure` cujo callee
-não é `Ident` e não tem `ffi_symbol`.
-
-**Impacto:** exemplo não roda. Limitação conhecida do codegen com
-show functions para tipos refinados com collections.
-
-**Caminho:** investigar o lowering de `show` em tipos refinados —
-o callee deveria ser resolvido como `Ident` ou ter um `ffi_symbol`
-atribuído. Pode requerer mudança no `function_def` ou no
-`show_synthesis` da inferência.
 
 #### Trampoline do scheduler engole erros (interp)
 

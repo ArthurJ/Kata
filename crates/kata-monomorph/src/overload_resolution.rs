@@ -174,12 +174,19 @@ pub(crate) fn instantiate_generic_closure(
 
     // Gera nome canônico da instância.
     let subs_key = canonicalize_subs(&oi.type_params, &subs);
-    let instance_name = format!("{name}_{subs_key}");
 
     // Procura a função original (template) pelo nome mangled (ffi_symbol)
     // ou pelo nome direto. Isto determina se a instância tem corpo Kata
     // (função sintetizada) ou é FFI pura (sem corpo).
     let func_lookup_name = oi.ffi_symbol.as_deref().unwrap_or(name);
+
+    // O prefixo do instance_name deve ser o func_lookup_name (ffi_symbol
+    // mangled quando existente), não o nome do callee. Sem isso, dois
+    // overloads genéricos diferentes com o mesmo nome (ex: `show :: List::A`
+    // e `show :: Array::A`) e mesmo type param produzem o mesmo instance_name
+    // (ex: `show_A_Int`), causando colisão — a segunda instância é skipada
+    // mas o callee é reescrito para um nome que não existe na symbol_table.
+    let instance_name = format!("{func_lookup_name}_{subs_key}");
     let orig_func = ctx.functions.iter().find(|f| f.name == func_lookup_name);
 
     // Verifica se a instância já existe.
