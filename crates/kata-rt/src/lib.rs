@@ -6,13 +6,13 @@
 //! O compilador conhece apenas o enum `FfiSymbol` e as 3 strings de mapeamento
 //! (`"i64"`, `"f64"`, `"kata_rt_string"`). Toda a implementação vive aqui.
 
-pub(crate) mod arc;
 pub(crate) mod arena;
 pub(crate) mod array;
 pub(crate) mod bigint;
 pub(crate) mod byte;
 pub(crate) mod bytes;
 pub(crate) mod cache;
+pub(crate) mod capture_box;
 pub(crate) mod channel;
 pub(crate) mod convert;
 pub(crate) mod dict;
@@ -55,7 +55,6 @@ pub use rational::rat_from_text;
 // C-ABI kata_rt_* no próprio text.rs os usam internamente).
 
 // Re-exports de funções C-ABI para o codegen registrar no JIT.
-pub use arc::kata_rt_alloc_arc;
 pub use arena::{
     kata_rt_arena_alloc, kata_rt_arena_create, kata_rt_arena_destroy,
     kata_rt_get_root_arena_handle, set_rt_ptr,
@@ -80,6 +79,7 @@ pub use bytes::{
     kata_rt_bytes_len, kata_rt_bytes_neq, kata_rt_bytes_not, kata_rt_bytes_or, kata_rt_bytes_set,
     kata_rt_bytes_show, kata_rt_bytes_slice, kata_rt_bytes_xor,
 };
+pub use capture_box::kata_rt_alloc_capture_box;
 pub use convert::{kata_rt_bytes_to_text, kata_rt_int_to_bytes, kata_rt_text_to_bytes};
 pub use dict::kata_rt_dict_merge;
 pub use dict::{

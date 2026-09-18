@@ -118,9 +118,9 @@ pub enum FfiSymbol {
     /// `kata_rt_sleep(ms) -> ()` — sleep cooperativo (suspende fiber até deadline).
     Sleep,
 
-    // ── Arc<T> / CaptureBox ───────────────────────
-    /// `kata_rt_alloc_arc(fn_ptr, captures_ptr, n_captures) -> box_ptr`
-    AllocArc,
+    // ── CaptureBox ───────────────────────────
+    /// `kata_rt_alloc_capture_box(fn_ptr, captures_ptr, n_captures) -> box_ptr`
+    AllocCaptureBox,
 
     // ── Collections ───────────────────────────
     /// `kata_rt_list_nil() -> ptr` — retorna 0 (null = Nil).
@@ -554,7 +554,7 @@ impl FfiSymbol {
             FfiSymbol::YieldCheck => "kata_rt_yield_check",
             FfiSymbol::SetTestTimeout => "kata_rt_set_test_timeout",
             FfiSymbol::Sleep => "kata_rt_sleep",
-            FfiSymbol::AllocArc => "kata_rt_alloc_arc",
+            FfiSymbol::AllocCaptureBox => "kata_rt_alloc_capture_box",
             // Collections
             FfiSymbol::ListNil => "kata_rt_list_nil",
             FfiSymbol::ListCons => "kata_rt_list_cons",
@@ -817,7 +817,7 @@ impl FfiSymbol {
             FfiSymbol::SetTestTimeout => Ty::Unit,
             FfiSymbol::Sleep => Ty::Unit,
             // Arc<T> / CaptureBox
-            FfiSymbol::AllocArc => Ty::int(),
+            FfiSymbol::AllocCaptureBox => Ty::int(),
             // Collections — todas retornam I64 (ptr ou valor i64)
             FfiSymbol::ListNil => Ty::int(),
             FfiSymbol::ListCons => Ty::int(),
@@ -1073,7 +1073,7 @@ impl FfiSymbol {
             FfiSymbol::YieldCheck,
             FfiSymbol::SetTestTimeout,
             FfiSymbol::Sleep,
-            FfiSymbol::AllocArc,
+            FfiSymbol::AllocCaptureBox,
             // Collections
             FfiSymbol::ListNil,
             FfiSymbol::ListCons,

@@ -1,7 +1,7 @@
 //! `TypeShape` — projeção runtime de `Ty` para reflexão estrutural.
 //!
 //! Descarta InferVar/Generic/Interface (mapeados para Unit graceful).
-//! O codegen emite `register_type(ptr, type_id)` após cada `alloc_arc`,
+//! O codegen emite `register_type(ptr, type_id)` após cada `alloc_capture_box`,
 //! permitindo que `typeof` e `pretty_print` funcionem em runtime.
 //!
 //! Scaffolding para fios futuros (reflexão runtime, debugger).

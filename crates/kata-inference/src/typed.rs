@@ -56,7 +56,7 @@ pub enum TypedExprKind {
     ///
     /// As variáveis capturadas pelo callee são lidas de `Lambda.captures`
     /// (single source of truth). O call site aloca um CaptureBox via
-    /// `kata_rt_alloc_arc` e passa `box_ptr` como primeiro arg.
+    /// `kata_rt_alloc_capture_box` e passa `box_ptr` como primeiro arg.
     Closure {
         callee: Box<Spanned<TypedExpr>>,
         args: Vec<Spanned<TypedExpr>>,
@@ -165,7 +165,7 @@ pub enum TypedExprKind {
         clauses: Vec<TypedLambdaClause>,
         /// Variáveis capturadas do escopo externo.
         /// Populado por collect_captures. O codegen aloca um CaptureBox
-        /// (via `kata_rt_alloc_arc`) e passa `box_ptr` como primeiro arg
+        /// (via `kata_rt_alloc_capture_box`) e passa `box_ptr` como primeiro arg
         /// da função JIT. Sempre Heap — sem escape analysis.
         captures: Vec<CaptureInfo>,
     },

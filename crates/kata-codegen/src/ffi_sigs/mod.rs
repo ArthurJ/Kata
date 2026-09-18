@@ -118,7 +118,7 @@ pub(crate) fn ffi_needs_arena(sym_name: &str) -> bool {
             FfiSymbol::ArenaAlloc
                 | FfiSymbol::ArenaDestroy
                 | FfiSymbol::StoreSumResult
-                | FfiSymbol::AllocArc
+                | FfiSymbol::AllocCaptureBox
                 | FfiSymbol::ListCons
                 | FfiSymbol::ArrayAlloc
                 | FfiSymbol::RangeAlloc

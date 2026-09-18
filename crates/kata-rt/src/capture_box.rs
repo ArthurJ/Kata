@@ -1,6 +1,6 @@
 //! CaptureBox para closures com captura.
 //!
-//! `kata_rt_alloc_arc(rt, fn_ptr, captures_ptr, n_captures, arena_handle)` aloca
+//! `kata_rt_alloc_capture_box(rt, fn_ptr, captures_ptr, n_captures, arena_handle)` aloca
 //! um CaptureBox na arena especificada. O box contém:
 //!
 //! ```text
@@ -30,7 +30,7 @@ const HEADER_SIZE: usize = 16;
 /// `n_captures` é o número de valores capturados.
 /// `arena_handle` é o handle da arena onde o box é alocado.
 #[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_alloc_arc(
+pub extern "C" fn kata_rt_alloc_capture_box(
     rt: i64,
     fn_ptr: i64,
     captures_ptr: i64,

@@ -423,7 +423,7 @@ pub(crate) fn lower_closure(
 ///
 /// 1. Aloca um array temporário de `n_captures * 8` bytes na arena disponível.
 /// 2. Preenche o array com os valores das captures (lidos do var_map).
-/// 3. Chama `kata_rt_alloc_arc(fn_ptr, array_ptr, n_captures, arena)` → `box_ptr`.
+/// 3. Chama `kata_rt_alloc_capture_box(fn_ptr, array_ptr, n_captures, arena)` → `box_ptr`.
 ///
 /// O CaptureBox contém: fn_ptr (offset 0), n_captures (offset 8),
 /// captures[0..n] (offset 16+).
@@ -439,18 +439,19 @@ pub(crate) fn alloc_capture_box(
 
     let capture_arena = crate::lowering::escape_arena::arena_handle_for_escape(escape, ctx);
 
-    let alloc_arc_ref = ctx.ffi_refs.get("kata_rt_alloc_arc").ok_or_else(|| {
-        super::CodegenError::FfiSymbolNotFound {
-            symbol: "kata_rt_alloc_arc".into(),
-        }
-    })?;
+    let alloc_capture_box_ref = ctx
+        .ffi_refs
+        .get("kata_rt_alloc_capture_box")
+        .ok_or_else(|| super::CodegenError::FfiSymbolNotFound {
+            symbol: "kata_rt_alloc_capture_box".into(),
+        })?;
 
     if captures.is_empty() {
         // Sem captures: cria box com fn_ptr e n_captures=0, sem alocar array.
         let null_array = ctx.builder.ins().iconst(I64, 0);
         let n_val = ctx.builder.ins().iconst(I64, 0);
         let arc_inst = ctx.builder.ins().call(
-            *alloc_arc_ref,
+            *alloc_capture_box_ref,
             &[rt_val, func_ptr, null_array, n_val, capture_arena],
         );
         return Ok(ctx.builder.inst_results(arc_inst)[0]);
@@ -484,7 +485,7 @@ pub(crate) fn alloc_capture_box(
 
     let n_val = ctx.builder.ins().iconst(I64, n);
     let arc_inst = ctx.builder.ins().call(
-        *alloc_arc_ref,
+        *alloc_capture_box_ref,
         &[rt_val, func_ptr, array_ptr, n_val, capture_arena],
     );
     let box_ptr = ctx.builder.inst_results(arc_inst)[0];

@@ -44,9 +44,9 @@ pub(crate) fn sig_for(sym: FfiSymbol) -> Option<Signature> {
         FfiSymbol::Sleep => {
             sig.params.push(AbiParam::new(I64)); // ms (SMI-tagged)
         }
-        // ── Arc<T> / CaptureBox ──
-        // A2: alloc_arc: (rt, fn_ptr, captures_ptr, n_captures, arena_handle) -> box_ptr
-        FfiSymbol::AllocArc => {
+        // ── CaptureBox ──
+        // alloc_capture_box: (rt, fn_ptr, captures_ptr, n_captures, arena_handle) -> box_ptr
+        FfiSymbol::AllocCaptureBox => {
             sig.params.push(AbiParam::new(I64)); // rt
             sig.params.push(AbiParam::new(I64)); // fn_ptr
             sig.params.push(AbiParam::new(I64)); // captures_ptr

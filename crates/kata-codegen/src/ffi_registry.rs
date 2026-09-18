@@ -183,8 +183,11 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
         "kata_rt_spawn_process",
         rt::kata_rt_spawn_process as *const u8,
     );
-    // Arc<T> / CaptureBox
-    builder.symbol("kata_rt_alloc_arc", rt::kata_rt_alloc_arc as *const u8);
+    // CaptureBox
+    builder.symbol(
+        "kata_rt_alloc_capture_box",
+        rt::kata_rt_alloc_capture_box as *const u8,
+    );
     // Collections
     builder.symbol("kata_rt_list_nil", rt::kata_rt_list_nil as *const u8);
     builder.symbol("kata_rt_list_cons", rt::kata_rt_list_cons as *const u8);
@@ -728,7 +731,7 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         YieldCheck,
         SetTestTimeout,
         Sleep,
-        AllocArc,
+        AllocCaptureBox,
         // Collections
         ListNil,
         ListCons,

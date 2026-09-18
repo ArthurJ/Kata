@@ -393,8 +393,8 @@ pub(crate) fn ffi_dispatch(
             Ok(ptr as i64)
         }
 
-        // ── Arc (CaptureBox) ─────────────────────────────────
-        "kata_rt_alloc_arc" => Ok(rt::kata_rt_alloc_arc(
+        // ── CaptureBox ─────────────────────────────────────
+        "kata_rt_alloc_capture_box" => Ok(rt::kata_rt_alloc_capture_box(
             rt_ptr, args[0], args[1], args[2], arena,
         )),
 
