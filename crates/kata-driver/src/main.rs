@@ -51,7 +51,7 @@ enum Command {
         #[arg(long = "interp")]
         interp: bool,
     },
-    /// Descobre e executa testes `@test` em arquivo ou diretório
+    /// Descobre e executa testes `#!test` e `@test` em arquivo ou diretório
     Test {
         /// Arquivo `.kata` ou diretório com `*.kata` (recursivo)
         path: String,
