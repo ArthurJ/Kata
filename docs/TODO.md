@@ -1,30 +1,12 @@
 # TODO — Kata-Lang
 
-Único arquivo de pendências. Atualizado 2026-09-18 (SIGSEGV de @test args Int resolvido: normalização Grouping→Tuple em action_infer.rs; discussão sobre sintaxe de action call adicionada ao Futuro).
+Único arquivo de pendências. Atualizado 2026-09-18.
+Itens resolvidos devem ser removidos — o histórico vive no git.
 
 ---
 
-## Resolvidos
-### ✅ `@test{expects}` com args Int causa SIGSEGV
-
-**Causa raiz:** `@test{args: (42)}` era parseado como `Grouping(IntLit 42)`,
-não `Tuple([IntLit 42])`. O codegen do wrapper lowera Grouping como a
-expressão interna (SMI), passando o SMI como `args_ptr`. A action faz
-`load(I64, args_ptr, 0)` — dereferencia o SMI como ponteiro → SIGSEGV.
-
-O mesmo bug não afeta `args: (42,)` (Tuple explícita), `args: (3, 4)`
-(2+ elementos), `args: ("texto")` (TextLit produz ponteiro válido), ou
-actions sem args. Funções puras e patterns não são afetados — Grouping
-em funções é transparente (descascado pelo inference), e patterns
-desembrulham `(x)` para `x` no parser.
-
-**Correção:** normalização `Grouping → Tuple de 1` em `action_infer.rs`,
-mesma lógica que já existia em `action_call.rs:168-191`. A normalização
-está duplicada em 4 pontos (action_call, action_infer, csp_concurrency,
-log_builtins) — ver item no Futuro sobre centralização.
-
-Testes de regressão: `test_com_1_arg_int_grouping_passa` e
-`test_com_1_arg_int_expects_passa` em `test_runner_e2e.rs`.
+## Pendentes
+### 🟡 Médio
 
 #### `private_type.kata` — family_extension_invalid
 
