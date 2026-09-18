@@ -680,14 +680,32 @@ len "hello"              # 5 — text (COUNTABLE dispatch, kata_rt_string_len)
     ```
   A ordem das diretivas importa (avaliação sequencial).
 - Catálogo: `@cache` (strategy: LRU/FIFO/MRU/LFU, capacity configurável), `@timer` (topic, msg, medição de tempo via `kata_rt_timer_now`), `@test`, `@log`, `@associative`, `@commutative`, `@ffi`, `@builtin`. (`spawn!` é special form, não diretiva — veja abaixo.) `@comptime` foi removido (Fase 5) — usar `constant` para bindings de módulo avaliados em compile-time.
+- **`@test` bifurca**: `@test("desc")` sem `expects` migra para `#!test` (marker puro — metadado). `@test{desc, expects: "..."}` permanece diretiva `@` (gera wrapper com verificação ativa — extensão de funcionalidade).
 - **Relações**:
   - `@test` → tree shaking remove em produção.
+  - `#!test` → tree shaking remove em produção (igual a `@test`).
   - `@associative` + `@commutative` → habilitam TRMA.
   - `@ffi` → informa linker de símbolo externo.
   - `@builtin` → marca função para síntese de nó TAST especializado (map/filter/fold).
   - `@cache` + `@timer` + `@log` com tail calls → wrapper/inner split: wrapper executa intrínsecas (cache/timer) e hooks de `@log` (enter/exit), inner executa body com TCO. Stack O(1). `@log{enter}` dispara 1 vez (wrapper); `@log{exit}` dispara 1 vez (epílogo do wrapper).
   - `spawn!` → special form que spawn processo OS separado (multiprocess). Aceita tupla (converte implicitamente) ou dict com `raw:`/`serialized:`. Não é diretiva — é operação ao lado de `fork!`.
   - `@log` → veja seção dedicada abaixo.
+
+### Pragmas `#!` (pseudo-comentários)
+
+```kata
+#!allow type.incomplete_interface
+#!test("soma correta")
+#!test{desc: "com args", args: (2, 3), timeout: 5000}
+#!bench-config iterations: 1000
+```
+
+- **Sintaxe**: `#!<token> <payload>`. `#` = comentário, `!` = preservar no AST.
+- **Escopo posicional**: início de linha → declaração inteira; inline → unidade sintática da linha; linha própria em bloco → próximo elemento.
+- **Conjunto fechado do compilador** (sem prefixo): `allow`/`warn`/`deny` (controle de diagnóstico), `test` (marker de test runner), `deprecated`/`must_use` (futuros).
+- **Pragmas externos**: prefixo obrigatório `#!<prefixo>-<resto>` (ex: `#!bench-config`). Parser rejeita token sem prefixo não reconhecido.
+- **`#!` vs `@`**: `#!` = metadado externo à lógica (programa faz a mesma coisa com ou sem). `@` = extensão de funcionalidade (programa faz algo que não faria sem). Teste: remover a anotação muda algo? Sim → `@`. Não → `#!`.
+- **`#!test`**: marker puro para o test runner. `kata test` descobre e executa. Sem `expects`/`policy` (esses permanecem `@test{expects}`). Tree shaking remove em produção.
 
 ---
 
