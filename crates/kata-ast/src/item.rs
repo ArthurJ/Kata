@@ -73,6 +73,9 @@ pub enum Item {
         param_defaults: Vec<Option<Spanned<Expr>>>,
         ret: Spanned<TypeExpr>,
         directives: Vec<Directive>,
+        /// Pragmas `#!` anexados a esta action (escopo posicional).
+        /// `#!test("desc")` antes de uma action é marker puro para o test runner.
+        pragmas: Vec<crate::item::Pragma>,
         /// Body da Action (statements sequenciais).
         body: Vec<crate::expr::ActionStmt>,
     },
