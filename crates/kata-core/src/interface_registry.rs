@@ -77,6 +77,11 @@ pub struct ImplEntry {
     /// implementou tudo. Erro de `type.missing_overload` só dispara
     /// no uso real do construtor, não na síntese eager.
     pub allows_incomplete: bool,
+    /// Bounds dos type params do tipo, extraídos da cláusula `where`
+    /// do `data` correspondente. Pares `(param_name, iface_name)`.
+    /// `Ex: vec![("T", "SCALAR")]` para `data Complex (...) where T implements SCALAR`.
+    /// Vazio para tipos não-genéricos ou sem bounds.
+    pub type_bounds: Vec<(String, String)>,
 }
 
 /// Método dentro de impl — tipos já resolvidos.
@@ -291,6 +296,76 @@ impl InterfaceRegistry {
             }
         }
         false
+    }
+
+    /// Versão genérica de `type_implements` para tipos paramétricos.
+    ///
+    /// Verifica que `type_name` aplicado a `type_args` implementa `iface_name`.
+    /// Encontra o `ImplEntry` correspondente. Se o impl tem `type_bounds`,
+    /// extrai o nome de cada type arg e verifica que satisfaz o bound
+    /// correspondente via `type_implements`. Se todos satisfazem, retorna true.
+    ///
+    /// `type_args` são os argumentos concretos (ex: `[Ty::Prim(Int), Ty::Prim(Int)]`
+    /// para `Complex::(Int, Int)`). A função extrai o nome de cada arg para
+    /// consultar `type_implements` — args que não têm um nome simples
+    /// (ex: `Ty::Var`, `Ty::Struct` aninhado) não satisfazem bounds nominais.
+    pub fn type_implements_generic(
+        &self,
+        type_name: &str,
+        type_args: &[Ty],
+        iface_name: &str,
+    ) -> bool {
+        // Primeiro verifica se o tipo implementa a interface (direto ou herança).
+        // Isso cobre o caso onde type_bounds é vazio (tipo genérico sem bounds).
+        let impl_entry = self
+            .impls
+            .iter()
+            .find(|e| e.type_name == type_name && e.interface_name == iface_name);
+
+        // Se não há impl direto, verifica via herança de interface.
+        if impl_entry.is_none() {
+            // Tenta encontrar qualquer impl do tipo que herda iface_name.
+            let inherits = self
+                .impls
+                .iter()
+                .filter(|e| e.type_name == type_name)
+                .any(|e| self.iface_inherits(&e.interface_name, iface_name));
+            if !inherits {
+                return false;
+            }
+            // Se herda mas não há impl direto, não há type_bounds para verificar.
+            return true;
+        }
+
+        let entry = impl_entry.unwrap();
+
+        // Se não há type_bounds, a verificação é a mesma de type_implements.
+        if entry.type_bounds.is_empty() {
+            return true;
+        }
+
+        // Verifica cada bound: para cada (param_name, iface_name) em type_bounds,
+        // encontrar o type arg correspondente e verificar que implementa o bound.
+        // type_bounds está na ordem dos type_params do tipo.
+        for (i, (param_name, bound_iface)) in entry.type_bounds.iter().enumerate() {
+            let arg = match type_args.get(i) {
+                Some(a) => a,
+                None => return false, // args insuficientes
+            };
+            let arg_name = extract_type_name(arg);
+            match arg_name {
+                Some(name) => {
+                    if !self.type_implements(&name, bound_iface) {
+                        return false;
+                    }
+                }
+                None => return false, // arg não tem nome nominal
+            }
+            // Silenciar warning de unused variable
+            let _ = param_name;
+        }
+
+        true
     }
 
     /// Verifica se `iface` herda (direta ou indiretamente) de `target`.
@@ -528,6 +603,23 @@ impl InterfaceRegistry {
                 self.ambiguous.insert(name.clone());
             }
         }
+    }
+}
+
+/// Extrai o nome nominal de um `Ty` para verificação de bounds.
+///
+/// `Ty::Prim(Int)` → `"Int"`, `Ty::Struct(StructKey::Plain(name))` → `name`,
+/// `Ty::Sum(name)` → `name`. Outros (Var, Generic, etc.) → `None`.
+fn extract_type_name(ty: &Ty) -> Option<String> {
+    use crate::ty::PrimTy;
+    match ty {
+        Ty::Prim(PrimTy::Int) => Some("Int".to_string()),
+        Ty::Prim(PrimTy::Float) => Some("Float".to_string()),
+        Ty::Prim(PrimTy::Text) => Some("Text".to_string()),
+        Ty::Prim(PrimTy::Rational) => Some("Rational".to_string()),
+        Ty::Sum(name) => Some(name.clone()),
+        Ty::Struct(key) => Some(key.name().to_string()),
+        _ => None,
     }
 }
 

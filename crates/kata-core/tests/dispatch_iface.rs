@@ -45,6 +45,7 @@ fn make_impl_entry(type_name: &str, iface_name: &str) -> ImplEntry {
         methods: Vec::new(),
         span: Span::synthetic(),
         allows_incomplete: false,
+        type_bounds: vec![],
     }
 }
 

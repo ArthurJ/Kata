@@ -124,6 +124,7 @@ pub(crate) fn synthesize_show_functions(
                 iface_params: vec![],
                 span: Span::synthetic(),
                 allows_incomplete: false,
+                type_bounds: vec![],
                 methods: vec![ImplMethodInfo {
                     name: "show".to_string(),
                     params: vec![param_ty.clone()],
@@ -312,6 +313,7 @@ pub(crate) fn synthesize_show_functions(
                 iface_params: vec![],
                 span: Span::synthetic(),
                 allows_incomplete: false,
+                type_bounds: vec![],
                 methods: vec![ImplMethodInfo {
                     name: "show".to_string(),
                     params: vec![param_ty.clone()],

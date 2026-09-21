@@ -251,6 +251,21 @@ pub(crate) fn run_pass0(
                         && dc.code == "type.incomplete_interface")
                 });
 
+                // Extrair type_bounds do StructInfo do tipo, se for genérico.
+                // `data Complex (...) where T implements SCALAR` registra
+                // `type_params: Some([TypeParamDecl { name: "T", bound: Some("SCALAR") }])`
+                // no StructRegistry. O impl herda esses bounds.
+                let type_bounds = struct_registry
+                    .get(type_name)
+                    .and_then(|info| info.type_params.as_ref())
+                    .map(|params| {
+                        params
+                            .iter()
+                            .filter_map(|p| p.bound.as_ref().map(|b| (p.name.clone(), b.clone())))
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+
                 // Registrar impl com methods vazios — serão preenchidos no 0b.
                 let entry = ImplEntry {
                     origin: origin.to_string(),
@@ -261,6 +276,7 @@ pub(crate) fn run_pass0(
                     methods: Vec::new(),
                     span: item.item.span,
                     allows_incomplete,
+                    type_bounds,
                 };
                 if let Err(e) = interface_registry.register_impl(entry) {
                     eprintln!("[resolution] warning: {e}");
@@ -507,12 +523,7 @@ pub(crate) fn run_pass0(
                                 }
                             })
                             .collect();
-                        struct_registry.register_generic(
-                            origin,
-                            name,
-                            field_infos,
-                            type_params,
-                        );
+                        struct_registry.register_generic(origin, name, field_infos, type_params);
                     } else {
                         struct_registry.register(origin, name, field_infos);
                     }
@@ -1098,110 +1109,102 @@ pub(crate) fn run_pass0(
         // Cross-type overloads (param_types diferentes) NÃO pulam
         // o default method — elas cobrem combinações de tipos diferentes.
         let defined_sigs: Vec<(String, Vec<Ty>)> = deferred
-                .methods
-                .iter()
-                .map(|m| {
-                    let pts: Vec<Ty> = m
-                        .params
-                        .iter()
-                        .map(|t| {
-                            let ty = resolve_type_expr(
-                                &t.node,
-                                type_env,
-                                interface_registry,
-                                &*struct_registry,
-                                None,
-                            );
-                            instantiate_family_for_concrete(
-                                &ty,
-                                &deferred.type_name,
-                                struct_registry,
-                            )
-                        })
-                        .collect();
-                    (m.name.clone(), pts)
-                })
-                .collect();
-            for sig in &iface_sigs {
-                if let Some(default_clauses) = &sig.default_body {
-                    let concrete_ty = resolve_type_expr(
-                        &kata_ast::TypeExpr::Named(deferred.type_name.clone()),
-                        type_env,
-                        interface_registry,
-                        &*struct_registry,
-                        None,
-                    );
-                    let param_types: Vec<Ty> = sig
-                        .params
-                        .iter()
-                        .map(|t| {
-                            let ty = t.substitute_self(&concrete_ty);
-                            instantiate_family_for_concrete(
-                                &ty,
-                                &deferred.type_name,
-                                struct_registry,
-                            )
-                        })
-                        .collect();
-                    let return_type = {
-                        let ty = sig.ret.substitute_self(&concrete_ty);
+            .methods
+            .iter()
+            .map(|m| {
+                let pts: Vec<Ty> = m
+                    .params
+                    .iter()
+                    .map(|t| {
+                        let ty = resolve_type_expr(
+                            &t.node,
+                            type_env,
+                            interface_registry,
+                            &*struct_registry,
+                            None,
+                        );
                         instantiate_family_for_concrete(&ty, &deferred.type_name, struct_registry)
-                    };
+                    })
+                    .collect();
+                (m.name.clone(), pts)
+            })
+            .collect();
+        for sig in &iface_sigs {
+            if let Some(default_clauses) = &sig.default_body {
+                let concrete_ty = resolve_type_expr(
+                    &kata_ast::TypeExpr::Named(deferred.type_name.clone()),
+                    type_env,
+                    interface_registry,
+                    &*struct_registry,
+                    None,
+                );
+                let param_types: Vec<Ty> = sig
+                    .params
+                    .iter()
+                    .map(|t| {
+                        let ty = t.substitute_self(&concrete_ty);
+                        instantiate_family_for_concrete(&ty, &deferred.type_name, struct_registry)
+                    })
+                    .collect();
+                let return_type = {
+                    let ty = sig.ret.substitute_self(&concrete_ty);
+                    instantiate_family_for_concrete(&ty, &deferred.type_name, struct_registry)
+                };
 
-                    // Pular se o impl já define este método com os mesmos
-                    // param_types (override real). Cross-type overloads
-                    // (param_types diferentes) não pular o default method.
-                    // Também verifica signatures já registradas por OUTROS
-                    // blocos `implements` do mesmo tipo — sem isso, default
-                    // methods de supertraits são regenerados duplicadamente
-                    // quando um novo impl (ex: SCALAR extends NUM) é
-                    // processado, causando erros de dispatch no corpo.
-                    let is_overridden = defined_sigs
+                // Pular se o impl já define este método com os mesmos
+                // param_types (override real). Cross-type overloads
+                // (param_types diferentes) não pular o default method.
+                // Também verifica signatures já registradas por OUTROS
+                // blocos `implements` do mesmo tipo — sem isso, default
+                // methods de supertraits são regenerados duplicadamente
+                // quando um novo impl (ex: SCALAR extends NUM) é
+                // processado, causando erros de dispatch no corpo.
+                let is_overridden = defined_sigs
+                    .iter()
+                    .any(|(name, pts)| name == &sig.name && pts == &param_types)
+                    || signatures
                         .iter()
-                        .any(|(name, pts)| name == &sig.name && pts == &param_types)
-                        || signatures.iter().any(|s| {
-                            s.name == sig.name && s.param_types == param_types
-                        });
-                    if is_overridden {
-                        continue;
-                    }
+                        .any(|s| s.name == sig.name && s.param_types == param_types);
+                if is_overridden {
+                    continue;
+                }
 
-                    // Se o impl tem #!allow type.incomplete_interface, não
-                    // instanciar métodos default da interface. O corpo do
-                    // default pode referenciar métodos que o tipo não define
-                    // (ex: `mod` chama `/`), causando erros de dispatch
-                    // confusos. O usuário explicitou que sabe que não
-                    // implementou tudo — não gerar defaults que podem falhar.
-                    if deferred.allows_incomplete {
-                        continue;
-                    }
+                // Se o impl tem #!allow type.incomplete_interface, não
+                // instanciar métodos default da interface. O corpo do
+                // default pode referenciar métodos que o tipo não define
+                // (ex: `mod` chama `/`), causando erros de dispatch
+                // confusos. O usuário explicitou que sabe que não
+                // implementou tudo — não gerar defaults que podem falhar.
+                if deferred.allows_incomplete {
+                    continue;
+                }
 
-                    let type_params = collect_type_params(&param_types, &return_type);
+                let type_params = collect_type_params(&param_types, &return_type);
 
-                    signatures.push(Signature {
-                        name: sig.name.clone(),
-                        param_types: param_types.clone(),
-                        return_type: return_type.clone(),
-                        ffi_symbol: None,
-                        is_associative: false,
-                        associative_neutral: None,
-                        is_action: false,
-                        is_commutative: false,
-                        type_params,
-                        param_names: vec![],
-                        param_defaults: vec![],
-                    });
+                signatures.push(Signature {
+                    name: sig.name.clone(),
+                    param_types: param_types.clone(),
+                    return_type: return_type.clone(),
+                    ffi_symbol: None,
+                    is_associative: false,
+                    associative_neutral: None,
+                    is_action: false,
+                    is_commutative: false,
+                    type_params,
+                    param_names: vec![],
+                    param_defaults: vec![],
+                });
 
-                    functions.push(FunctionDef {
-                        name: sig.name.clone(),
-                        param_types,
-                        return_type,
-                        clauses: default_clauses.clone(),
-                        cache_strategy: None,
-                        cache_capacity: None,
-                        timer: None,
-                        custom_directives: Vec::new(),
-                    });
+                functions.push(FunctionDef {
+                    name: sig.name.clone(),
+                    param_types,
+                    return_type,
+                    clauses: default_clauses.clone(),
+                    cache_strategy: None,
+                    cache_capacity: None,
+                    timer: None,
+                    custom_directives: Vec::new(),
+                });
             }
         }
     }
@@ -1248,7 +1251,10 @@ fn collect_type_param_names(ty: &Ty, result: &mut Vec<String>) {
                 collect_type_param_names(arg, result);
             }
         }
-        Ty::List(inner) | Ty::Array(inner) | Ty::Range(inner) | Ty::Set(inner)
+        Ty::List(inner)
+        | Ty::Array(inner)
+        | Ty::Range(inner)
+        | Ty::Set(inner)
         | Ty::Tensor(inner) => collect_type_param_names(inner, result),
         Ty::Dict(k, v) => {
             collect_type_param_names(k, result);

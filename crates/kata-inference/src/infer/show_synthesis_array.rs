@@ -83,6 +83,7 @@ pub(crate) fn synthesize_array_show_functions(
             iface_params: vec![],
             span: Span::synthetic(),
             allows_incomplete: false,
+            type_bounds: vec![],
             methods: vec![ImplMethodInfo {
                 name: "show".to_string(),
                 params: vec![array_ty.clone()],
