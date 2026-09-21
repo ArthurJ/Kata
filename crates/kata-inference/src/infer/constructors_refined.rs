@@ -76,6 +76,7 @@ pub(crate) fn synthesize_refined(
                 substitutions: None,
                 param_names: vec![],
                 param_defaults: vec![],
+            deferred_diagnostic: None,
             });
         }
 
@@ -112,6 +113,7 @@ pub(crate) fn synthesize_refined(
             substitutions: None,
             param_names: vec![],
             param_defaults: vec![],
+            deferred_diagnostic: None,
         });
     }
 
@@ -122,6 +124,10 @@ pub(crate) fn synthesize_refined(
     let deferred = super::expr::DeferredLambdaTable::default();
     let empty_post_conds = super::post_conditions::PostCondTable::default();
     let empty_inline_fns = super::post_conditions::InlineFnTable::default();
+
+    // Coleta diagnósticos deferidos durante a inferência de predicados.
+    // Aplicados ao dispatch_table após o loop (borrow imutável do ctx).
+    let mut deferred_diags: Vec<(String, String)> = Vec::new();
     let ctx = InferCtx {
         table: &*dispatch_table,
         enum_registry,
@@ -149,8 +155,6 @@ pub(crate) fn synthesize_refined(
         // ── 2a. Sintetiza funções predicado ──
         for (i, pred_name) in pred_names.iter().enumerate() {
             let pred_expr = &decl.predicates[i];
-
-            // Substitui Hole por Ident("x") no predicado
             let substituted = substitute_hole(pred_expr, "x");
             let desugared = desugar::desugar(&substituted);
 
@@ -171,26 +175,113 @@ pub(crate) fn synthesize_refined(
                 Ok(t) => t,
                 Err(ref e)
                     if decl.extension_impl.is_some()
-                        && matches!(e, MiddleError::NoOverload { .. }) =>
+                        && !decl.allows_incomplete
+                        && matches!(e, MiddleError::NoOverload { .. } | MiddleError::TypeMismatch { .. }) =>
                 {
                     let (type_name, iface_name, impl_span) = decl
                         .extension_impl
                         .as_ref()
                         .expect("extension_impl is Some — guard verified");
-                    let method_map = interface_registry.method_to_ifaces();
                     // Extrai o nome do método que falhou no dispatch.
+                    // NoOverload carrega o nome diretamente; TypeMismatch
+                    // carrega expected/found — o nome do método pode estar
+                    // no formato "nome" dentro de expected/found, mas não
+                    // é extraível de forma confiável. Nesses casos, usa
+                    // string vazia e deixa o missing_signature resolver
+                    // via interface_registry lookup.
                     let method_name = match e {
                         MiddleError::NoOverload { name, .. } => name.clone(),
+                        MiddleError::TypeMismatch { expected, .. } => {
+                            // Tenta extrair o nome do método de expected.
+                            // expected tem formato "Int, NonZero (Int)" para
+                            // dispatch — o nome do método não está aqui.
+                            // O nome está disponível no contexto de quem
+                            // chamou, mas não no erro. Usa o expected como
+                            // pista para o usuário.
+                            expected.clone()
+                        }
                         _ => String::new(),
                     };
-                    let missing_ifaces = method_map.get(&method_name).cloned().unwrap_or_default();
-                    return Err(MiddleError::FamilyExtensionInvalid {
+                    // Constrói a signature esperada com Self substituído,
+                    // consultando a interface (e supertraits) no InterfaceRegistry.
+                    let all_sigs = ctx.interface_registry.all_signatures(iface_name);
+                    let missing_signature = all_sigs
+                        .iter()
+                        .find(|s| s.name == method_name)
+                        .map(|sig| {
+                            let concrete_ty = Ty::Struct(StructKey::Plain(type_name.clone()));
+                            let params: Vec<String> = sig
+                                .params
+                                .iter()
+                                .map(|t| t.substitute_self(&concrete_ty).to_string())
+                                .collect();
+                            let ret = sig.ret.substitute_self(&concrete_ty).to_string();
+                            let params_str = params.join(" ");
+                            if params_str.is_empty() {
+                                format!("{} => {}", sig.name, ret)
+                            } else {
+                                format!("{} :: {} => {}", sig.name, params_str, ret)
+                            }
+                        })
+                        .unwrap_or_else(|| method_name.clone());
+                    return Err(MiddleError::MissingOverload {
                         type_name: type_name.clone(),
-                        iface_name: iface_name.clone(),
                         family_name: decl.name.clone(),
-                        missing_ifaces,
+                        method_name,
+                        missing_signature,
                         span: (*impl_span).into(),
                     });
+                }
+                Err(ref e)
+                    if decl.allows_incomplete
+                        && decl.extension_impl.is_some()
+                        && matches!(
+                            e,
+                            MiddleError::NoOverload { .. } | MiddleError::TypeMismatch { .. }
+                        ) =>
+                {
+                    // #!allow type.incomplete_interface: o usuário sabe que
+                    // não implementou tudo. Gerar predicado que sempre
+                    // retorna false e registrar diagnóstico deferido no
+                    // construtor para emitir como erro compile-time no
+                    // call site.
+                    let (type_name, iface_name, _) = decl
+                        .extension_impl
+                        .as_ref()
+                        .expect("extension_impl is Some — guard verified");
+                    let missing_method = match e {
+                        MiddleError::NoOverload { name, .. } => {
+                            // NoOverload pode carregar o nome do operador
+                            // desugared (ex: "=" em vez de "zero"). Extrair
+                            // o método real da interface consultando
+                            // all_signatures e filtrando por nome.
+                            let all_sigs = interface_registry.all_signatures(iface_name);
+                            let real = all_sigs.iter().find(|s| s.name == *name)
+                                .map(|s| s.name.clone());
+                            real.unwrap_or_else(|| name.clone())
+                        }
+                        _ => "método".to_string(),
+                    };
+                    let diag_msg = format!(
+                        "`{}` não pode ser construído: o predicado da família `{}` \
+                         requer `{}` que não está definido para `{}` \
+                         (implementação incompleta com #!allow type.incomplete_interface)",
+                        decl.name, decl.name, missing_method, type_name
+                    );
+                    // Coletar para aplicar ao dispatch_table após o loop.
+                    deferred_diags.push((decl.name.clone(), diag_msg));
+                    TypedExpr {
+                        span: Span::synthetic(),
+                        ty: Ty::boolean(),
+                        tail_pos: true,
+                        escape: EscapeTarget::Caller,
+                        kind: TypedExprKind::VariantQual {
+                            enum_name: "Boolean".to_string(),
+                            variant: "False".to_string(),
+                            tag: 1,
+                            module_path: None,
+                        },
+                    }
                 }
                 Err(e) => return Err(e),
             };
@@ -294,6 +385,18 @@ pub(crate) fn synthesize_refined(
             cache_spec: None,
             timer_spec: None,
         });
+    }
+
+    // Aplicar diagnósticos deferidos ao dispatch_table (após o borrow
+    // imutável do ctx ter terminado).
+    for (ctor_name, diag_msg) in &deferred_diags {
+        if let Some(overloads) = dispatch_table.get_overloads_mut(ctor_name) {
+            for ov in overloads.iter_mut() {
+                if ov.is_constructor {
+                    ov.deferred_diagnostic = Some(diag_msg.clone());
+                }
+            }
+        }
     }
 
     Ok(functions)

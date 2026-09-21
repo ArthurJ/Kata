@@ -139,8 +139,8 @@ fn snapshot_functions() {
 }
 
 #[test]
-fn snapshot_modules() {
-    run_category("modules");
+fn snapshot_imports() {
+    run_category("imports");
 }
 
 #[test]

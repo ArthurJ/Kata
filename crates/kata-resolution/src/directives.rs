@@ -431,10 +431,7 @@ pub(crate) fn extract_pragma_test_specs(pragmas: &[Pragma]) -> Vec<TestSpec> {
                     // Single arg — wrap no Spanned do próprio expr.
                     // O AST TestSpec não guarda Spanned<Expr> individuais,
                     // então usamos o span do pragma como fallback.
-                    Some(Spanned::new(
-                        ast_spec.args[0].clone(),
-                        ast_spec.span,
-                    ))
+                    Some(Spanned::new(ast_spec.args[0].clone(), ast_spec.span))
                 } else {
                     // Múltiplos args — wrap em Tuple.
                     let elements: Vec<Spanned<Expr>> = ast_spec
@@ -442,10 +439,7 @@ pub(crate) fn extract_pragma_test_specs(pragmas: &[Pragma]) -> Vec<TestSpec> {
                         .iter()
                         .map(|e| Spanned::new(e.clone(), ast_spec.span))
                         .collect();
-                    Some(Spanned::new(
-                        Expr::Tuple { elements },
-                        ast_spec.span,
-                    ))
+                    Some(Spanned::new(Expr::Tuple { elements }, ast_spec.span))
                 };
 
                 let timeout = ast_spec.timeout.map(|t| t as i64);

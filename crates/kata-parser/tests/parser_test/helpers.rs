@@ -10,5 +10,5 @@ pub(super) fn parse_src(src: &str) -> kata_ast::Module {
 }
 
 pub(super) fn first_item(m: &kata_ast::Module) -> &Item {
-    &m.items.first().expect("at least one item").node
+    &m.items.first().expect("at least one item").item.node
 }

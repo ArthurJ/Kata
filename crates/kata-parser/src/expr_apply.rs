@@ -286,8 +286,9 @@ fn parse_apply_impl(parser: &mut Parser, as_arg: bool) -> Result<Spanned<Expr>, 
             return Err(FrontendError::UnexpectedToken {
                 expected: format!(
                     "`{}` tem aridade padrão {} — excesso de argumentos posicionais. \
-                         Use `{}{{...}}` para aridade diferente ou separe com quebra de linha.",
-                    name, arity, name
+                         Verifique se há um argumento extra ou use parênteses para agrupar \
+                         sub-expressões.",
+                    name, arity
                 ),
                 found: parser.peek().to_string(),
                 span: kata_diagnostics::MietteSpan(span),

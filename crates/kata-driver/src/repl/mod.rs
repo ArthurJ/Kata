@@ -31,7 +31,7 @@ use kata_lexer::lex;
 use kata_monomorph::monomorphize;
 use kata_optimizer::optimize;
 use kata_parser::{parse, parse_repl_decls_only, parse_repl_with_arity, scan_lambdas};
-use kata_resolution::{ModuleLoader, ResolvedModule, extract_arities, resolve};
+use kata_resolution::{ModuleLoader, ResolvedModule, extract_arities, extract_constructor_arities, resolve};
 use kata_tree_shaking::tree_shake;
 
 use crate::display;
@@ -50,7 +50,7 @@ fn load_stdlib() -> Result<ResolvedModule, String> {
 /// Sessão REPL — acumula items do usuário entre expressões.
 pub(crate) struct ReplSession {
     /// Items top-level acumulados (let bindings, sigs, data, enum, etc.).
-    pub(crate) items: Vec<Spanned<Item>>,
+    pub(crate) items: Vec<kata_ast::ModuleEntry>,
     /// Bindings `let` escalares congelados — mapa nome → literal AST.
     /// Após avaliar `let x := <expr>` e obter um valor escalar, o valor
     /// é guardado aqui como literal. Nas próximas linhas, o item `let`
@@ -161,8 +161,15 @@ impl ReplSession {
                 crate::format_error_vec(&e)
             )
         })?;
-        let decls_resolved = merge_resolved(self.prelude.clone(), decls_user);
+        let mut decls_resolved = merge_resolved(self.prelude.clone(), decls_user);
+        // merge_imports no Pass 1 do REPL: traz structs de módulos importados
+        // (ex: Complex) para o struct_registry, permitindo que
+        // extract_constructor_arities os encontre.
+        if !self.imports.is_empty() {
+            kata_resolution::merge_imports(&mut decls_resolved, &self.imports);
+        }
         arities.extend(extract_arities(&decls_resolved.signatures));
+        arities.extend(extract_constructor_arities(&decls_resolved.struct_registry));
 
         // Pass 2: parse_with_arity (completo)
         let module =
@@ -176,7 +183,7 @@ impl ReplSession {
         let has_entry = module
             .items
             .iter()
-            .any(|i| matches!(i.node, Item::EntryExpr(_)));
+            .any(|i| matches!(i.item.node, Item::EntryExpr(_)));
 
         // Guarda os items do input antes de movê-los para self.items.
         // Necessário para congelar bindings após avaliação.
@@ -194,7 +201,7 @@ impl ReplSession {
             .items
             .iter()
             .filter_map(|i| {
-                if let Item::ConstantDecl { name, .. } = &i.node {
+                if let Item::ConstantDecl { name, .. } = &i.item.node {
                     Some(name.clone())
                 } else {
                     None
@@ -203,7 +210,7 @@ impl ReplSession {
             .collect();
         if !new_constant_names.is_empty() {
             self.items.retain(|i| {
-                if let Item::ConstantDecl { name, .. } = &i.node {
+                if let Item::ConstantDecl { name, .. } = &i.item.node {
                     !new_constant_names.contains(name)
                 } else {
                     true
@@ -222,7 +229,7 @@ impl ReplSession {
             .items
             .iter()
             .filter_map(|i| {
-                if let Item::EntryExpr(ref expr) = i.node
+                if let Item::EntryExpr(ref expr) = i.item.node
                     && let Expr::Let { ref name, .. } = expr.node
                 {
                     Some(name.clone())
@@ -233,7 +240,7 @@ impl ReplSession {
             .collect();
         if !new_let_names.is_empty() {
             self.items.retain(|i| {
-                if let Item::EntryExpr(ref expr) = i.node
+                if let Item::EntryExpr(ref expr) = i.item.node
                     && let Expr::Let { ref name, .. } = expr.node
                 {
                     !new_let_names.contains(name)
@@ -256,7 +263,7 @@ impl ReplSession {
         let has_imports = import_module
             .items
             .iter()
-            .any(|i| matches!(i.node, Item::ImportDecl { .. }));
+            .any(|i| matches!(i.item.node, Item::ImportDecl { .. }));
         if has_imports {
             self.imports = crate::imports::load_repl_imports(&import_module)
                 .map_err(|e| format!("erro ao carregar imports: {e}"))?;
@@ -289,7 +296,7 @@ impl ReplSession {
                     // avaliar o valor do binding separadamente para obter
                     // seu tipo e valor, e guardar como literal.
                     if input_items.len() == 1
-                        && let Item::EntryExpr(ref expr) = input_items[0].node
+                        && let Item::EntryExpr(ref expr) = input_items[0].item.node
                         && let Expr::Let {
                             ref name,
                             ref value,
@@ -303,11 +310,14 @@ impl ReplSession {
                         let mut val_items = self.items.clone();
                         // Substitui bindings congelados por literais.
                         val_items = self.build_eval_items(&val_items);
-                        val_items.push(Spanned::new(
+                        val_items.push(kata_ast::ModuleEntry::new(Spanned::new(
                             Item::EntryExpr(*value.clone()),
                             Span::synthetic(),
-                        ));
-                        let val_module = Module { items: val_items, pragmas: Vec::new() };
+                        )));
+                        let val_module = Module {
+                            items: val_items,
+                            pragmas: Vec::new(),
+                        };
                         if let Ok(val_result) = self.run_pipeline_eval(&val_module) {
                             // Tentar congelar como literal escalar.
                             if let Some(literal) =
@@ -353,7 +363,7 @@ impl ReplSession {
                     // Remove EntryExpr que não são bindings — expressões
                     // puras (ex: `5`, `echo!(5)`, `g 5`) são "avaliar e
                     // esquecer". Apenas `Let`/`LetDestruct` persistem.
-                    self.items.retain(|item| match &item.node {
+                    self.items.retain(|item| match &item.item.node {
                         Item::EntryExpr(expr) => {
                             matches!(expr.node, Expr::Let { .. } | Expr::LetDestruct { .. })
                         }
@@ -381,7 +391,10 @@ impl ReplSession {
                 items.extend(module.items);
             }
         }
-        Module { items, pragmas: Vec::new() }
+        Module {
+            items,
+            pragmas: Vec::new(),
+        }
     }
 
     /// Constrói Module para `:env` — items acumulados + entry sintético `0`.
@@ -393,16 +406,22 @@ impl ReplSession {
         let mut items = self.build_eval_items(&self.items);
         let needs_entry = match items.last() {
             None => true,
-            Some(item) => matches!(&item.node, Item::EntryExpr(_)),
+            Some(item) => matches!(&item.item.node, Item::EntryExpr(_)),
         };
         if needs_entry {
             let zero = Expr::IntLit {
                 text: "0".to_string(),
             };
             let spanned = Spanned::new(zero, Span::synthetic());
-            items.push(Spanned::new(Item::EntryExpr(spanned), Span::synthetic()));
+            items.push(kata_ast::ModuleEntry::new(Spanned::new(
+                Item::EntryExpr(spanned),
+                Span::synthetic(),
+            )));
         }
-        Module { items, pragmas: Vec::new() }
+        Module {
+            items,
+            pragmas: Vec::new(),
+        }
     }
 
     /// Resolve @embed_text/@embed_bytes no módulo, substituindo por literais.
@@ -445,7 +464,7 @@ impl ReplSession {
         let has_entry = module
             .items
             .iter()
-            .any(|i| matches!(i.node, Item::EntryExpr(_)));
+            .any(|i| matches!(i.item.node, Item::EntryExpr(_)));
         let items = if has_entry {
             self.build_eval_items(&module.items)
         } else {
@@ -454,10 +473,16 @@ impl ReplSession {
                 text: "0".to_string(),
             };
             let spanned = Spanned::new(zero, Span::synthetic());
-            items.push(Spanned::new(Item::EntryExpr(spanned), Span::synthetic()));
+            items.push(kata_ast::ModuleEntry::new(Spanned::new(
+                Item::EntryExpr(spanned),
+                Span::synthetic(),
+            )));
             items
         };
-        let module = Module { items, pragmas: Vec::new() };
+        let module = Module {
+            items,
+            pragmas: Vec::new(),
+        };
         self.run_pipeline_typed(&module)?;
         Ok(())
     }
@@ -620,14 +645,14 @@ impl ReplSession {
     }
 
     /// Constrói a lista de items substituindo bindings congelados por literais.
-    fn build_eval_items(&self, items: &[Spanned<Item>]) -> Vec<Spanned<Item>> {
+    fn build_eval_items(&self, items: &[kata_ast::ModuleEntry]) -> Vec<kata_ast::ModuleEntry> {
         if self.frozen_bindings.is_empty() {
             return items.to_vec();
         }
         items
             .iter()
             .map(|item| {
-                if let Item::EntryExpr(ref expr) = item.node
+                if let Item::EntryExpr(ref expr) = item.item.node
                     && let Expr::Let { ref name, .. } = expr.node
                     && let Some(literal) = self.frozen_bindings.get(name)
                 {
@@ -636,10 +661,10 @@ impl ReplSession {
                         ty: None,
                         value: Box::new(Spanned::new(literal.clone(), Span::synthetic())),
                     };
-                    return Spanned::new(
+                    return kata_ast::ModuleEntry::new(Spanned::new(
                         Item::EntryExpr(Spanned::new(new_expr, Span::synthetic())),
                         Span::synthetic(),
-                    );
+                    ));
                 }
                 item.clone()
             })
@@ -648,7 +673,7 @@ impl ReplSession {
 
     /// Constrói o Module para avaliação, substituindo bindings congelados
     /// por literais.
-    fn build_eval_module(&self, items: &[Spanned<Item>]) -> Module {
+    fn build_eval_module(&self, items: &[kata_ast::ModuleEntry]) -> Module {
         Module {
             items: self.build_eval_items(items),
             pragmas: Vec::new(),

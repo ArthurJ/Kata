@@ -22,7 +22,7 @@ fn parse_entry(src: &str) -> Spanned<Expr> {
     module
         .items
         .into_iter()
-        .find_map(|item| match item.node {
+        .find_map(|item| match item.item.node {
             kata_ast::Item::EntryExpr(expr) => Some(expr),
             _ => None,
         })
@@ -294,7 +294,7 @@ fn desugar_preserves_let() {
     let action = module
         .items
         .into_iter()
-        .find_map(|item| match item.node {
+        .find_map(|item| match item.item.node {
             kata_ast::Item::ActionDecl { body, .. } => Some(body),
             _ => None,
         })

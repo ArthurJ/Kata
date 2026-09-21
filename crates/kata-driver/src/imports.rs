@@ -160,7 +160,7 @@ pub(crate) fn evaluate_imported_constants(
             .module_ast
             .items
             .iter()
-            .filter_map(|item| match &item.node {
+            .filter_map(|item| match &item.item.node {
                 Item::ExportDecl { items } => Some(
                     items
                         .iter()
@@ -198,7 +198,7 @@ fn has_entry_expr(module: &kata_ast::Module) -> bool {
     module
         .items
         .iter()
-        .any(|item| matches!(item.node, kata_ast::Item::EntryExpr(_)))
+        .any(|item| matches!(item.item.node, kata_ast::Item::EntryExpr(_)))
 }
 
 /// Injeta um `IntLit(0)` sintético como `EntryExpr` no final do módulo.
@@ -212,9 +212,9 @@ fn inject_synthetic_entry(mut module: kata_ast::Module) -> kata_ast::Module {
         },
         span,
     );
-    module.items.push(kata_ast::Spanned::new(
+    module.items.push(kata_ast::ModuleEntry::new(kata_ast::Spanned::new(
         kata_ast::Item::EntryExpr(zero),
         span,
-    ));
+    )));
     module
 }

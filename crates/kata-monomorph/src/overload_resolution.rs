@@ -214,6 +214,7 @@ pub(crate) fn instantiate_generic_closure(
             substitutions: Some(subs.clone()),
             param_names: vec![],
             param_defaults: vec![],
+            deferred_diagnostic: None,
         });
 
         // Gera TypedFunction se a função original tem corpo.
@@ -362,6 +363,7 @@ pub(crate) fn instantiate_generic_action_call(
                 substitutions: Some(subs.clone()),
                 param_names: vec![],
                 param_defaults: vec![],
+            deferred_diagnostic: None,
             });
 
             // Gera TypedAction se a Action original tem corpo.
@@ -463,6 +465,7 @@ pub(crate) fn instantiate_overloadset_arg(
             substitutions: Some(subs.clone()),
             param_names: vec![],
             param_defaults: vec![],
+            deferred_diagnostic: None,
         });
 
         // Gera TypedAction se a action original tem corpo.

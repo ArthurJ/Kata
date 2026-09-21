@@ -109,10 +109,12 @@ impl Parser {
             }
         }
 
-        // Bloco indentado de assinaturas
-        self.expect(&Token::Indent, "INDENT (interface signatures)")?;
+        // Bloco indentado de assinaturas (opcional — interface pode ser
+        // vazia, herdando apenas de supertraits, ex: `interface NUM implements FIELD`).
         let mut signatures = Vec::new();
-        loop {
+        if matches!(self.peek(), Token::Indent) {
+            self.advance(); // consome INDENT
+            loop {
             while matches!(self.peek(), Token::StmtSep) {
                 self.advance();
             }
@@ -164,7 +166,8 @@ impl Parser {
                 default_body,
             });
         }
-        self.expect(&Token::Dedent, "DEDENT (end of interface)")?;
+            self.expect(&Token::Dedent, "DEDENT (end of interface)")?;
+        }
 
         if matches!(self.peek(), Token::StmtSep) {
             self.advance();

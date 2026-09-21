@@ -47,6 +47,12 @@ pub struct OverloadInfo {
     /// default. Paralelo a `param_names`. Vazio para funções, FFI, e actions
     /// sem defaults (sintaxe `(x::Int, y::Int)` → `vec![None; N]`).
     pub param_defaults: Vec<Option<Spanned<Expr>>>,
+    /// Diagnóstico deferido para construtores de família com `#!allow
+    /// type.incomplete_interface`. Quando `Some`, o predicado sempre
+    /// retorna false (método faltante) e este campo carrega a mensagem
+    /// de erro a ser emitida no call site como erro compile-time.
+    /// `None` para funções normais e construtores válidos.
+    pub deferred_diagnostic: Option<String>,
 }
 
 /// Score de um candidato — 2D + tiebreak genérico.
@@ -182,6 +188,7 @@ impl DispatchTable {
             substitutions: None,
             param_names: vec![],
             param_defaults: vec![],
+            deferred_diagnostic: None,
         });
     }
 
@@ -210,6 +217,12 @@ impl DispatchTable {
     /// Retorna todas as overloads de um nome.
     pub fn get_overloads(&self, name: &str) -> Option<&Vec<OverloadInfo>> {
         self.entries.get(name)
+    }
+
+    /// Retorna todas as overloads de um nome mutavelmente.
+    /// Usado para anexar diagnósticos deferidos a construtores de família.
+    pub fn get_overloads_mut(&mut self, name: &str) -> Option<&mut Vec<OverloadInfo>> {
+        self.entries.get_mut(name)
     }
 
     /// Resolve uma chamada: nome + tipos dos argumentos → OverloadInfo.

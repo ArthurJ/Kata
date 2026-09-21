@@ -248,9 +248,9 @@ fn action_decl_then_entry_expr() {
     let src = "action greet\n    echo!(\"hello\")\ngreet!()";
     let m = parse_src(src);
     assert_eq!(m.items.len(), 2);
-    assert!(matches!(m.items[0].node, Item::ActionDecl { .. }));
+    assert!(matches!(m.items[0].item.node, Item::ActionDecl { .. }));
     assert!(matches!(
-        &m.items[1].node,
+        &m.items[1].item.node,
         Item::EntryExpr(e) if matches!(e.node, Expr::ActionCall { .. })
     ));
 }

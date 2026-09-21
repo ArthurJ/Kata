@@ -125,6 +125,20 @@ pub(crate) fn try_dispatch_table(
         return None;
     }
 
+    // Verificar diagnóstico deferido em construtores de família com
+    // #!allow type.incomplete_interface. Se o construtor tem um
+    // diagnóstico deferido, emitir como erro compile-time no call site.
+    if let Some(overloads) = ctx.table.get_overloads(func_name) {
+        for ov in overloads {
+            if let Some(ref diag) = ov.deferred_diagnostic {
+                return Some(Err(MiddleError::DeferredDiagnostic {
+                    message: diag.clone(),
+                    span: (*span).into(),
+                }));
+            }
+        }
+    }
+
     // Se todas as overloads de `func_name` são Actions, o usuário está
     // chamando uma action sem `!` (sintaxe de função pura). Actions são
     // comportamento — devem ser chamadas com `!` (ActionCall), não com

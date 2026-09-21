@@ -12,7 +12,7 @@ use kata_ast::{DirectiveArg, Expr, Item};
 
 /// Extrai a primeira diretiva `test` do primeiro item do módulo.
 fn first_test_directive(m: &kata_ast::Module) -> &kata_ast::Directive {
-    let item = &m.items.first().expect("at least one item").node;
+    let item = &m.items.first().expect("at least one item").item.node;
     match item {
         Item::ActionDecl { directives, .. } => directives
             .iter()
@@ -306,7 +306,7 @@ fn test_directive_dict_with_nested_tuple() {
 fn existing_directives_still_parse() {
     // @ffi, @commutative continuam funcionando — não regrediu
     let m = parse_src("@ffi(\"kata_rt_bi_add\")\n@commutative(0)\n+ :: Int Int => Int");
-    match &m.items[0].node {
+    match &m.items[0].item.node {
         Item::Sig { directives, .. } => {
             assert_eq!(directives.len(), 2);
             assert_eq!(directives[0].name, "ffi");

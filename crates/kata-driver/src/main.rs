@@ -15,6 +15,7 @@ mod pipeline;
 mod pragma_processing;
 mod repl;
 mod test_runner;
+#[cfg(test)]
 mod test_utils;
 
 /// CLI do compilador Kata.

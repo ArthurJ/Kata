@@ -7,7 +7,7 @@ use kata_ast::{Expr, Item, Module};
 use kata_core::ty::Ty;
 use kata_lexer::lex;
 use kata_parser::{parse_decls_only, parse_with_arity, scan_lambdas};
-use kata_resolution::{extract_arities, resolve};
+use kata_resolution::{extract_arities, extract_constructor_arities, resolve};
 
 impl ReplSession {
     /// Processa um comando `:`.
@@ -77,7 +77,7 @@ impl ReplSession {
                 // Fallback: listar nomes sem tipos.
                 let mut shown = false;
                 for item in &self.items {
-                    if let Item::EntryExpr(expr) = &item.node
+                    if let Item::EntryExpr(expr) = &item.item.node
                         && let Expr::Let { name, .. } = &expr.node
                     {
                         println!("  {name}");
@@ -138,8 +138,12 @@ impl ReplSession {
                 crate::format_error_vec(&e)
             )
         })?;
-        let decls_resolved = merge_resolved(self.prelude.clone(), decls_user);
+        let mut decls_resolved = merge_resolved(self.prelude.clone(), decls_user);
+        if !self.imports.is_empty() {
+            kata_resolution::merge_imports(&mut decls_resolved, &self.imports);
+        }
         arities.extend(extract_arities(&decls_resolved.signatures));
+        arities.extend(extract_constructor_arities(&decls_resolved.struct_registry));
 
         // Pass 2: parse_with_arity (completo)
         let module =
@@ -154,7 +158,7 @@ impl ReplSession {
         let has_entry = module
             .items
             .iter()
-            .any(|i| matches!(i.node, Item::EntryExpr(_)));
+            .any(|i| matches!(i.item.node, Item::EntryExpr(_)));
 
         // Snapshot para rollback em caso de erro.
         let snapshot_len = self.items.len();
@@ -170,7 +174,7 @@ impl ReplSession {
         let has_imports = import_module
             .items
             .iter()
-            .any(|i| matches!(i.node, Item::ImportDecl { .. }));
+            .any(|i| matches!(i.item.node, Item::ImportDecl { .. }));
         if has_imports {
             self.imports = crate::imports::load_repl_imports(&import_module).map_err(|e| {
                 self.items.truncate(snapshot_len);

@@ -26,14 +26,14 @@ use kata_comptime::run_comptime_pass;
 use kata_core::ty::Ty;
 use kata_inference::infer_module;
 use kata_lexer::lex_with_recovery;
-use kata_monomorph::{monomorphize, MonoModule};
+use kata_monomorph::{MonoModule, monomorphize};
 use kata_optimizer::optimize;
 use kata_parser::{parse_decls_only, parse_with_arity_recovery, parse_with_recovery, scan_lambdas};
-use kata_resolution::{extract_arities, resolve_with_prelude, ModuleLoader, ResolvedModule};
+use kata_resolution::{ModuleLoader, ResolvedModule, extract_arities, extract_constructor_arities, resolve_with_prelude};
 use kata_tree_shaking::{tree_shake, tree_shake_preserve_tests};
 
 use crate::imports;
-use crate::{merge_resolved, IntoReport};
+use crate::{IntoReport, merge_resolved};
 
 // ── Erros ─────────────────────────────────────────────────
 
@@ -353,6 +353,7 @@ impl Pipeline {
                     .map_err(|e| one_err(e.into_report_with_source(&self.source, file_path)))?;
                 let decls_resolved = quick_resolve(&decls_module, file_path)?;
                 arities.extend(extract_arities(&decls_resolved.signatures));
+                arities.extend(extract_constructor_arities(&decls_resolved.struct_registry));
                 // Pass 2: parse completo com recovery.
                 parse_with_arity_recovery(tokens, arities)
             }
@@ -370,8 +371,14 @@ impl Pipeline {
         // erros; pragmas redundantes são warnings. Ambos são
         // reportados imediatamente.
         let registry = kata_diagnostics::DiagnosticRegistry::new();
+        // Coletar pragmas de module.pragmas (órfãos) + pragmas
+        // posicionais anexados a cada ModuleEntry.
+        let mut all_pragmas = module.pragmas.clone();
+        for entry in &module.items {
+            all_pragmas.extend(entry.pragmas.clone());
+        }
         let (pragma_errors, overrides) =
-            crate::pragma_processing::process_pragmas(&module.pragmas, &registry);
+            crate::pragma_processing::process_pragmas(&all_pragmas, &registry);
         if !pragma_errors.is_empty() {
             return Err(pragma_errors);
         }
@@ -447,6 +454,24 @@ impl Pipeline {
         );
         if !orphan_errors.is_empty() {
             let reports: Vec<_> = orphan_errors
+                .into_iter()
+                .map(|re| re.into_report_with_source(&self.source, self.file_path.as_deref()))
+                .collect();
+            let (errs, warns) =
+                crate::pragma_processing::filter_errors(reports, &self.pragma_overrides);
+            self.pragma_warnings.extend(warns);
+            if !errs.is_empty() {
+                return Err(errs);
+            }
+        }
+
+        // Gate 2: implementação incompleta de interface — validar após
+        // merge do prelude (interfaces do prelude visíveis aqui).
+        // Erro controlável via #!allow type.incomplete_interface.
+        let incomplete_errors =
+            kata_resolution::validate_incomplete_interfaces(&resolved.interface_registry);
+        if !incomplete_errors.is_empty() {
+            let reports: Vec<_> = incomplete_errors
                 .into_iter()
                 .map(|re| re.into_report_with_source(&self.source, self.file_path.as_deref()))
                 .collect();
@@ -755,6 +780,11 @@ fn quick_resolve(
             .map(|re| re.into_report_with_source("", file_path))
             .collect::<Vec<_>>()
     })?;
-    let resolved = merge_resolved(prelude, user);
+    let mut resolved = merge_resolved(prelude, user);
+    // merge_imports no Pass 1: os structs de módulos importados (ex: Complex
+    // de complex.kata) precisam estar no struct_registry para que
+    // extract_constructor_arities os encontre — sem isto, o parser arity-aware
+    // não conhece a aridade de construtores importados e os trata como greedy.
+    kata_resolution::merge_imports(&mut resolved, &imports);
     Ok(resolved)
 }

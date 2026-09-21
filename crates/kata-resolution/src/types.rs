@@ -230,6 +230,11 @@ pub struct RefinedDeclInfo {
     /// extensão automática de família via `extend_families_for_implementors`.
     /// None para instâncias originais (declaradas no pass0).
     pub extension_impl: Option<(String, String, Span)>,
+    /// True se o impl de origem tem `#!allow type.incomplete_interface`.
+    /// Quando true + `extension_impl` é Some, a síntese do predicado é
+    /// pulada — o usuário sabe que não implementou tudo. O erro
+    /// `type.missing_overload` só dispara no uso real do construtor.
+    pub allows_incomplete: bool,
 }
 
 /// Informação de um enum com variantes predicadas.
@@ -343,6 +348,23 @@ pub enum ResolveError {
         /// Origin onde a interface é definida.
         iface_origin: String,
         #[label("implements em módulo de usuário")]
+        span: MietteSpan,
+    },
+
+    /// `T implements IFACE` não define todos os métodos de IFACE.
+    /// `missing` lista cada método faltando com sua signature
+    /// (`"name :: params => ret"`).
+    #[error("`{type_name} implements {interface_name}` não define todos os métodos de {interface_name}\n{}", missing.iter().map(|(n,s)| format!("  {s}")).collect::<Vec<_>>().join("\n"))]
+    #[diagnostic(
+        code = "type.incomplete_interface",
+        help = "Para silenciar: #!allow type.incomplete_interface\nPara warning:  #!warn  type.incomplete_interface"
+    )]
+    IncompleteInterface {
+        type_name: String,
+        interface_name: String,
+        /// Métodos faltando: `(nome, signature_formatada)`.
+        missing: Vec<(String, String)>,
+        #[label("implementação incompleta")]
         span: MietteSpan,
     },
 }

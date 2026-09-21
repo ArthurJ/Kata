@@ -5,12 +5,28 @@
 //! `test`, `deprecated`, `must_use`. Tokens externos exigem prefixo
 //! obrigatório `#!<prefixo>-<resto>`. Token sem prefixo não reconhecido
 //! → erro.
+//!
+//! ## Sintaxe de marcações
+//!
+//! Uma marcação por linha — o lexer consome a linha inteira até `\n`
+//! como um único `Token::Pragma`, então `#!allow A B` na mesma linha
+//! não é duas marcações: `B` vira parte do payload bruto e não bate
+//! em nenhum código de diagnóstico (falha silenciosa — o diagnóstico
+//! continua disparando).
+//!
+//! Listas separadas por vírgula (`#!allow A, B`) não são suportadas.
+//! Para silenciar múltiplos códigos no mesmo item, empilhe pragmas em
+//! linhas consecutivas:
+//!
+//! ```text
+//! #!allow type.incomplete_interface
+//! #!allow type.missing_overload
+//! Foo implements Bar
+//! ```
 
-use kata_ast::{
-    DiagnosticControl, DiagnosticLevel, Pragma, TestSpec, UnknownPragma,
-};
-use kata_diagnostics::FrontendError;
 use kata_ast::Span;
+use kata_ast::{DiagnosticControl, DiagnosticLevel, Pragma, TestSpec, UnknownPragma};
+use kata_diagnostics::FrontendError;
 
 use crate::Parser;
 
@@ -95,9 +111,7 @@ impl Parser {
                     if prefix.is_empty() {
                         // `-` no início do token — inválido
                         return Err(FrontendError::UnexpectedToken {
-                            expected: format!(
-                                "pragma token with non-empty prefix (got `{token}`)"
-                            ),
+                            expected: format!("pragma token with non-empty prefix (got `{token}`)"),
                             found: format!("#!{token} {raw}"),
                             span: span.into(),
                         });
@@ -152,12 +166,8 @@ impl Parser {
         // Forma longa: {desc: "desc", args: ..., timeout: ...}
         if trimmed.starts_with('{') && trimmed.ends_with('}') {
             let inner = &trimmed[1..trimmed.len() - 1];
-            let desc = extract_field(inner, "desc")
-                .trim_matches('"')
-                .to_string();
-            let timeout = extract_field(inner, "timeout")
-                .parse::<u64>()
-                .ok();
+            let desc = extract_field(inner, "desc").trim_matches('"').to_string();
+            let timeout = extract_field(inner, "timeout").parse::<u64>().ok();
             let args = parse_args_field(inner);
             return Ok(TestSpec {
                 desc,
@@ -252,11 +262,11 @@ fn parse_args_field(payload: &str) -> Vec<kata_ast::Expr> {
                 kata_ast::Expr::TextLit {
                     text: s[1..s.len() - 1].to_string(),
                 }
-            } else if let Ok(_) = s.parse::<i64>() {
+            } else if s.parse::<i64>().is_ok() {
                 kata_ast::Expr::IntLit {
                     text: s.to_string(),
                 }
-            } else if let Ok(_) = s.parse::<f64>() {
+            } else if s.parse::<f64>().is_ok() {
                 kata_ast::Expr::FloatLit {
                     text: s.to_string(),
                 }

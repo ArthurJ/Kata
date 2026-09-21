@@ -23,7 +23,7 @@ use kata_lexer::lex;
 use kata_monomorph::monomorphize;
 use kata_optimizer::optimize;
 use kata_parser::{parse_repl_decls_only, parse_repl_with_arity, scan_lambdas};
-use kata_resolution::{ModuleLoader, ResolvedModule, extract_arities, resolve};
+use kata_resolution::{ModuleLoader, ResolvedModule, extract_arities, extract_constructor_arities, resolve};
 
 use crate::display;
 use crate::merge_resolved;
@@ -39,7 +39,7 @@ fn load_stdlib() -> Result<ResolvedModule, String> {
 
 pub(crate) struct InterpReplSession {
     /// Items top-level acumulados (let bindings, sigs, data, enum, etc.).
-    items: Vec<Spanned<Item>>,
+    items: Vec<kata_ast::ModuleEntry>,
     /// Módulos importados via `import` no REPL — cacheados entre linhas.
     imports: Vec<kata_resolution::ImportedModule>,
     /// Prelude resolvido (recarregado em `:reset`).
@@ -117,8 +117,12 @@ impl InterpReplSession {
                 crate::format_error_vec(&e)
             )
         })?;
-        let decls_resolved = merge_resolved(self.prelude.clone(), decls_user);
+        let mut decls_resolved = merge_resolved(self.prelude.clone(), decls_user);
+        if !self.imports.is_empty() {
+            kata_resolution::merge_imports(&mut decls_resolved, &self.imports);
+        }
         arities.extend(extract_arities(&decls_resolved.signatures));
+        arities.extend(extract_constructor_arities(&decls_resolved.struct_registry));
 
         // Pass 2: parse_with_arity (completo)
         let module =
@@ -131,7 +135,7 @@ impl InterpReplSession {
         let has_entry = module
             .items
             .iter()
-            .any(|i| matches!(i.node, Item::EntryExpr(_)));
+            .any(|i| matches!(i.item.node, Item::EntryExpr(_)));
 
         let snapshot_len = self.items.len();
         let snapshot_imports_len = self.imports.len();
@@ -141,7 +145,7 @@ impl InterpReplSession {
             .items
             .iter()
             .filter_map(|i| {
-                if let Item::EntryExpr(ref expr) = i.node
+                if let Item::EntryExpr(ref expr) = i.item.node
                     && let Expr::Let { ref name, .. } = expr.node
                 {
                     Some(name.clone())
@@ -152,7 +156,7 @@ impl InterpReplSession {
             .collect();
         if !new_let_names.is_empty() {
             self.items.retain(|i| {
-                if let Item::EntryExpr(ref expr) = i.node
+                if let Item::EntryExpr(ref expr) = i.item.node
                     && let Expr::Let { ref name, .. } = expr.node
                 {
                     !new_let_names.contains(name)
@@ -171,7 +175,7 @@ impl InterpReplSession {
             .items
             .iter()
             .filter_map(|i| {
-                if let Item::ConstantDecl { name, .. } = &i.node {
+                if let Item::ConstantDecl { name, .. } = &i.item.node {
                     Some(name.clone())
                 } else {
                     None
@@ -180,7 +184,7 @@ impl InterpReplSession {
             .collect();
         if !new_constant_names.is_empty() {
             self.items.retain(|i| {
-                if let Item::ConstantDecl { name, .. } = &i.node {
+                if let Item::ConstantDecl { name, .. } = &i.item.node {
                     !new_constant_names.contains(name)
                 } else {
                     true
@@ -198,7 +202,7 @@ impl InterpReplSession {
         let has_imports = import_module
             .items
             .iter()
-            .any(|i| matches!(i.node, Item::ImportDecl { .. }));
+            .any(|i| matches!(i.item.node, Item::ImportDecl { .. }));
         if has_imports {
             self.imports = crate::imports::load_repl_imports(&import_module)
                 .map_err(|e| format!("erro ao carregar imports: {e}"))?;
@@ -231,7 +235,7 @@ impl InterpReplSession {
                     }
                     // Remover EntryExpr que não são bindings — expressões
                     // puras são "avaliar e esquecer". Apenas Let persiste.
-                    self.items.retain(|item| match &item.node {
+                    self.items.retain(|item| match &item.item.node {
                         Item::EntryExpr(expr) => {
                             matches!(expr.node, Expr::Let { .. } | Expr::LetDestruct { .. })
                         }
@@ -283,7 +287,7 @@ impl InterpReplSession {
         let has_entry = module
             .items
             .iter()
-            .any(|i| matches!(i.node, Item::EntryExpr(_)));
+            .any(|i| matches!(i.item.node, Item::EntryExpr(_)));
         let items = if has_entry {
             module.items.clone()
         } else {
@@ -292,10 +296,16 @@ impl InterpReplSession {
                 text: "0".to_string(),
             };
             let spanned = Spanned::new(zero, Span::synthetic());
-            items.push(Spanned::new(Item::EntryExpr(spanned), Span::synthetic()));
+            items.push(kata_ast::ModuleEntry::new(Spanned::new(
+                Item::EntryExpr(spanned),
+                Span::synthetic(),
+            )));
             items
         };
-        let module = Module { items, pragmas: Vec::new() };
+        let module = Module {
+            items,
+            pragmas: Vec::new(),
+        };
         self.run_pipeline_typed(&module)?;
         Ok(())
     }
@@ -469,7 +479,7 @@ impl InterpReplSession {
             Err(e) => {
                 let mut shown = false;
                 for item in &self.items {
-                    if let Item::EntryExpr(expr) = &item.node
+                    if let Item::EntryExpr(expr) = &item.item.node
                         && let Expr::Let { name, .. } = &expr.node
                     {
                         println!("  {name}");
@@ -508,8 +518,12 @@ impl InterpReplSession {
                 crate::format_error_vec(&e)
             )
         })?;
-        let decls_resolved = merge_resolved(self.prelude.clone(), decls_user);
+        let mut decls_resolved = merge_resolved(self.prelude.clone(), decls_user);
+        if !self.imports.is_empty() {
+            kata_resolution::merge_imports(&mut decls_resolved, &self.imports);
+        }
         arities.extend(extract_arities(&decls_resolved.signatures));
+        arities.extend(extract_constructor_arities(&decls_resolved.struct_registry));
 
         let module =
             parse_repl_with_arity(tokens, arities).map_err(|e| format!("erro de parse: {e}"))?;
@@ -522,7 +536,7 @@ impl InterpReplSession {
         let has_entry = module
             .items
             .iter()
-            .any(|i| matches!(i.node, Item::EntryExpr(_)));
+            .any(|i| matches!(i.item.node, Item::EntryExpr(_)));
 
         let snapshot_len = self.items.len();
         let snapshot_imports_len = self.imports.len();
@@ -535,7 +549,7 @@ impl InterpReplSession {
         let has_imports = import_module
             .items
             .iter()
-            .any(|i| matches!(i.node, Item::ImportDecl { .. }));
+            .any(|i| matches!(i.item.node, Item::ImportDecl { .. }));
         if has_imports {
             self.imports = crate::imports::load_repl_imports(&import_module).map_err(|e| {
                 self.items.truncate(snapshot_len);
@@ -591,7 +605,10 @@ impl InterpReplSession {
                 items.extend(module.items);
             }
         }
-        Module { items, pragmas: Vec::new() }
+        Module {
+            items,
+            pragmas: Vec::new(),
+        }
     }
 
     /// Constrói Module para `:env` — items acumulados + entry sintético `0`.
@@ -599,16 +616,22 @@ impl InterpReplSession {
         let mut items = self.items.clone();
         let needs_entry = match items.last() {
             None => true,
-            Some(item) => matches!(&item.node, Item::EntryExpr(_)),
+            Some(item) => matches!(&item.item.node, Item::EntryExpr(_)),
         };
         if needs_entry {
             let zero = Expr::IntLit {
                 text: "0".to_string(),
             };
             let spanned = Spanned::new(zero, Span::synthetic());
-            items.push(Spanned::new(Item::EntryExpr(spanned), Span::synthetic()));
+            items.push(kata_ast::ModuleEntry::new(Spanned::new(
+                Item::EntryExpr(spanned),
+                Span::synthetic(),
+            )));
         }
-        Module { items, pragmas: Vec::new() }
+        Module {
+            items,
+            pragmas: Vec::new(),
+        }
     }
 }
 

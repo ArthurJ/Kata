@@ -166,7 +166,7 @@ pub(crate) fn instantiate_family_for_concrete(
 /// com base nos items do módulo.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn run_pass0(
-    items: &[kata_ast::Spanned<Item>],
+    items: &[kata_ast::ModuleEntry],
     type_env: &mut TypeEnv,
     enum_registry: &mut EnumRegistry,
     struct_registry: &mut StructRegistry,
@@ -197,6 +197,10 @@ pub(crate) fn run_pass0(
         type_name: String,
         interface_name: String,
         methods: Vec<kata_ast::ImplMethod>,
+        /// True se o impl tem `#!allow type.incomplete_interface` anexado.
+        /// Quando true, métodos default da interface não são instanciados
+        /// para evitar corpos que referenciam métodos não definidos.
+        allows_incomplete: bool,
     }
 
     let mut deferred_interfaces: Vec<DeferredInterface> = Vec::new();
@@ -204,7 +208,7 @@ pub(crate) fn run_pass0(
 
     // ── Pass 0a: registrar declarações ──────────────────────────
     for item in items {
-        match &item.node {
+        match &item.item.node {
             Item::InterfaceDecl {
                 name,
                 supertraits,
@@ -235,6 +239,18 @@ pub(crate) fn run_pass0(
                 iface_params,
                 methods,
             } => {
+                // Verificar se o impl tem #!allow ou #!warn
+                // type.incomplete_interface. Ambos permitem que a impl
+                // incompleta proceeda — a diferença (warn emite diagnóstico,
+                // allow silencia) é tratada pelo filter_errors no pipeline.
+                let allows_incomplete = item.pragmas.iter().any(|p| {
+                    matches!(p, kata_ast::Pragma::DiagnosticControl(dc)
+                        if matches!(dc.level,
+                            kata_ast::DiagnosticLevel::Allow
+                            | kata_ast::DiagnosticLevel::Warn)
+                        && dc.code == "type.incomplete_interface")
+                });
+
                 // Registrar impl com methods vazios — serão preenchidos no 0b.
                 let entry = ImplEntry {
                     origin: origin.to_string(),
@@ -243,7 +259,8 @@ pub(crate) fn run_pass0(
                     interface_name: interface_name.clone(),
                     iface_params: iface_params.clone(),
                     methods: Vec::new(),
-                    span: item.span,
+                    span: item.item.span,
+                    allows_incomplete,
                 };
                 if let Err(e) = interface_registry.register_impl(entry) {
                     eprintln!("[resolution] warning: {e}");
@@ -252,6 +269,7 @@ pub(crate) fn run_pass0(
                     type_name: type_name.clone(),
                     interface_name: interface_name.clone(),
                     methods: methods.clone(),
+                    allows_incomplete,
                 });
             }
             // Processar data/enum/alias/refines inline no passo 0a.
@@ -316,6 +334,7 @@ pub(crate) fn run_pass0(
                                     predicates: refined_decl.predicates.clone(),
                                     lazy_type_param: None,
                                     extension_impl: None,
+                                    allows_incomplete: false,
                                 });
                             } else {
                                 // Registrar uma instância por tipo concreto.
@@ -342,6 +361,7 @@ pub(crate) fn run_pass0(
                                         predicates: refined_decl.predicates.clone(),
                                         lazy_type_param: None,
                                         extension_impl: None,
+                                    allows_incomplete: false,
                                     });
                                 }
                                 // Registrar o nome público no type_env como Family
@@ -377,6 +397,7 @@ pub(crate) fn run_pass0(
                                     predicates: refined_decl.predicates.clone(),
                                     lazy_type_param: lazy_param,
                                     extension_impl: None,
+                                    allows_incomplete: false,
                                 });
                             } else {
                                 // Refined concreto: `data (Int, > _ 0) as PositiveInt`
@@ -408,6 +429,7 @@ pub(crate) fn run_pass0(
                                     predicates: refined_decl.predicates.clone(),
                                     lazy_type_param: None,
                                     extension_impl: None,
+                                    allows_incomplete: false,
                                 });
                             }
                         }
@@ -497,6 +519,7 @@ pub(crate) fn run_pass0(
                             predicates: rd.predicates.clone(),
                             lazy_type_param: rd.lazy_type_param.clone(),
                             extension_impl: None,
+                            allows_incomplete: false,
                         });
                     }
                 } else {
@@ -1033,7 +1056,9 @@ pub(crate) fn run_pass0(
         // que não foram definidos no impl. Gera Signature +
         // FunctionDef sintetizada usando o default_body da interface.
         // Self na assinatura é substituído pelo tipo concreto.
-        if let Some(iface_info) = interface_registry.get_interface(&deferred.interface_name) {
+        // Percorre supertraits (ex: NUM herda mod// de FIELD).
+        let iface_sigs = interface_registry.all_signatures(&deferred.interface_name);
+        for sig in &iface_sigs {
             // Coletar assinaturas definidas no impl (nome + param_types
             // após instantiate_family_for_concrete) para decidir se o
             // default method deve ser pulado. Só pula se o impl define
@@ -1065,7 +1090,7 @@ pub(crate) fn run_pass0(
                     (m.name.clone(), pts)
                 })
                 .collect();
-            for sig in &iface_info.signatures {
+            for sig in &iface_sigs {
                 if let Some(default_clauses) = &sig.default_body {
                     let concrete_ty = resolve_type_expr(
                         &kata_ast::TypeExpr::Named(deferred.type_name.clone()),
@@ -1098,6 +1123,16 @@ pub(crate) fn run_pass0(
                         .iter()
                         .any(|(name, pts)| name == &sig.name && pts == &param_types);
                     if is_overridden {
+                        continue;
+                    }
+
+                    // Se o impl tem #!allow type.incomplete_interface, não
+                    // instanciar métodos default da interface. O corpo do
+                    // default pode referenciar métodos que o tipo não define
+                    // (ex: `mod` chama `/`), causando erros de dispatch
+                    // confusos. O usuário explicitou que sabe que não
+                    // implementou tudo — não gerar defaults que podem falhar.
+                    if deferred.allows_incomplete {
                         continue;
                     }
 

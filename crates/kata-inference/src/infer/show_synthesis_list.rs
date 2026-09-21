@@ -61,6 +61,7 @@ pub(crate) fn synthesize_list_show_functions(
         substitutions: None,
         param_names: vec![],
         param_defaults: vec![],
+            deferred_diagnostic: None,
     });
 
     // ── Registra overload `__kata_show__List_rest :: List::A => Text` ──
@@ -80,6 +81,7 @@ pub(crate) fn synthesize_list_show_functions(
         substitutions: None,
         param_names: vec![],
         param_defaults: vec![],
+            deferred_diagnostic: None,
     });
 
     // ── Registra `List implements SHOW` no InterfaceRegistry ──
@@ -91,6 +93,7 @@ pub(crate) fn synthesize_list_show_functions(
             interface_name: "SHOW".to_string(),
             iface_params: vec![],
             span: Span::synthetic(),
+            allows_incomplete: false,
             methods: vec![ImplMethodInfo {
                 name: "show".to_string(),
                 params: vec![list_ty.clone()],

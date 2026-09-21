@@ -229,7 +229,7 @@ impl ModuleLoader {
     ) -> Result<Vec<ImportedModule>, LoadError> {
         let mut imports = Vec::new();
         for item in &module.items {
-            if let Item::ImportDecl { path, alias, items } = &item.node {
+            if let Item::ImportDecl { path, alias, items } = &item.item.node {
                 let resolved_path = self.resolve_path(path, entry_dir)?;
                 let cached = self.load_path(&resolved_path)?;
                 let module_name = path.last().cloned().unwrap_or_default();
@@ -504,7 +504,7 @@ pub(crate) fn filter_exports(resolved: ResolvedModule, module: &Module) -> Resol
     let exported: HashSet<String> = module
         .items
         .iter()
-        .filter_map(|item| match &item.node {
+        .filter_map(|item| match &item.item.node {
             Item::ExportDecl { items } => Some(
                 items
                     .iter()

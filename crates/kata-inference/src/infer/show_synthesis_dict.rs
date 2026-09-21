@@ -63,6 +63,7 @@ pub(crate) fn synthesize_dict_show_functions(
         substitutions: None,
         param_names: vec![],
         param_defaults: vec![],
+            deferred_diagnostic: None,
     });
 
     // ── __kata_show__Dict_rest :: Dict::K V Int => Text ──
@@ -80,6 +81,7 @@ pub(crate) fn synthesize_dict_show_functions(
         substitutions: None,
         param_names: vec![],
         param_defaults: vec![],
+            deferred_diagnostic: None,
     });
 
     // ── Dict implements SHOW ──
@@ -91,6 +93,7 @@ pub(crate) fn synthesize_dict_show_functions(
             interface_name: "SHOW".to_string(),
             iface_params: vec![],
             span: Span::synthetic(),
+            allows_incomplete: false,
             methods: vec![ImplMethodInfo {
                 name: "show".to_string(),
                 params: vec![dict_ty.clone()],

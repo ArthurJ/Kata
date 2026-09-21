@@ -91,8 +91,8 @@ pub(crate) fn try_iface_method_dispatch(
     for arg in arg_types {
         match arg {
             Ty::Interface(iface_name) => {
-                if let Some(iface_info) = iface_reg.get_interface(iface_name) {
-                    for sig in &iface_info.signatures {
+                let iface_sigs = iface_reg.all_signatures(iface_name);
+                for sig in &iface_sigs {
                         if sig.name == func_name && sig.params.len() == arg_types.len() {
                             let mut params_match = true;
                             for (sp, sa) in sig.params.iter().zip(arg_types) {
@@ -117,7 +117,6 @@ pub(crate) fn try_iface_method_dispatch(
                             }
                         }
                     }
-                }
             }
             Ty::Var(_) => {
                 // Ty::Var em função genérica sintetizada (ex: `show v` dentro
@@ -127,7 +126,8 @@ pub(crate) fn try_iface_method_dispatch(
                 // cujo número de params case, e retornamos seu `ret`.
                 // O despacho concreto é resolvido no monomorphizador.
                 for iface_info in iface_reg.all_interfaces() {
-                    for sig in &iface_info.signatures {
+                    let all_sigs = iface_reg.all_signatures(&iface_info.name);
+                    for sig in &all_sigs {
                         if sig.name == func_name && sig.params.len() == arg_types.len() {
                             // Verifica params: Self deve ser Ty::Var, outros
                             // devem bater com arg_types.

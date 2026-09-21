@@ -8,7 +8,7 @@ fn parse_src(src: &str) -> Module {
 }
 
 fn first_item(m: &Module) -> &Item {
-    &m.items.first().expect("at least one item").node
+    &m.items.first().expect("at least one item").item.node
 }
 
 #[test]

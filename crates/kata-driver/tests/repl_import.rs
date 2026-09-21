@@ -64,9 +64,9 @@ fn result_lines(output: &str) -> Vec<&str> {
 
 #[test]
 fn repl_import_selective() {
-    // import examples/modules/mock_math.(dobrar) traz `dobrar` para o escopo.
+    // import examples/imports/modules/mock_math.(dobrar) traz `dobrar` para o escopo.
     let out = run_repl(&[
-        "import examples/modules/mock_math.(dobrar)",
+        "import examples/imports/modules/mock_math.(dobrar)",
         "echo!(dobrar 5)",
         ":quit",
     ]);
@@ -81,7 +81,7 @@ fn repl_import_selective() {
 fn repl_import_selective_alias() {
     // import com alias: dobrar as d → d 7 = 14
     let out = run_repl(&[
-        "import examples/modules/mock_math.(dobrar as d)",
+        "import examples/imports/modules/mock_math.(dobrar as d)",
         "echo!(d 7)",
         ":quit",
     ]);
@@ -96,7 +96,7 @@ fn repl_import_selective_alias() {
 fn repl_import_persistent_across_lines() {
     // Import persiste entre linhas: dobrar disponível em múltiplas expressões.
     let out = run_repl(&[
-        "import examples/modules/mock_math.(dobrar)",
+        "import examples/imports/modules/mock_math.(dobrar)",
         "echo!(dobrar 10)",
         "echo!(dobrar 20)",
         ":quit",
@@ -116,7 +116,7 @@ fn repl_import_persistent_across_lines() {
 fn repl_import_used_in_function() {
     // Função definida no REPL usa função importada.
     let out = run_repl(&[
-        "import examples/modules/mock_math.(dobrar)",
+        "import examples/imports/modules/mock_math.(dobrar)",
         "quadrado :: Int => Int",
         "lambda x: * (dobrar x) (dobrar x)",
         "",
@@ -135,7 +135,7 @@ fn repl_load_with_import() {
     // :load de arquivo que contém import.
     // Cria arquivo temporário com import + função que usa o import.
     let temp = std::env::temp_dir().join("kata5_repl_load_import_test.kata");
-    std::fs::write(&temp, "import examples/modules/mock_math.(dobrar)\n\ndobrar_e_somar :: Int Int => Int\nlambda a b: + (dobrar a) (dobrar b)\n\necho!(dobrar_e_somar 3 4)\n").unwrap();
+    std::fs::write(&temp, "import examples/imports/modules/mock_math.(dobrar)\n\ndobrar_e_somar :: Int Int => Int\nlambda a b: + (dobrar a) (dobrar b)\n\necho!(dobrar_e_somar 3 4)\n").unwrap();
     let path = temp.to_string_lossy().to_string();
     let out = run_repl(&[&format!(":load {path}"), ":quit"]);
     let lines = result_lines(&out);

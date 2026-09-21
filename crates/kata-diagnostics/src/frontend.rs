@@ -123,9 +123,7 @@ pub enum FrontendError {
         span: MietteSpan,
     },
 
-    #[error(
-        "aninhamento excessivo: limite de {limit} níveis de aninhamento de expressão excedido"
-    )]
+    #[error("aninhamento excessivo: limite de {limit} níveis de aninhamento de expressão excedido")]
     #[diagnostic(code = "parse.nesting_too_deep")]
     NestingTooDeep {
         limit: usize,

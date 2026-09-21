@@ -5,7 +5,7 @@
 //! e span fallback. A resolução de `TypeExpr` → `Ty` usa
 //! [`kata_resolution::resolve_type_expr`].
 
-use kata_ast::{Expr, Item, Pattern, Span, Spanned, WithBinding};
+use kata_ast::{Expr, Pattern, Span, Spanned, WithBinding};
 use kata_core::dispatch::{DispatchError, DispatchTable, OverloadInfo};
 use kata_core::enum_registry::EnumRegistry;
 use kata_core::ty::{Ty, TypeEnv};
@@ -40,6 +40,7 @@ pub(crate) fn populate_dispatch_table(signatures: &[Signature]) -> DispatchTable
             substitutions: None,
             param_names: sig.param_names.clone(),
             param_defaults: sig.param_defaults.clone(),
+            deferred_diagnostic: None,
         });
 
         // Marca comutativa quando a assinatura tem @commutative.
@@ -51,10 +52,10 @@ pub(crate) fn populate_dispatch_table(signatures: &[Signature]) -> DispatchTable
 }
 
 /// Span do último item ou sintético se módulo vazio.
-pub(crate) fn item_span_or_synthetic(items: &[Spanned<Item>]) -> MietteSpan {
+pub(crate) fn item_span_or_synthetic(items: &[kata_ast::ModuleEntry]) -> MietteSpan {
     items
         .last()
-        .map(|i| i.span.into())
+        .map(|i| i.item.span.into())
         .unwrap_or(MietteSpan(Span::synthetic()))
 }
 

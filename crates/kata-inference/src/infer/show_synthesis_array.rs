@@ -52,6 +52,7 @@ pub(crate) fn synthesize_array_show_functions(
         substitutions: None,
         param_names: vec![],
         param_defaults: vec![],
+            deferred_diagnostic: None,
     });
 
     // ── __kata_show__Array_rest :: Array::A Int => Text ──
@@ -69,6 +70,7 @@ pub(crate) fn synthesize_array_show_functions(
         substitutions: None,
         param_names: vec![],
         param_defaults: vec![],
+            deferred_diagnostic: None,
     });
 
     // ── Array implements SHOW ──
@@ -80,6 +82,7 @@ pub(crate) fn synthesize_array_show_functions(
             interface_name: "SHOW".to_string(),
             iface_params: vec![],
             span: Span::synthetic(),
+            allows_incomplete: false,
             methods: vec![ImplMethodInfo {
                 name: "show".to_string(),
                 params: vec![array_ty.clone()],

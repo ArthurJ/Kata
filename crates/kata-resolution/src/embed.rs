@@ -66,7 +66,13 @@ pub fn resolve_embeds(
     }
 
     if ctx.errors.is_empty() {
-        Ok((Module { items, pragmas: Vec::new() }, ctx.deps))
+        Ok((
+            Module {
+                items,
+                pragmas: Vec::new(),
+            },
+            ctx.deps,
+        ))
     } else {
         Err(ctx.errors)
     }
@@ -89,7 +95,13 @@ pub(crate) fn resolve_embeds_stdlib(
     }
 
     if ctx.errors.is_empty() {
-        Ok((Module { items, pragmas: Vec::new() }, ctx.deps))
+        Ok((
+            Module {
+                items,
+                pragmas: Vec::new(),
+            },
+            ctx.deps,
+        ))
     } else {
         Err(ctx.errors)
     }
@@ -104,7 +116,8 @@ struct EmbedCtx<'a> {
 
 // ── Walker: Item ──────────────────────────────────────────────────
 
-fn walk_item(item: Spanned<Item>, ctx: &mut EmbedCtx) -> Spanned<Item> {
+fn walk_item(entry: kata_ast::ModuleEntry, ctx: &mut EmbedCtx) -> kata_ast::ModuleEntry {
+    let item = entry.item;
     let node = match item.node {
         Item::Sig {
             name,
@@ -300,7 +313,12 @@ fn walk_item(item: Spanned<Item>, ctx: &mut EmbedCtx) -> Spanned<Item> {
         item @ (Item::ImportDecl { .. } | Item::ExportDecl { .. } | Item::AliasDecl { .. }) => item,
     };
 
-    Spanned::new(node, item.span)
+    let new_item = Spanned::new(node, item.span);
+    if entry.pragmas.is_empty() {
+        kata_ast::ModuleEntry::new(new_item)
+    } else {
+        kata_ast::ModuleEntry::with_pragmas(new_item, entry.pragmas)
+    }
 }
 
 // ── Walker: LambdaClause, GuardClause, MatchArm, ActionStmt ──────

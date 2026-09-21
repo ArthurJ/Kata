@@ -61,13 +61,18 @@ interface ORD implements EQ
 
     >= :: Self Self => Boolean
 
-interface NUM implements EQ
+interface RING implements EQ
     + :: Self Self => Self
 
     - :: Self Self => Self
 
     * :: Self Self => Self
 
+    zero :: Self => Self
+
+    abs :: Self => Self
+
+interface FIELD implements RING
     div :: Self Self => Result::(Self, Text)
 
     / :: Self NonZero => Self
@@ -78,9 +83,7 @@ interface NUM implements EQ
     // :: Self NonZero => Int
     lambda a b: int (/ a b)
 
-    zero :: Self => Self
-
-    abs :: Self => Self
+interface NUM implements FIELD
 
 interface SHOW
     show :: Self => Text

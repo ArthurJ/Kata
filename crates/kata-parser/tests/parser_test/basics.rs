@@ -181,9 +181,9 @@ fn multiple_items() {
     let src = "data Int ()\nenum Boolean\n    True\n    False\n+ 1 2";
     let m = parse_src(src);
     assert_eq!(m.items.len(), 3);
-    assert!(matches!(m.items[0].node, Item::DataDecl { .. }));
-    assert!(matches!(m.items[1].node, Item::EnumDecl { .. }));
-    assert!(matches!(m.items[2].node, Item::EntryExpr(_)));
+    assert!(matches!(m.items[0].item.node, Item::DataDecl { .. }));
+    assert!(matches!(m.items[1].item.node, Item::EnumDecl { .. }));
+    assert!(matches!(m.items[2].item.node, Item::EntryExpr(_)));
 }
 
 // ── Greedy application ────────────────────────────────────────────

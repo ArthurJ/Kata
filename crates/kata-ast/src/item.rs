@@ -7,6 +7,26 @@
 use crate::expr::{Expr, LambdaClause, TypeExpr};
 use crate::span::{Span, Spanned};
 
+/// Entry de módulo: `Spanned<Item>` + pragmas posicionais anexados.
+///
+/// `#!allow`/`#!warn`/`#!deny` em início de linha antes de uma declaração
+/// fica aqui — escopo é a declaração inteira, não o módulo.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ModuleEntry {
+    pub item: Spanned<Item>,
+    pub pragmas: Vec<Pragma>,
+}
+
+impl ModuleEntry {
+    pub fn new(item: Spanned<Item>) -> Self {
+        ModuleEntry { item, pragmas: Vec::new() }
+    }
+
+    pub fn with_pragmas(item: Spanned<Item>, pragmas: Vec<Pragma>) -> Self {
+        ModuleEntry { item, pragmas }
+    }
+}
+
 /// Item de top-level — declaração que aparece no nível de módulo.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Item {
@@ -301,7 +321,7 @@ pub enum Pragma {
 }
 
 /// `#!allow`/`#!warn`/`#!deny <diagnostic_code>`.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DiagnosticControl {
     pub level: DiagnosticLevel,
     /// Código do diagnóstico (ex: `type.incomplete_interface`).
@@ -311,7 +331,7 @@ pub struct DiagnosticControl {
 }
 
 /// Nível de severidade ajustado por pragma.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DiagnosticLevel {
     /// `#!allow` — silencia o diagnóstico.
     Allow,
@@ -334,7 +354,7 @@ pub struct TestSpec {
 }
 
 /// `#!<prefixo>-<resto> <payload>` — pragma externo preservado.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnknownPragma {
     /// Token completo (ex: `bench-config`).
     pub token: String,

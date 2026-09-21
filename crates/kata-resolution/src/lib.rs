@@ -7,6 +7,7 @@
 
 mod directives;
 pub(crate) mod embed;
+mod families;
 pub(crate) mod ident_collector;
 pub(crate) mod merge_imports;
 pub(crate) mod module_loader;
@@ -15,6 +16,7 @@ mod type_resolve;
 mod types;
 
 pub use embed::{EmbedError, resolve_embeds};
+pub use families::expand_family_signatures;
 pub use type_resolve::{collect_type_params, resolve_type_expr};
 pub use types::*;
 
@@ -27,7 +29,8 @@ use directives::{
 };
 
 use kata_ast::{Item, Module};
-use kata_core::{StructKey, Ty, TypeEnv};
+use kata_core::{Ty, TypeEnv};
+use kata_core::struct_registry::StructRegistry;
 
 /// Extrai a aridade padrão de cada nome de função a partir das assinaturas
 /// resolvidas.
@@ -49,6 +52,51 @@ pub fn extract_arities(signatures: &[Signature]) -> std::collections::HashMap<St
                 e.insert(sig.param_types.len());
             }
         }
+    }
+    arities
+}
+
+/// Extrai aridades de construtores de `data` (smart constructors) a partir
+/// do `struct_registry`.
+///
+/// Construtores são sintetizados no inference (`constructors.rs`), mas o
+/// parser precisa das aridades no Pass 2 — antes do inference. Esta função
+/// espelha a lógica de filtragem de `synthesize_constructors` para que o
+/// parser arity-aware trate construtores de `data` igual às funções comuns:
+/// `Complex 5.0 5.0` coleta exatamente 2 argumentos (não greedy).
+///
+/// Refined types com predicates são incluídos — o construtor falível
+/// sintetizado por `constructors_refined` tem a mesma aridade (1 parâmetro
+/// do tipo base). Famílias polimórficas (`is_instance_of`) não são
+/// construíveis diretamente e são puladas.
+pub fn extract_constructor_arities(
+    struct_registry: &StructRegistry,
+) -> std::collections::HashMap<String, usize> {
+    let mut arities = std::collections::HashMap::new();
+    for name in struct_registry.names() {
+        let Some(info) = struct_registry.get(name) else {
+            continue;
+        };
+        // Família polimórfica — não construtível diretamente.
+        if info.is_instance_of.is_some() {
+            continue;
+        }
+        // Struct sem campos (tipo opaco) — não ganha construtor.
+        // Alias de primitivo opaco (fields vazio) ganha construtor identity
+        // de aridade 1, mas só se alias_of.is_some(). Struct sem campos e
+        // sem alias não tem construtor algum.
+        let arity = if info.fields.is_empty() {
+            if info.alias_of.is_some() {
+                // Alias de tipo opaco: construtor identity, aridade 1.
+                1
+            } else {
+                continue;
+            }
+        } else {
+            info.fields.len()
+        };
+        // insert_only: não sobrescreve aridade de função já declarada.
+        arities.entry(name.to_string()).or_insert(arity);
     }
     arities
 }
@@ -215,7 +263,7 @@ fn resolve_inner(
     // Começa com diretivas importadas (se houver) e adiciona as locais.
     let mut directive_registry = imported_directives;
     for item in &module.items {
-        if let Item::DirectiveDecl { name, args, body } = &item.node {
+        if let Item::DirectiveDecl { name, args, body } = &item.item.node {
             match directives::extract_directive_spec(name, args, body.clone()) {
                 Ok(def) => {
                     if let Err(e) = directive_registry.insert(def) {
@@ -232,7 +280,7 @@ fn resolve_inner(
 
     // Pass 1: coleta assinaturas de funções
     for item in &module.items {
-        match &item.node {
+        match &item.item.node {
             Item::Sig {
                 name,
                 params,
@@ -510,7 +558,7 @@ fn resolve_inner(
                 // Extrai casos de teste dos pragmas #!test anexados à action.
                 // #!test("desc") e #!test{desc, args, timeout} — marker puro,
                 // sem expects/policy (esses permanecem @test{expects}).
-                tests.extend(extract_pragma_test_specs(&action_pragmas));
+                tests.extend(extract_pragma_test_specs(action_pragmas));
 
                 // Se tem @ffi e body vazio → Action FFI builtin.
                 // Produz uma Signature com is_action = true para o DispatchTable.
@@ -667,7 +715,7 @@ pub fn merge_two(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModul
     // Isto corrige o bug onde `data MyNum; MyNum implements NUM` falha porque
     // NonZero::MyNum nunca foi registrada (a família foi expandida eagerly
     // em pass0 com apenas os implementors do prelude).
-    extend_families_for_implementors(
+    families::extend_families_for_implementors(
         &mut struct_registry,
         &mut refined_decls,
         &interface_registry,
@@ -679,7 +727,7 @@ pub fn merge_two(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModul
     // da família ainda não existia). Agora que extend_families_for_implementors
     // registrou as instâncias faltantes, re-aplicar instantiate_family_for_concrete
     // com o concrete_type correto (o tipo que implementa a interface).
-    reinstantiate_family_params(
+    families::reinstantiate_family_params(
         &mut signatures,
         &mut functions,
         &interface_registry,
@@ -713,342 +761,6 @@ pub fn merge_two(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModul
         actions,
         directive_registry,
         embed_dependencies,
-    }
-}
-
-/// Re-instancia `Family(name)` → `Instance(name, concrete)` em signatures e
-/// functiondefs que não puderam ser instanciadas no pass0 porque a instância
-/// da família ainda não havia sido registrada.
-///
-/// Após `extend_families_for_implementors`, as instâncias faltantes existem.
-/// Para cada `(type_name, iface_name)` nos impls, lista os métodos da interface
-/// e re-aplica `instantiate_family_for_concrete` com `concrete = type_name`
-/// nas signatures/functiondefs cujo nome é um método dessa interface e que
-/// ainda contêm `Family` nos param_types.
-fn reinstantiate_family_params(
-    signatures: &mut [Signature],
-    functions: &mut [FunctionDef],
-    interface_registry: &kata_core::InterfaceRegistry,
-    struct_registry: &kata_core::StructRegistry,
-) {
-    // Para cada impl, coletar (type_name, method_names da interface).
-    let impls: Vec<(String, String)> = interface_registry
-        .impls_view()
-        .iter()
-        .map(|e| (e.type_name.clone(), e.interface_name.clone()))
-        .collect();
-
-    // Construir mapa: method_name → set de (type_name) que implementam
-    // uma interface contendo esse método.
-    // Para cada (type_name, iface_name), listar métodos da iface.
-    use std::collections::HashMap;
-    let mut method_to_types: HashMap<String, Vec<String>> = HashMap::new();
-    for (type_name, iface_name) in &impls {
-        if let Some(iface_info) = interface_registry.get_interface(iface_name) {
-            for sig in &iface_info.signatures {
-                method_to_types
-                    .entry(sig.name.clone())
-                    .or_default()
-                    .push(type_name.clone());
-            }
-        }
-    }
-
-    // Re-instanciar signatures.
-    for sig in signatures.iter_mut() {
-        // Só processar se tem Family OU Plain-de-família nos params.
-        // Plain("NonZero") aparece quando o pass0 do usuário resolveu "NonZero"
-        // sem saber que é família (o struct_registry do usuário não tem o
-        // prelude merged). Após merge_two, o struct_registry merged sabe.
-        let needs_reinst = sig.param_types.iter().any(|ty| match ty {
-            Ty::Struct(StructKey::Family(_)) => true,
-            Ty::Struct(StructKey::Plain(name)) => struct_registry.is_family(name),
-            _ => false,
-        });
-        if !needs_reinst {
-            continue;
-        }
-        // Determinar o concrete_type: é o Self da interface — o tipo que
-        // aparece como Struct(Plain(name)) no primeiro param (convenção de
-        // métodos de interface: Self é o receptor/primeiro param).
-        // Só re-instanciar se o Self é um tipo que implementa a interface
-        // e está na lista de candidates.
-        let self_type_name = sig.param_types.first().and_then(|ty| match ty {
-            Ty::Struct(StructKey::Plain(name)) => Some(name.clone()),
-            Ty::Prim(_) => {
-                // Primitivos: Int, Float, etc. Já foram instanciados no
-                // pass0 — não deveriam ter Family aqui. Pular.
-                None
-            }
-            _ => None,
-        });
-
-        let Some(concrete_type) = self_type_name else {
-            continue;
-        };
-
-        // Verificar que este concrete_type está nos candidates (implementa
-        // uma interface com este método).
-        let is_candidate = method_to_types
-            .get(&sig.name)
-            .map(|types| types.contains(&concrete_type))
-            .unwrap_or(false);
-        if !is_candidate {
-            continue;
-        }
-
-        let new_params: Vec<Ty> = sig
-            .param_types
-            .iter()
-            .map(|ty| pass0::instantiate_family_for_concrete(ty, &concrete_type, struct_registry))
-            .collect();
-        if new_params != sig.param_types {
-            sig.param_types = new_params;
-        }
-    }
-
-    // Re-instanciar functiondefs.
-    for func in functions.iter_mut() {
-        let needs_reinst = func.param_types.iter().any(|ty| match ty {
-            Ty::Struct(StructKey::Family(_)) => true,
-            Ty::Struct(StructKey::Plain(name)) => struct_registry.is_family(name),
-            _ => false,
-        });
-        if !needs_reinst {
-            continue;
-        }
-        // Mesma lógica: Self = primeiro param (Struct(Plain(name))).
-        let self_type_name = func.param_types.first().and_then(|ty| match ty {
-            Ty::Struct(StructKey::Plain(name)) => Some(name.clone()),
-            _ => None,
-        });
-        let Some(concrete_type) = self_type_name else {
-            continue;
-        };
-        let is_candidate = method_to_types
-            .get(&func.name)
-            .map(|types| types.contains(&concrete_type))
-            .unwrap_or(false);
-        if !is_candidate {
-            continue;
-        }
-        let new_params: Vec<Ty> = func
-            .param_types
-            .iter()
-            .map(|ty| pass0::instantiate_family_for_concrete(ty, &concrete_type, struct_registry))
-            .collect();
-        if new_params != func.param_types {
-            func.param_types = new_params;
-            let new_ret = pass0::instantiate_family_for_concrete(
-                &func.return_type,
-                &concrete_type,
-                struct_registry,
-            );
-            func.return_type = new_ret;
-        }
-    }
-}
-
-/// Estende famílias polimórficas com instâncias faltantes para implementors
-/// tardios.
-///
-/// Após `merge_two`, o `interface_registry` contém todos os `implements` do
-/// prelude + usuário, e o `struct_registry` contém todas as famílias. Para
-/// cada `T implements IFACE`, se existe uma família `data (IFACE, ...) as Fam`
-/// que não tem `Fam::T` registrada, registra a instância faltante + o
-/// `RefinedDeclInfo` correspondente para o inference sintetizar o construtor.
-///
-/// Origin da instância: a origin da família (resolvida via
-/// `struct_registry.resolve_origin(family)`), não a origin do implementor.
-/// Isto porque `get_instance(family, concrete)` resolve origin pelo nome
-/// da família — se registrássemos com origin do usuário, a busca falharia.
-fn extend_families_for_implementors(
-    struct_registry: &mut kata_core::StructRegistry,
-    refined_decls: &mut Vec<RefinedDeclInfo>,
-    interface_registry: &kata_core::InterfaceRegistry,
-    type_graph: &mut kata_core::TypeGraph,
-) {
-    // Coletar todos os (type_name, iface_name, span) dos impls.
-    // O span é necessário para produzir o diagnóstico
-    // `FamilyExtensionInvalid` no inference quando um predicado falha.
-    let impls: Vec<(String, String, kata_ast::Span)> = interface_registry
-        .impls_view()
-        .iter()
-        .map(|e| (e.type_name.clone(), e.interface_name.clone(), e.span))
-        .collect();
-
-    for (type_name, iface_name, impl_span) in &impls {
-        // Encontrar famílias sobre esta interface.
-        let families = struct_registry.families_over_iface(iface_name);
-        for family in &families {
-            // Pular se a instância já existe (idempotência).
-            if struct_registry.has_instance(family, type_name) {
-                continue;
-            }
-
-            // Resolver a origin da família para registrar a instância.
-            let Some(family_origin) = struct_registry
-                .resolve_origin(family)
-                .map(|s| s.to_string())
-            else {
-                continue;
-            };
-
-            // Obter os predicados de uma instância existente da mesma família
-            // para derivar os pred_names da nova instância.
-            // Estrutura: __pred_{family}_{concrete}_{idx}
-            let num_preds = struct_registry
-                .all_instances(family)
-                .first()
-                .and_then(|(_, info)| info.predicates.as_ref())
-                .map(|preds| preds.len())
-                .unwrap_or(0);
-
-            let pred_names: Vec<String> = (0..num_preds)
-                .map(|i| format!("__pred_{family}_{type_name}_{i}"))
-                .collect();
-
-            // Determinar o base_ty da instância (tipo concreto).
-            let instance_base = match type_name.as_str() {
-                "Int" => Ty::Prim(kata_core::PrimTy::Int),
-                "Float" => Ty::Prim(kata_core::PrimTy::Float),
-                "Rational" => Ty::Prim(kata_core::PrimTy::Rational),
-                "Text" => Ty::Prim(kata_core::PrimTy::Text),
-                _ => Ty::Struct(StructKey::Plain(type_name.clone())),
-            };
-
-            // Registrar a instância no struct_registry.
-            struct_registry.register_refined_instance(
-                &family_origin,
-                family,
-                type_name,
-                pred_names,
-            );
-
-            // Sincronizar o TypeGraph: adicionar a instância ao nó Family.
-            type_graph.add_family_instance(family, type_name);
-
-            // Adicionar RefinedDeclInfo para o inference sintetizar o construtor.
-            // Os predicados são os mesmos da família (extraídos de uma
-            // instância existente via refined_decls).
-            let template_found = refined_decls
-                .iter()
-                .find(|rd| rd.name == *family && rd.lazy_type_param.is_none());
-            if let Some(template) = template_found {
-                refined_decls.push(RefinedDeclInfo {
-                    name: family.clone(),
-                    base_ty: instance_base,
-                    predicates: template.predicates.clone(),
-                    lazy_type_param: None,
-                    extension_impl: Some((type_name.clone(), iface_name.clone(), *impl_span)),
-                });
-            }
-        }
-    }
-}
-
-/// Expande signatures e functions que usam `Family("FamilyName")` de uma
-/// família polimórfica em múltiplas versões concretas, uma por instância.
-///
-/// `Family("NonZero")` é produzido por `resolve_type_expr` quando o nome
-/// é uma família polimórfica registrada. A expansão substitui cada
-/// `Family("NonZero")` por `Instance("NonZero","Int")`,
-/// `Instance("NonZero","Float")`, etc. O tree-shaking remove as
-/// instâncias sem chamador.
-pub fn expand_family_signatures(
-    signatures: &mut Vec<Signature>,
-    _struct_registry: &kata_core::StructRegistry,
-) {
-    // Para cada signature, verificar se algum param é Family.
-    // Se sim, expandir em instâncias concretas.
-    let mut new_sigs = Vec::new();
-
-    for sig in signatures.iter() {
-        // Coletar posições dos params que são Family.
-        let family_positions: Vec<(usize, String)> = sig
-            .param_types
-            .iter()
-            .enumerate()
-            .filter_map(|(i, ty)| {
-                if let Ty::Struct(StructKey::Family(name)) = ty {
-                    Some((i, name.clone()))
-                } else {
-                    None
-                }
-            })
-            .collect();
-
-        if family_positions.is_empty() {
-            // Sem famílias — signature fica como está.
-            continue;
-        }
-
-        // Gerar combinações: produto cartesiano das instâncias de cada família.
-        // Por enquanto, suportamos 1 família por signature (suficiente para stdlib).
-        // Para múltiplas famílias (ex: NUM NonZero), generalizar com produto cartesiano.
-        if family_positions.len() == 1 {
-            let (pos, family_name) = &family_positions[0];
-            let instances = _struct_registry.all_instances(family_name);
-            for (concrete_alias, _) in &instances {
-                let instance_key =
-                    StructKey::Instance(family_name.clone(), concrete_alias.to_string());
-                let mut new_params = sig.param_types.clone();
-                new_params[*pos] = Ty::Struct(instance_key);
-
-                let new_sig = Signature {
-                    name: sig.name.clone(),
-                    param_types: new_params.clone(),
-                    return_type: sig.return_type.clone(),
-                    ffi_symbol: sig.ffi_symbol.clone(),
-                    is_associative: sig.is_associative,
-                    associative_neutral: sig.associative_neutral,
-                    is_action: sig.is_action,
-                    is_commutative: sig.is_commutative,
-                    type_params: sig.type_params.clone(),
-                    param_names: sig.param_names.clone(),
-                    param_defaults: sig.param_defaults.clone(),
-                };
-                new_sigs.push(new_sig);
-
-                // NÃO expandir FunctionDefs com corpo Kata.
-                // Funções FFI (sem corpo) são expandidas via Signature apenas.
-                // Funções com corpo Kata mantêm Family nos param_types — o
-                // dispatch resolve Family ↔ Instance no call site via
-                // match_score (Family ↔ Instance = exact).
-            }
-
-            // Marcar a signature original para remoção.
-            // (Fazemos isso adiando: não adicionamos a original de volta.)
-        }
-    }
-
-    // Se houve expansão, substituir as signatures originais pelas expandidas.
-    if !new_sigs.is_empty() {
-        // Coletar nomes das signatures que foram expandidas (têm Family nos params).
-        let expanded_names: Vec<(String, Vec<Ty>)> = signatures
-            .iter()
-            .filter(|sig| {
-                sig.param_types
-                    .iter()
-                    .any(|ty| matches!(ty, Ty::Struct(StructKey::Family(_))))
-            })
-            .map(|sig| (sig.name.clone(), sig.param_types.clone()))
-            .collect();
-
-        // Remover signatures originais que foram expandidas.
-        signatures.retain(|sig| {
-            !expanded_names
-                .iter()
-                .any(|(name, params)| sig.name == *name && sig.param_types == *params)
-        });
-
-        // Adicionar signatures expandidas.
-        signatures.extend(new_sigs);
-
-        // FunctionDefs NÃO são removidos — mantêm Family nos param_types.
-        // O dispatch encontra a Signature expandida (Instance concreta)
-        // para FFI, e encontra a Signature original (Family) para corpos
-        // Kata via match_score (Family ↔ Instance = exact).
     }
 }
 
@@ -1118,4 +830,137 @@ pub fn validate_orphan_rule(
     }
 
     errors
+}
+
+/// Gate 2: implementação incompleta de interface.
+///
+/// Para cada `T implements IFACE`, verifica que todos os métodos
+/// **obrigatórios** (sem `default_body`) de IFACE e seus supertraits
+/// têm um método com o mesmo nome definido no impl. Métodos com
+/// `default_body` contam como cobertos (o pass0b sintetiza o corpo).
+///
+/// Retorna `Vec<ResolveError>` com `IncompleteInterface` para cada impl
+/// que deixou métodos obrigatórios faltando. O erro é controlável via
+/// `#!allow type.incomplete_interface` (ver `filter_errors` no pipeline).
+pub fn validate_incomplete_interfaces(
+    interface_registry: &kata_core::InterfaceRegistry,
+) -> Vec<ResolveError> {
+    let mut errors = Vec::new();
+
+    for entry in interface_registry.impls_view() {
+        // Só valida impls declarados no módulo do usuário. Impls
+        // importados (origin "complex", "math", etc.) e sintéticos
+        // são validados em seu módulo de origem.
+        if entry.origin != "__local__" {
+            continue;
+        }
+
+        // Métodos definidos pelo usuário EM QUALQUER impl do mesmo tipo.
+        // Ex: `MyNum implements NUM` define 8 métodos de NUM, e
+        // `MyNum implements EQ` define `=` e `!=`. NUM tem supertrait EQ,
+        // então o check de NUM precisa ver os métodos de EQ também.
+        let defined_names: std::collections::HashSet<&str> = interface_registry
+            .get_impls_for_type(&entry.type_name)
+            .iter()
+            .flat_map(|e| e.methods.iter().map(|m| m.name.as_str()))
+            .collect();
+
+        // Coletar métodos obrigatórios faltando da interface + supertraits.
+        let missing = collect_missing_methods(
+            interface_registry,
+            &entry.interface_name,
+            &defined_names,
+            &entry.type_name,
+        );
+
+        if !missing.is_empty() {
+            errors.push(ResolveError::IncompleteInterface {
+                type_name: entry.type_name.clone(),
+                interface_name: entry.interface_name.clone(),
+                missing,
+                span: entry.span.into(),
+            });
+        }
+    }
+
+    errors
+}
+
+/// Percorre a interface e seus supertraits recursivamente, coletando
+/// métodos obrigatórios (sem `default_body`) que não estão em
+/// `defined_names`. Retorna `Vec<(name, signature)>` onde signature
+/// é a string formatada com `Self` substituído pelo nome do tipo.
+fn collect_missing_methods(
+    registry: &kata_core::InterfaceRegistry,
+    iface_name: &str,
+    defined_names: &std::collections::HashSet<&str>,
+    concrete_ty_name: &str,
+) -> Vec<(String, String)> {
+    let mut missing = Vec::new();
+    let mut visited = std::collections::HashSet::new();
+    collect_missing_methods_inner(
+        registry,
+        iface_name,
+        defined_names,
+        &mut missing,
+        &mut visited,
+        concrete_ty_name,
+    );
+    missing
+}
+
+fn collect_missing_methods_inner(
+    registry: &kata_core::InterfaceRegistry,
+    iface_name: &str,
+    defined_names: &std::collections::HashSet<&str>,
+    missing: &mut Vec<(String, String)>,
+    visited: &mut std::collections::HashSet<String>,
+    concrete_ty_name: &str,
+) {
+    if !visited.insert(iface_name.to_string()) {
+        return;
+    }
+
+    let Some(info) = registry.get_interface(iface_name) else {
+        return;
+    };
+
+    let concrete_ty = kata_core::Ty::Struct(kata_core::StructKey::Plain(
+        concrete_ty_name.to_string(),
+    ));
+
+    for sig in &info.signatures {
+        // Métodos com default_body contam como cobertos.
+        if sig.default_body.is_some() {
+            continue;
+        }
+        if !defined_names.contains(sig.name.as_str()) {
+            // Formatar signature com Self substituído: "name :: params => ret"
+            let params: Vec<String> = sig
+                .params
+                .iter()
+                .map(|t| t.substitute_self(&concrete_ty).to_string())
+                .collect();
+            let ret = sig.ret.substitute_self(&concrete_ty).to_string();
+            let params_str = params.join(" ");
+            let sig_str = if params_str.is_empty() {
+                format!("{} => {}", sig.name, ret)
+            } else {
+                format!("{} :: {} => {}", sig.name, params_str, ret)
+            };
+            missing.push((sig.name.clone(), sig_str));
+        }
+    }
+
+    // Recursão em supertraits.
+    for st in &info.supertraits {
+        collect_missing_methods_inner(
+            registry,
+            st,
+            defined_names,
+            missing,
+            visited,
+            concrete_ty_name,
+        );
+    }
 }

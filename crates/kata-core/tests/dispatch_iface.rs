@@ -3,6 +3,7 @@
 //! Verifica que match_score pontua iface++ quando o argumento implementa
 //! a interface esperada, e que o dispatch seleciona a overload correta.
 
+use kata_ast::Span;
 use kata_core::dispatch::{DispatchTable, OverloadInfo};
 use kata_core::interface_registry::{ImplEntry, InterfaceInfo, InterfaceRegistry};
 use kata_core::ty::Ty;
@@ -21,6 +22,7 @@ fn make_ffi_info(name: &str, params: &[Ty], ret: Ty, ffi: &str) -> OverloadInfo 
         substitutions: None,
         param_names: vec![],
         param_defaults: vec![],
+            deferred_diagnostic: None,
     }
 }
 
@@ -38,10 +40,11 @@ fn make_impl_entry(type_name: &str, iface_name: &str) -> ImplEntry {
         origin: "test".to_string(),
         type_name: type_name.into(),
         type_params: Vec::new(),
-        interface_name: iface_name.into(),
         iface_params: Vec::new(),
+        interface_name: iface_name.into(),
         methods: Vec::new(),
-        span: kata_ast::Span::synthetic(),
+        span: Span::synthetic(),
+        allows_incomplete: false,
     }
 }
 

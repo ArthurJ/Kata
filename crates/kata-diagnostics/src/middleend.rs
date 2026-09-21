@@ -258,4 +258,31 @@ Converta um argumento ou adicione uma sobrecarga cross-type."
         #[label("estende família inválida")]
         span: MietteSpan,
     },
+
+    /// `Fam::T` requer uma sobrecarga que não existe para `T`.
+    /// Ex: o predicado `!= _ (zero _)` de `NonZero::Internal` precisa de
+    /// `zero :: Internal => Internal`, mas `Internal` não define `zero`.
+    #[error(
+        "`{family_name}::{type_name}` requer a sobrecarga `{missing_signature}`, mas `{type_name}` não define `{method_name}`"
+    )]
+    #[diagnostic(code = "type.missing_overload")]
+    MissingOverload {
+        type_name: String,
+        family_name: String,
+        method_name: String,
+        /// Signature esperada com Self substituído (ex: "zero :: Internal => Internal").
+        missing_signature: String,
+        #[label("método não definido neste implements")]
+        span: MietteSpan,
+    },
+
+    /// Erro genérico do middleend com mensagem customizada.
+    /// Usado para diagnósticos deferidos de construtores de família.
+    #[error("{message}")]
+    #[diagnostic(code = "type.deferred_diagnostic")]
+    DeferredDiagnostic {
+        message: String,
+        #[label("uso do construtor incompleto")]
+        span: MietteSpan,
+    },
 }

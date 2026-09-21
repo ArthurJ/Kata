@@ -1,6 +1,5 @@
 ---
 source: crates/kata-driver/tests/examples_snapshot.rs
-assertion_line: 96
 expression: output
 ---
 42

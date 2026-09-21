@@ -111,6 +111,7 @@ pub(crate) fn synthesize_show_functions(
             substitutions: None,
             param_names: vec![],
             param_defaults: vec![],
+            deferred_diagnostic: None,
         });
 
         // Registra `Struct implements SHOW` no InterfaceRegistry.
@@ -122,6 +123,7 @@ pub(crate) fn synthesize_show_functions(
                 interface_name: "SHOW".to_string(),
                 iface_params: vec![],
                 span: Span::synthetic(),
+                allows_incomplete: false,
                 methods: vec![ImplMethodInfo {
                     name: "show".to_string(),
                     params: vec![param_ty.clone()],
@@ -213,6 +215,7 @@ pub(crate) fn synthesize_show_functions(
                 substitutions: None,
                 param_names: vec![],
                 param_defaults: vec![],
+            deferred_diagnostic: None,
             });
 
             let pattern = Spanned::new(
@@ -296,6 +299,7 @@ pub(crate) fn synthesize_show_functions(
             substitutions: None,
             param_names: vec![],
             param_defaults: vec![],
+            deferred_diagnostic: None,
         });
 
         // Registra `Enum implements SHOW` no InterfaceRegistry.
@@ -307,6 +311,7 @@ pub(crate) fn synthesize_show_functions(
                 interface_name: "SHOW".to_string(),
                 iface_params: vec![],
                 span: Span::synthetic(),
+                allows_incomplete: false,
                 methods: vec![ImplMethodInfo {
                     name: "show".to_string(),
                     params: vec![param_ty.clone()],

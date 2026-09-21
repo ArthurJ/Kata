@@ -71,6 +71,12 @@ pub struct ImplEntry {
     /// Span do `implements` no código-fonte.
     /// `Span::synthetic()` para impls sintéticos (show_synthesis, etc.).
     pub span: Span,
+    /// True se o impl tem `#!allow type.incomplete_interface` anexado.
+    /// Quando true, a síntese de predicados de família polimórfica
+    /// deve ser pulada — o usuário explicitou que sabe que não
+    /// implementou tudo. Erro de `type.missing_overload` só dispara
+    /// no uso real do construtor, não na síntese eager.
+    pub allows_incomplete: bool,
 }
 
 /// Método dentro de impl — tipos já resolvidos.
@@ -315,6 +321,62 @@ impl InterfaceRegistry {
         info.supertraits
             .iter()
             .any(|st| self.interface_has_method(st, method_name))
+    }
+
+    /// Coleta os nomes de todos os métodos de uma interface, incluindo
+    /// métodos herdados de supertraits (recursivamente). Evita ciclos.
+    pub fn all_method_names(&self, iface_name: &str) -> Vec<String> {
+        fn collect(
+            reg: &InterfaceRegistry,
+            iface: &str,
+            out: &mut Vec<String>,
+            visited: &mut std::collections::HashSet<String>,
+        ) {
+            if !visited.insert(iface.to_string()) {
+                return;
+            }
+            if let Some(info) = reg.get_interface(iface) {
+                for sig in &info.signatures {
+                    out.push(sig.name.clone());
+                }
+                for st in &info.supertraits {
+                    collect(reg, st, out, visited);
+                }
+            }
+        }
+        let mut out = Vec::new();
+        let mut visited = std::collections::HashSet::new();
+        collect(self, iface_name, &mut out, &mut visited);
+        out
+    }
+
+    /// Coleta todas as signatures de uma interface, incluindo as
+    /// herdadas de supertraits (recursivamente). Evita ciclos.
+    /// Assinaturas de supertraits vêm antes das da interface direta
+    /// (ordem DFS: RING antes de FIELD antes de NUM).
+    pub fn all_signatures(&self, iface_name: &str) -> Vec<InterfaceSignature> {
+        fn collect(
+            reg: &InterfaceRegistry,
+            iface: &str,
+            out: &mut Vec<InterfaceSignature>,
+            visited: &mut std::collections::HashSet<String>,
+        ) {
+            if !visited.insert(iface.to_string()) {
+                return;
+            }
+            if let Some(info) = reg.get_interface(iface) {
+                for st in &info.supertraits {
+                    collect(reg, st, out, visited);
+                }
+                for sig in &info.signatures {
+                    out.push(sig.clone());
+                }
+            }
+        }
+        let mut out = Vec::new();
+        let mut visited = std::collections::HashSet::new();
+        collect(self, iface_name, &mut out, &mut visited);
+        out
     }
 
     /// Constrói um mapa `method_name → Vec<iface_name>` listando quais

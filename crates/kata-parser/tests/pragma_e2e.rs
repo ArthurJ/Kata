@@ -14,7 +14,13 @@ use kata_parser::parse;
 fn parse_pragma(src: &str) -> Vec<Pragma> {
     let tokens = lex(src).expect("lex failed");
     let module = parse(tokens).expect("parse failed");
-    module.pragmas
+    // Pragmas podem estar em module.pragmas (órfãos) ou anexados
+    // a ModuleEntry (escopo posicional).
+    let mut all = module.pragmas.clone();
+    for entry in &module.items {
+        all.extend(entry.pragmas.clone());
+    }
+    all
 }
 
 fn parse_pragma_err(src: &str) -> String {
@@ -31,7 +37,9 @@ const MINIMAL_PROG: &str = "echo!(\"hi\")\n";
 
 #[test]
 fn t1_pragma_allow_produces_diagnostic_control() {
-    let pragmas = parse_pragma(&format!("#!allow type.incomplete_interface\n{MINIMAL_PROG}"));
+    let pragmas = parse_pragma(&format!(
+        "#!allow type.incomplete_interface\n{MINIMAL_PROG}"
+    ));
     assert_eq!(pragmas.len(), 1);
     match &pragmas[0] {
         Pragma::DiagnosticControl(dc) => {
@@ -70,9 +78,7 @@ fn t3_pragma_deny_produces_diagnostic_control() {
 
 #[test]
 fn t4_pragma_external_with_prefix_preserved() {
-    let pragmas = parse_pragma(&format!(
-        "#!bench-config iterations: 1000\n{MINIMAL_PROG}"
-    ));
+    let pragmas = parse_pragma(&format!("#!bench-config iterations: 1000\n{MINIMAL_PROG}"));
     assert_eq!(pragmas.len(), 1);
     match &pragmas[0] {
         Pragma::UnknownPragma(up) => {
@@ -101,9 +107,7 @@ fn t5_pragma_external_inline_lexer_tokenizes() {
 
 #[test]
 fn t6_pragma_without_prefix_rejected() {
-    let err = parse_pragma_err(&format!(
-        "#!benchmark iterations: 1000\n{MINIMAL_PROG}"
-    ));
+    let err = parse_pragma_err(&format!("#!benchmark iterations: 1000\n{MINIMAL_PROG}"));
     assert!(
         err.contains("benchmark") || err.contains("pragma"),
         "error should mention `benchmark` or `pragma`, got: {err}"
@@ -140,7 +144,7 @@ fn t8_pragma_test_marker_produces_test_spec() {
     let action = module
         .items
         .iter()
-        .find_map(|i| match &i.node {
+        .find_map(|i| match &i.item.node {
             Item::ActionDecl { pragmas, .. } => Some(pragmas),
             _ => None,
         })
@@ -166,7 +170,7 @@ fn t9_pragma_test_with_timeout() {
     let action = module
         .items
         .iter()
-        .find_map(|i| match &i.node {
+        .find_map(|i| match &i.item.node {
             Item::ActionDecl { pragmas, .. } => Some(pragmas),
             _ => None,
         })
@@ -184,15 +188,19 @@ fn t9_pragma_test_with_timeout() {
 #[test]
 fn t10_pragma_does_not_break_decl_after() {
     // Pragma antes de uma declaração sig deve ser coletado sem
-    // impedir o parse da sig.
+    // impedir o parse da sig. Escopo posicional: pragma anexado
+    // ao ModuleEntry da sig.
     let src = "#!allow type.incomplete_interface\n+ :: Int Int => Int\n";
     let tokens = lex(src).expect("lex failed");
     let module = parse(tokens).expect("parse failed");
-    assert_eq!(module.pragmas.len(), 1);
+    // Pragma pode estar em module.pragmas ou anexado ao ModuleEntry.
+    let pragma_count = module.pragmas.len()
+        + module.items.iter().map(|e| e.pragmas.len()).sum::<usize>();
+    assert_eq!(pragma_count, 1);
     let has_sig = module
         .items
         .iter()
-        .any(|item| matches!(item.node, Item::Sig { .. }));
+        .any(|item| matches!(item.item.node, Item::Sig { .. }));
     assert!(has_sig, "module should contain the sig decl");
 }
 

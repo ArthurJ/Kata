@@ -175,6 +175,7 @@ pub fn infer_module(
             substitutions: None,
             param_names: action_def.param_names.clone(),
             param_defaults: action_def.param_defaults.clone(),
+            deferred_diagnostic: None,
         });
     }
 
@@ -299,7 +300,7 @@ pub fn infer_module(
     let mut seen_constant_names: std::collections::HashSet<String> =
         std::collections::HashSet::new();
     for item in &module.items {
-        if let Item::ConstantDecl { name, value } = &item.node {
+        if let Item::ConstantDecl { name, value } = &item.item.node {
             // Constants são imutáveis por design — redefinir o mesmo nome é erro.
             if !seen_constant_names.insert(name.clone()) {
                 return Err(MiddleError::DuplicateConstant {
@@ -434,7 +435,7 @@ pub fn infer_module(
     let mut entry_expr: Option<Spanned<TypedExpr>> = None;
 
     for item in &module.items {
-        match &item.node {
+        match &item.item.node {
             Item::EntryExpr(expr) => {
                 // Desugar Pipe e Hole antes do typeck. Após isto, a AST
                 // não contém Expr::Pipe nem Expr::Hole — o typeck nunca os
@@ -658,7 +659,7 @@ fn debug_assert_no_embed_residual(module: &Module) {
     }
 
     for item in &module.items {
-        match &item.node {
+        match &item.item.node {
             Item::ConstantDecl { value, .. } => {
                 check_expr(value);
             }

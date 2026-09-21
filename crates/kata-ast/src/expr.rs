@@ -530,7 +530,7 @@ pub struct ActionStmt {
 /// Um módulo completo — arquivo .kata.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Module {
-    pub items: Vec<Spanned<crate::item::Item>>,
+    pub items: Vec<crate::item::ModuleEntry>,
     /// Pragmas `#!` de top-level que não foram anexados a items
     /// (ex: pragmas órfãos no fim do arquivo). Pragmas anexados a
     /// items específicos serão distribuídos em fases posteriores.
@@ -538,7 +538,10 @@ pub struct Module {
 }
 
 impl Module {
-    pub fn new(items: Vec<Spanned<crate::item::Item>>) -> Self {
-        Module { items, pragmas: Vec::new() }
+    pub fn new(items: Vec<crate::item::ModuleEntry>) -> Self {
+        Module {
+            items,
+            pragmas: Vec::new(),
+        }
     }
 }
