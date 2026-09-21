@@ -194,8 +194,8 @@ fn t10_pragma_does_not_break_decl_after() {
     let tokens = lex(src).expect("lex failed");
     let module = parse(tokens).expect("parse failed");
     // Pragma pode estar em module.pragmas ou anexado ao ModuleEntry.
-    let pragma_count = module.pragmas.len()
-        + module.items.iter().map(|e| e.pragmas.len()).sum::<usize>();
+    let pragma_count =
+        module.pragmas.len() + module.items.iter().map(|e| e.pragmas.len()).sum::<usize>();
     assert_eq!(pragma_count, 1);
     let has_sig = module
         .items

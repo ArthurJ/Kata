@@ -363,7 +363,7 @@ pub(crate) fn instantiate_generic_action_call(
                 substitutions: Some(subs.clone()),
                 param_names: vec![],
                 param_defaults: vec![],
-            deferred_diagnostic: None,
+                deferred_diagnostic: None,
             });
 
             // Gera TypedAction se a Action original tem corpo.

@@ -31,7 +31,9 @@ use kata_lexer::lex;
 use kata_monomorph::monomorphize;
 use kata_optimizer::optimize;
 use kata_parser::{parse, parse_repl_decls_only, parse_repl_with_arity, scan_lambdas};
-use kata_resolution::{ModuleLoader, ResolvedModule, extract_arities, extract_constructor_arities, resolve};
+use kata_resolution::{
+    ModuleLoader, ResolvedModule, extract_arities, extract_constructor_arities, resolve,
+};
 use kata_tree_shaking::tree_shake;
 
 use crate::display;

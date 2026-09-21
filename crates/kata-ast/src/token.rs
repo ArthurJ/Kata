@@ -74,6 +74,8 @@ pub enum Token {
     Refines,
     /// `with` — bloco bottom-up ao final de lambda
     With,
+    /// `where` — bounds de type params em `data`
+    Where,
     /// `match` — pattern matching
     Match,
     /// `return` — early return em Actions
@@ -208,6 +210,7 @@ impl Token {
                 | Token::Implements
                 | Token::Refines
                 | Token::With
+                | Token::Where
                 | Token::Match
                 | Token::Return
                 | Token::Loop
@@ -253,6 +256,7 @@ impl std::fmt::Display for Token {
             Token::Implements => write!(f, "implements"),
             Token::Refines => write!(f, "refines"),
             Token::With => write!(f, "with"),
+            Token::Where => write!(f, "where"),
             Token::Match => write!(f, "match"),
             Token::Return => write!(f, "return"),
             Token::Loop => write!(f, "loop"),

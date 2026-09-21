@@ -39,6 +39,9 @@ impl Parser {
         // Parse fields: (field::Type field::Type) or ()
         let fields = self.parse_field_decls()?;
 
+        // Parse optional `where` clause: `where T implements SCALAR, R implements NAT`
+        let where_bounds = self.parse_where_clause()?;
+
         if matches!(self.peek(), Token::StmtSep) {
             self.advance();
         }
@@ -48,6 +51,7 @@ impl Parser {
             fields,
             directives,
             refined: None,
+            where_bounds,
         })
     }
 
@@ -107,6 +111,7 @@ impl Parser {
                 base_ty,
                 predicates,
             }),
+            where_bounds: Vec::new(),
         })
     }
 
@@ -136,6 +141,50 @@ impl Parser {
             self.peek(),
             Token::IntLit(_) | Token::FloatLit(_) | Token::TextLit(_) | Token::At
         )
+    }
+
+    /// Parse optional `where` clause: `where T implements SCALAR, R implements NAT`.
+    /// Returns Vec<(param_name, iface_name)>. Empty if no `where` keyword.
+    fn parse_where_clause(&mut self) -> Result<Vec<(String, String)>, FrontendError> {
+        if !matches!(self.peek(), Token::Where) {
+            return Ok(Vec::new());
+        }
+        self.advance(); // consume `where`
+
+        let mut bounds = Vec::new();
+        loop {
+            // Parse: PascalName implements ALL_CAPS
+            let param_name = match self.peek() {
+                Token::Ident(s) => {
+                    let n = s.clone();
+                    self.advance();
+                    n
+                }
+                _ => return Err(self.error("type param name after `where`")),
+            };
+            self.expect(&Token::Implements, "`implements` in where clause")?;
+            let iface_name = match self.peek() {
+                Token::Ident(s) => {
+                    let n = s.clone();
+                    self.advance();
+                    n
+                }
+                _ => return Err(self.error("interface name after `implements`")),
+            };
+            bounds.push((param_name, iface_name));
+
+            if matches!(self.peek(), Token::Comma) {
+                self.advance();
+                // Skip newlines after comma
+                while matches!(self.peek(), Token::StmtSep) {
+                    self.advance();
+                }
+            } else {
+                break;
+            }
+        }
+
+        Ok(bounds)
     }
 
     /// `alias Target as NewName` — cria um newtype.

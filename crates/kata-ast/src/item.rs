@@ -19,7 +19,10 @@ pub struct ModuleEntry {
 
 impl ModuleEntry {
     pub fn new(item: Spanned<Item>) -> Self {
-        ModuleEntry { item, pragmas: Vec::new() }
+        ModuleEntry {
+            item,
+            pragmas: Vec::new(),
+        }
     }
 
     pub fn with_pragmas(item: Spanned<Item>, pragmas: Vec<Pragma>) -> Self {
@@ -57,6 +60,10 @@ pub enum Item {
         /// Refined declaration. None = struct normal.
         /// Some(RefinedDecl) = tipo refinado com predicados.
         refined: Option<RefinedDecl>,
+        /// Bounds de type params: `where T implements SCALAR, R implements NAT`.
+        /// Vec<(param_name, iface_name)>. Vazio quando não há `where` clause
+        /// ou quando é refined declaration (família não aceita type params).
+        where_bounds: Vec<(String, String)>,
     },
 
     /// `enum Nome` com variantes indentadas.

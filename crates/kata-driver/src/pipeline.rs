@@ -29,7 +29,10 @@ use kata_lexer::lex_with_recovery;
 use kata_monomorph::{MonoModule, monomorphize};
 use kata_optimizer::optimize;
 use kata_parser::{parse_decls_only, parse_with_arity_recovery, parse_with_recovery, scan_lambdas};
-use kata_resolution::{ModuleLoader, ResolvedModule, extract_arities, extract_constructor_arities, resolve_with_prelude};
+use kata_resolution::{
+    ModuleLoader, ResolvedModule, extract_arities, extract_constructor_arities,
+    resolve_with_prelude,
+};
 use kata_tree_shaking::{tree_shake, tree_shake_preserve_tests};
 
 use crate::imports;

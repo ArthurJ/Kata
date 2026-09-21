@@ -63,7 +63,7 @@ pub(crate) fn synthesize_dict_show_functions(
         substitutions: None,
         param_names: vec![],
         param_defaults: vec![],
-            deferred_diagnostic: None,
+        deferred_diagnostic: None,
     });
 
     // ── __kata_show__Dict_rest :: Dict::K V Int => Text ──
@@ -81,7 +81,7 @@ pub(crate) fn synthesize_dict_show_functions(
         substitutions: None,
         param_names: vec![],
         param_defaults: vec![],
-            deferred_diagnostic: None,
+        deferred_diagnostic: None,
     });
 
     // ── Dict implements SHOW ──

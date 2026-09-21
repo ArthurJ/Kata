@@ -59,7 +59,7 @@ pub(crate) fn synthesize_enum_pred(
                     substitutions: None,
                     param_names: vec![],
                     param_defaults: vec![],
-            deferred_diagnostic: None,
+                    deferred_diagnostic: None,
                 });
             }
         }

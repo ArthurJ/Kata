@@ -184,9 +184,7 @@ match NonZero (Internal 3)
 /// NonZero::MyNum é gerada e funciona.
 #[test]
 fn t5_impl_completo_compila() {
-    let src = format!(
-        "{MYNUM_FULL_IMPL}\nmatch NonZero (MyNum 3)\n    Ok v: 1\n    Err _: 0"
-    );
+    let src = format!("{MYNUM_FULL_IMPL}\nmatch NonZero (MyNum 3)\n    Ok v: 1\n    Err _: 0");
     let (_stdout, _stderr, exit) = run_kata(&src);
     assert_eq!(exit, 0, "impl completo deve compilar — stderr: {_stderr}");
 }
@@ -196,9 +194,7 @@ fn t5_impl_completo_compila() {
 /// T6: `NonZero (MyNum 3)` → Ok (valor não-zero).
 #[test]
 fn t6_impl_completo_nonzero_ok() {
-    let src = format!(
-        "{MYNUM_FULL_IMPL}\nmatch NonZero (MyNum 3)\n    Ok v: 1\n    Err _: 0"
-    );
+    let src = format!("{MYNUM_FULL_IMPL}\nmatch NonZero (MyNum 3)\n    Ok v: 1\n    Err _: 0");
     let (stdout, _stderr, exit) = run_kata(&src);
     assert_eq!(exit, 0, "deve compilar — stderr: {_stderr}");
     assert!(
@@ -313,10 +309,7 @@ Greeting implements SHOW
 ";
     // Greeting implements SHOW sem nenhum método → incomplete.
     let (_stdout, stderr, exit) = run_kata(src_incomplete);
-    assert_ne!(
-        exit, 0,
-        "SHOW incompleto deve falhar — stderr: {stderr}"
-    );
+    assert_ne!(exit, 0, "SHOW incompleto deve falhar — stderr: {stderr}");
     assert!(
         stderr.contains("type.incomplete_interface")
             || stderr.contains("não define todos os métodos"),

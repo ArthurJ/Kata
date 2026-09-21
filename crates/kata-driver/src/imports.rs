@@ -212,9 +212,11 @@ fn inject_synthetic_entry(mut module: kata_ast::Module) -> kata_ast::Module {
         },
         span,
     );
-    module.items.push(kata_ast::ModuleEntry::new(kata_ast::Spanned::new(
-        kata_ast::Item::EntryExpr(zero),
-        span,
-    )));
+    module
+        .items
+        .push(kata_ast::ModuleEntry::new(kata_ast::Spanned::new(
+            kata_ast::Item::EntryExpr(zero),
+            span,
+        )));
     module
 }

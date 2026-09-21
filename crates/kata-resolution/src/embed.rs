@@ -175,6 +175,7 @@ fn walk_item(entry: kata_ast::ModuleEntry, ctx: &mut EmbedCtx) -> kata_ast::Modu
             fields,
             directives,
             refined,
+            where_bounds,
         } => {
             let refined = refined.map(|r| kata_ast::RefinedDecl {
                 base_ty: r.base_ty,
@@ -189,6 +190,7 @@ fn walk_item(entry: kata_ast::ModuleEntry, ctx: &mut EmbedCtx) -> kata_ast::Modu
                 fields,
                 directives,
                 refined,
+                where_bounds,
             }
         }
 

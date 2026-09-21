@@ -93,30 +93,29 @@ pub(crate) fn try_iface_method_dispatch(
             Ty::Interface(iface_name) => {
                 let iface_sigs = iface_reg.all_signatures(iface_name);
                 for sig in &iface_sigs {
-                        if sig.name == func_name && sig.params.len() == arg_types.len() {
-                            let mut params_match = true;
-                            for (sp, sa) in sig.params.iter().zip(arg_types) {
-                                if matches!(sp, Ty::Var(name) if name == "Self") {
-                                    if !matches!(sa, Ty::Interface(n) if n == iface_name) {
-                                        params_match = false;
-                                        break;
-                                    }
-                                } else if sp != sa {
+                    if sig.name == func_name && sig.params.len() == arg_types.len() {
+                        let mut params_match = true;
+                        for (sp, sa) in sig.params.iter().zip(arg_types) {
+                            if matches!(sp, Ty::Var(name) if name == "Self") {
+                                if !matches!(sa, Ty::Interface(n) if n == iface_name) {
                                     params_match = false;
                                     break;
                                 }
-                            }
-                            if params_match {
-                                // Self no retorno é substituído pelo tipo do arg
-                                // (Interface(name)) — assim, step :: Self => Self
-                                // com arg Interface("STEPPABLE") retorna Interface("STEPPABLE"),
-                                // e o monomorphizador resolve ao instanciar.
-                                let ret =
-                                    substitute_self(&sig.ret, &Ty::Interface(iface_name.clone()));
-                                return Some(ret);
+                            } else if sp != sa {
+                                params_match = false;
+                                break;
                             }
                         }
+                        if params_match {
+                            // Self no retorno é substituído pelo tipo do arg
+                            // (Interface(name)) — assim, step :: Self => Self
+                            // com arg Interface("STEPPABLE") retorna Interface("STEPPABLE"),
+                            // e o monomorphizador resolve ao instanciar.
+                            let ret = substitute_self(&sig.ret, &Ty::Interface(iface_name.clone()));
+                            return Some(ret);
+                        }
                     }
+                }
             }
             Ty::Var(_) => {
                 // Ty::Var em função genérica sintetizada (ex: `show v` dentro

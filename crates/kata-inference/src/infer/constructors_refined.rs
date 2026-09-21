@@ -76,7 +76,7 @@ pub(crate) fn synthesize_refined(
                 substitutions: None,
                 param_names: vec![],
                 param_defaults: vec![],
-            deferred_diagnostic: None,
+                deferred_diagnostic: None,
             });
         }
 
@@ -176,7 +176,10 @@ pub(crate) fn synthesize_refined(
                 Err(ref e)
                     if decl.extension_impl.is_some()
                         && !decl.allows_incomplete
-                        && matches!(e, MiddleError::NoOverload { .. } | MiddleError::TypeMismatch { .. }) =>
+                        && matches!(
+                            e,
+                            MiddleError::NoOverload { .. } | MiddleError::TypeMismatch { .. }
+                        ) =>
                 {
                     let (type_name, iface_name, impl_span) = decl
                         .extension_impl
@@ -256,7 +259,9 @@ pub(crate) fn synthesize_refined(
                             // o método real da interface consultando
                             // all_signatures e filtrando por nome.
                             let all_sigs = interface_registry.all_signatures(iface_name);
-                            let real = all_sigs.iter().find(|s| s.name == *name)
+                            let real = all_sigs
+                                .iter()
+                                .find(|s| s.name == *name)
                                 .map(|s| s.name.clone());
                             real.unwrap_or_else(|| name.clone())
                         }

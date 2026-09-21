@@ -232,7 +232,14 @@ pub(crate) fn extend_families_for_implementors(
     let impls: Vec<(String, String, Span, bool)> = interface_registry
         .impls_view()
         .iter()
-        .map(|e| (e.type_name.clone(), e.interface_name.clone(), e.span, e.allows_incomplete))
+        .map(|e| {
+            (
+                e.type_name.clone(),
+                e.interface_name.clone(),
+                e.span,
+                e.allows_incomplete,
+            )
+        })
         .collect();
 
     for (type_name, iface_name, impl_span, allows_incomplete) in &impls {

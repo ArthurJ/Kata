@@ -361,7 +361,7 @@ pub(crate) fn run_pass0(
                                         predicates: refined_decl.predicates.clone(),
                                         lazy_type_param: None,
                                         extension_impl: None,
-                                    allows_incomplete: false,
+                                        allows_incomplete: false,
                                     });
                                 }
                                 // Registrar o nome público no type_env como Family
@@ -1058,14 +1058,13 @@ pub(crate) fn run_pass0(
         // Self na assinatura é substituído pelo tipo concreto.
         // Percorre supertraits (ex: NUM herda mod// de FIELD).
         let iface_sigs = interface_registry.all_signatures(&deferred.interface_name);
-        for sig in &iface_sigs {
-            // Coletar assinaturas definidas no impl (nome + param_types
-            // após instantiate_family_for_concrete) para decidir se o
-            // default method deve ser pulado. Só pula se o impl define
-            // o mesmo método com os mesmos param_types (override real).
-            // Cross-type overloads (param_types diferentes) NÃO pulam
-            // o default method — elas cobrem combinações de tipos diferentes.
-            let defined_sigs: Vec<(String, Vec<Ty>)> = deferred
+        // Coletar assinaturas definidas no impl (nome + param_types
+        // após instantiate_family_for_concrete) para decidir se o
+        // default method deve ser pulado. Só pula se o impl define
+        // o mesmo método com os mesmos param_types (override real).
+        // Cross-type overloads (param_types diferentes) NÃO pulam
+        // o default method — elas cobrem combinações de tipos diferentes.
+        let defined_sigs: Vec<(String, Vec<Ty>)> = deferred
                 .methods
                 .iter()
                 .map(|m| {
@@ -1162,7 +1161,6 @@ pub(crate) fn run_pass0(
                         timer: None,
                         custom_directives: Vec::new(),
                     });
-                }
             }
         }
     }

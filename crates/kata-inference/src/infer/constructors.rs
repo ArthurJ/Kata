@@ -184,7 +184,7 @@ pub(crate) fn synthesize_constructors(
                 substitutions: None,
                 param_names: vec![],
                 param_defaults: vec![],
-            deferred_diagnostic: None,
+                deferred_diagnostic: None,
             });
 
             let pattern = Spanned::new(
@@ -253,7 +253,7 @@ pub(crate) fn synthesize_constructors(
                 substitutions: None,
                 param_names: vec![],
                 param_defaults: vec![],
-            deferred_diagnostic: None,
+                deferred_diagnostic: None,
             });
 
             let patterns: Vec<Spanned<TypedPattern>> = field_types

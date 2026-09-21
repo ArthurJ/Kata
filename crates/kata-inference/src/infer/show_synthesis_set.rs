@@ -55,7 +55,7 @@ pub(crate) fn synthesize_set_show_functions(
         substitutions: None,
         param_names: vec![],
         param_defaults: vec![],
-            deferred_diagnostic: None,
+        deferred_diagnostic: None,
     });
 
     // ── __kata_show__Set_rest :: Set::A Int => Text ──
@@ -73,7 +73,7 @@ pub(crate) fn synthesize_set_show_functions(
         substitutions: None,
         param_names: vec![],
         param_defaults: vec![],
-            deferred_diagnostic: None,
+        deferred_diagnostic: None,
     });
 
     // ── Set implements SHOW ──

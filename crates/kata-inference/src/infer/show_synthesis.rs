@@ -215,7 +215,7 @@ pub(crate) fn synthesize_show_functions(
                 substitutions: None,
                 param_names: vec![],
                 param_defaults: vec![],
-            deferred_diagnostic: None,
+                deferred_diagnostic: None,
             });
 
             let pattern = Spanned::new(

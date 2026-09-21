@@ -37,6 +37,7 @@ pub(crate) fn lex_ident(lex: &mut Lexer, start: &Pos) -> Result<TokenWithSpan, F
         "implements" => Token::Implements,
         "refines" => Token::Refines,
         "with" => Token::With,
+        "where" => Token::Where,
         "match" => Token::Match,
         "return" => Token::Return,
         "loop" => Token::Loop,

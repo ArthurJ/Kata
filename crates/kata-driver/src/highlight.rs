@@ -77,7 +77,7 @@ fn token_color(token: &Token) -> Option<&'static str> {
         Token::Import | Token::Export | Token::As | Token::Super => Some(BOLD_MAGENTA),
 
         // ── Palavras-chave de tipo ────────────────────────
-        Token::Interface | Token::Implements | Token::Refines | Token::With => Some(BOLD_BLUE),
+        Token::Interface | Token::Implements | Token::Refines | Token::With | Token::Where => Some(BOLD_BLUE),
 
         // ── lambda/λ, type ────────────────────────────────
         Token::Lambda | Token::Type => Some(BOLD_GREEN),

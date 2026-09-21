@@ -29,8 +29,8 @@ use directives::{
 };
 
 use kata_ast::{Item, Module};
-use kata_core::{Ty, TypeEnv};
 use kata_core::struct_registry::StructRegistry;
+use kata_core::{Ty, TypeEnv};
 
 /// Extrai a aridade padrão de cada nome de função a partir das assinaturas
 /// resolvidas.
@@ -925,9 +925,8 @@ fn collect_missing_methods_inner(
         return;
     };
 
-    let concrete_ty = kata_core::Ty::Struct(kata_core::StructKey::Plain(
-        concrete_ty_name.to_string(),
-    ));
+    let concrete_ty =
+        kata_core::Ty::Struct(kata_core::StructKey::Plain(concrete_ty_name.to_string()));
 
     for sig in &info.signatures {
         // Métodos com default_body contam como cobertos.

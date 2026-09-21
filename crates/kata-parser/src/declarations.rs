@@ -364,14 +364,18 @@ impl Parser {
 
             match self.peek() {
                 Token::Data => match self.parse_data_decl(directives) {
-                    Ok(item) => items.push(entry_from(Spanned::new(item, item_start), diag_pragmas)),
+                    Ok(item) => {
+                        items.push(entry_from(Spanned::new(item, item_start), diag_pragmas))
+                    }
                     Err(e) => {
                         errors.push(e);
                         self.sync_to_stmt_sep();
                     }
                 },
                 Token::Enum => match self.parse_enum_decl(directives) {
-                    Ok(item) => items.push(entry_from(Spanned::new(item, item_start), diag_pragmas)),
+                    Ok(item) => {
+                        items.push(entry_from(Spanned::new(item, item_start), diag_pragmas))
+                    }
                     Err(e) => {
                         errors.push(e);
                         self.sync_to_stmt_sep();
@@ -379,28 +383,36 @@ impl Parser {
                 },
 
                 Token::Alias => match self.parse_alias_decl(directives) {
-                    Ok(item) => items.push(entry_from(Spanned::new(item, item_start), diag_pragmas)),
+                    Ok(item) => {
+                        items.push(entry_from(Spanned::new(item, item_start), diag_pragmas))
+                    }
                     Err(e) => {
                         errors.push(e);
                         self.sync_to_stmt_sep();
                     }
                 },
                 Token::Action => match self.parse_action_decl(directives, test_pragmas) {
-                    Ok(item) => items.push(entry_from(Spanned::new(item, item_start), diag_pragmas)),
+                    Ok(item) => {
+                        items.push(entry_from(Spanned::new(item, item_start), diag_pragmas))
+                    }
                     Err(e) => {
                         errors.push(e);
                         self.sync_to_stmt_sep();
                     }
                 },
                 Token::Directive => match self.parse_directive_decl() {
-                    Ok(item) => items.push(entry_from(Spanned::new(item, item_start), diag_pragmas)),
+                    Ok(item) => {
+                        items.push(entry_from(Spanned::new(item, item_start), diag_pragmas))
+                    }
                     Err(e) => {
                         errors.push(e);
                         self.sync_to_stmt_sep();
                     }
                 },
                 Token::Interface => match self.parse_interface_decl(directives) {
-                    Ok(item) => items.push(entry_from(Spanned::new(item, item_start), diag_pragmas)),
+                    Ok(item) => {
+                        items.push(entry_from(Spanned::new(item, item_start), diag_pragmas))
+                    }
                     Err(e) => {
                         errors.push(e);
                         self.sync_to_stmt_sep();
@@ -411,21 +423,27 @@ impl Parser {
                     self.sync_to_stmt_sep();
                 }
                 Token::Import => match self.parse_import_decl() {
-                    Ok(item) => items.push(entry_from(Spanned::new(item, item_start), diag_pragmas)),
+                    Ok(item) => {
+                        items.push(entry_from(Spanned::new(item, item_start), diag_pragmas))
+                    }
                     Err(e) => {
                         errors.push(e);
                         self.sync_to_stmt_sep();
                     }
                 },
                 Token::Export => match self.parse_export_decl() {
-                    Ok(item) => items.push(entry_from(Spanned::new(item, item_start), diag_pragmas)),
+                    Ok(item) => {
+                        items.push(entry_from(Spanned::new(item, item_start), diag_pragmas))
+                    }
                     Err(e) => {
                         errors.push(e);
                         self.sync_to_stmt_sep();
                     }
                 },
                 Token::Constant => match self.parse_constant_decl(directives) {
-                    Ok(item) => items.push(entry_from(Spanned::new(item, item_start), diag_pragmas)),
+                    Ok(item) => {
+                        items.push(entry_from(Spanned::new(item, item_start), diag_pragmas))
+                    }
                     Err(e) => {
                         errors.push(e);
                         self.sync_to_stmt_sep();

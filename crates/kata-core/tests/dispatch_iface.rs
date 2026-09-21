@@ -22,7 +22,7 @@ fn make_ffi_info(name: &str, params: &[Ty], ret: Ty, ffi: &str) -> OverloadInfo 
         substitutions: None,
         param_names: vec![],
         param_defaults: vec![],
-            deferred_diagnostic: None,
+        deferred_diagnostic: None,
     }
 }
 

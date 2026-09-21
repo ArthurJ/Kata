@@ -115,57 +115,57 @@ impl Parser {
         if matches!(self.peek(), Token::Indent) {
             self.advance(); // consome INDENT
             loop {
-            while matches!(self.peek(), Token::StmtSep) {
-                self.advance();
-            }
-            if matches!(self.peek(), Token::Dedent | Token::Eof) {
-                break;
-            }
-
-            // Assinatura: `name :: Type1 Type2 ... => RetType`
-            let sig_name = match self.peek() {
-                Token::Ident(s) => {
-                    let span = self.peek_span();
-                    let n = s.clone();
+                while matches!(self.peek(), Token::StmtSep) {
                     self.advance();
-                    self.validate_name(&n, CasingPattern::SnakeCase, span)?;
-                    n
                 }
-                _ => return Err(self.error("method name in interface")),
-            };
-            self.expect(&Token::DoubleColon, "`::` in interface signature")?;
+                if matches!(self.peek(), Token::Dedent | Token::Eof) {
+                    break;
+                }
 
-            let mut params = Vec::new();
-            while !matches!(self.peek(), Token::FatArrow | Token::Eof) {
-                params.push(self.parse_type_expr()?);
+                // Assinatura: `name :: Type1 Type2 ... => RetType`
+                let sig_name = match self.peek() {
+                    Token::Ident(s) => {
+                        let span = self.peek_span();
+                        let n = s.clone();
+                        self.advance();
+                        self.validate_name(&n, CasingPattern::SnakeCase, span)?;
+                        n
+                    }
+                    _ => return Err(self.error("method name in interface")),
+                };
+                self.expect(&Token::DoubleColon, "`::` in interface signature")?;
+
+                let mut params = Vec::new();
+                while !matches!(self.peek(), Token::FatArrow | Token::Eof) {
+                    params.push(self.parse_type_expr()?);
+                }
+                self.expect(&Token::FatArrow, "`=>` in interface signature")?;
+                let ret = self.parse_type_expr()?;
+
+                // Default method: após a assinatura, se o próximo token (após
+                // StmtSep) é `Lambda`, parseia o corpo — mesmo padrão de
+                // `parse_implements_decl`. Assinatura sem `lambda` = obrigatória.
+                while matches!(self.peek(), Token::StmtSep) {
+                    self.advance();
+                }
+                let default_body = if matches!(self.peek(), Token::Lambda) {
+                    Some(self.parse_sig_clauses(params.len())?)
+                } else {
+                    None
+                };
+
+                // Consome StmtSep após o método (se houver).
+                if matches!(self.peek(), Token::StmtSep) {
+                    self.advance();
+                }
+
+                signatures.push(InterfaceSig {
+                    name: sig_name,
+                    params,
+                    ret,
+                    default_body,
+                });
             }
-            self.expect(&Token::FatArrow, "`=>` in interface signature")?;
-            let ret = self.parse_type_expr()?;
-
-            // Default method: após a assinatura, se o próximo token (após
-            // StmtSep) é `Lambda`, parseia o corpo — mesmo padrão de
-            // `parse_implements_decl`. Assinatura sem `lambda` = obrigatória.
-            while matches!(self.peek(), Token::StmtSep) {
-                self.advance();
-            }
-            let default_body = if matches!(self.peek(), Token::Lambda) {
-                Some(self.parse_sig_clauses(params.len())?)
-            } else {
-                None
-            };
-
-            // Consome StmtSep após o método (se houver).
-            if matches!(self.peek(), Token::StmtSep) {
-                self.advance();
-            }
-
-            signatures.push(InterfaceSig {
-                name: sig_name,
-                params,
-                ret,
-                default_body,
-            });
-        }
             self.expect(&Token::Dedent, "DEDENT (end of interface)")?;
         }
 
