@@ -40,7 +40,28 @@ pub(crate) fn synthesize_constructors(
         }
 
         let field_types: Vec<Ty> = struct_info.fields.iter().map(|f| f.ty.clone()).collect();
-        let ret_ty = Ty::Struct(StructKey::Plain(struct_name.to_string()));
+
+        // Detectar se é struct paramétrico (tem type_params).
+        let is_generic = struct_info.type_params.is_some();
+        let type_params: Vec<String> = struct_info
+            .type_params
+            .as_ref()
+            .map(|tps| tps.iter().map(|tp| tp.name.clone()).collect())
+            .unwrap_or_default();
+
+        // Para structs paramétricos, o tipo de retorno carrega os type args
+        // como Ty::Var — apply_subs os substitui pelos tipos concretos após
+        // unify, produzindo StructKey::Generic("Pair", [Int, Int]).
+        // Para structs monomórficos, mantém Plain.
+        let ret_ty = if is_generic {
+            let type_args: Vec<Ty> = type_params
+                .iter()
+                .map(|name| Ty::Var(name.clone()))
+                .collect();
+            Ty::Struct(StructKey::Generic(struct_name.to_string(), type_args))
+        } else {
+            Ty::Struct(StructKey::Plain(struct_name.to_string()))
+        };
 
         // Proibe Ty::Action em campos de data — Actions são comportamento,
         // não informação. (PRD §3.7)
@@ -59,14 +80,6 @@ pub(crate) fn synthesize_constructors(
                 span: kata_ast::Span::synthetic().into(),
             });
         }
-
-        // Detectar se é struct paramétrico (tem type_params).
-        let is_generic = struct_info.type_params.is_some();
-        let type_params: Vec<String> = struct_info
-            .type_params
-            .as_ref()
-            .map(|tps| tps.iter().map(|tp| tp.name.clone()).collect())
-            .unwrap_or_default();
 
         // Registra overload no DispatchTable.
         dispatch_table.insert(OverloadInfo {

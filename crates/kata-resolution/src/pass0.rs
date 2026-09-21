@@ -42,6 +42,74 @@ fn extract_lazy_type_param(base_ty: &Ty) -> Option<String> {
     }
 }
 
+/// Substitui `Struct(Plain(name))` por `Struct(Generic(name, type_args))`
+/// quando `name` é um struct paramétrico no StructRegistry.
+///
+/// Em assinaturas de métodos de `implements` para tipos genéricos, o tipo
+/// aparece como `Pair` (Plain) porque `resolve_type_expr` não sabe que é
+/// genérico. Esta substituição injeta os type params como `Ty::Var`, fazendo
+/// `collect_type_params` detectá-los e marcar o método como genérico para
+/// monomorfização.
+///
+/// Recursiva em tipos compostos (Function, Tuple, List, etc.).
+pub(crate) fn instantiate_generic_struct_refs(ty: &Ty, struct_reg: &StructRegistry) -> Ty {
+    match ty {
+        Ty::Struct(StructKey::Plain(name)) => {
+            if let Some(info) = struct_reg.get(name) {
+                if let Some(type_params) = &info.type_params {
+                    let type_args: Vec<Ty> = type_params
+                        .iter()
+                        .map(|tp| Ty::Var(tp.name.clone()))
+                        .collect();
+                    return Ty::Struct(StructKey::Generic(name.clone(), type_args));
+                }
+            }
+            ty.clone()
+        }
+        Ty::Struct(StructKey::Generic(name, args)) => Ty::Struct(StructKey::Generic(
+            name.clone(),
+            args.iter()
+                .map(|a| instantiate_generic_struct_refs(a, struct_reg))
+                .collect(),
+        )),
+        Ty::Function(params, ret) => Ty::Function(
+            params
+                .iter()
+                .map(|p| instantiate_generic_struct_refs(p, struct_reg))
+                .collect(),
+            Box::new(instantiate_generic_struct_refs(ret, struct_reg)),
+        ),
+        Ty::Action(params, ret) => Ty::Action(
+            params
+                .iter()
+                .map(|p| instantiate_generic_struct_refs(p, struct_reg))
+                .collect(),
+            Box::new(instantiate_generic_struct_refs(ret, struct_reg)),
+        ),
+        Ty::Tuple(elems) => Ty::Tuple(
+            elems
+                .iter()
+                .map(|e| instantiate_generic_struct_refs(e, struct_reg))
+                .collect(),
+        ),
+        Ty::List(inner) => Ty::List(Box::new(instantiate_generic_struct_refs(inner, struct_reg))),
+        Ty::Array(inner) => Ty::Array(Box::new(instantiate_generic_struct_refs(inner, struct_reg))),
+        Ty::Set(inner) => Ty::Set(Box::new(instantiate_generic_struct_refs(inner, struct_reg))),
+        Ty::Range(inner) => Ty::Range(Box::new(instantiate_generic_struct_refs(inner, struct_reg))),
+        Ty::Dict(k, v) => Ty::Dict(
+            Box::new(instantiate_generic_struct_refs(k, struct_reg)),
+            Box::new(instantiate_generic_struct_refs(v, struct_reg)),
+        ),
+        Ty::Generic(name, args) => Ty::Generic(
+            name.clone(),
+            args.iter()
+                .map(|a| instantiate_generic_struct_refs(a, struct_reg))
+                .collect(),
+        ),
+        _ => ty.clone(),
+    }
+}
+
 /// Substitui `Family(name)` por `Instance(name, concrete_type)` em um `Ty`,
 /// recursivamente, quando a instância existe no StructRegistry.
 ///
@@ -988,11 +1056,12 @@ pub(crate) fn run_pass0(
                                 &*struct_registry,
                                 None,
                             );
-                            instantiate_family_for_concrete(
+                            let ty = instantiate_family_for_concrete(
                                 &ty,
                                 &deferred.type_name,
                                 struct_registry,
-                            )
+                            );
+                            instantiate_generic_struct_refs(&ty, struct_registry)
                         })
                         .collect(),
                     ret: {
@@ -1003,7 +1072,12 @@ pub(crate) fn run_pass0(
                             &*struct_registry,
                             None,
                         );
-                        instantiate_family_for_concrete(&ty, &deferred.type_name, struct_registry)
+                        let ty = instantiate_family_for_concrete(
+                            &ty,
+                            &deferred.type_name,
+                            struct_registry,
+                        );
+                        instantiate_generic_struct_refs(&ty, struct_registry)
                     },
                     ffi_symbol,
                 }
@@ -1031,7 +1105,9 @@ pub(crate) fn run_pass0(
                         &*struct_registry,
                         None,
                     );
-                    instantiate_family_for_concrete(&ty, &deferred.type_name, struct_registry)
+                    let ty =
+                        instantiate_family_for_concrete(&ty, &deferred.type_name, struct_registry);
+                    instantiate_generic_struct_refs(&ty, struct_registry)
                 })
                 .collect();
             let return_type = {
@@ -1042,7 +1118,8 @@ pub(crate) fn run_pass0(
                     &*struct_registry,
                     None,
                 );
-                instantiate_family_for_concrete(&ty, &deferred.type_name, struct_registry)
+                let ty = instantiate_family_for_concrete(&ty, &deferred.type_name, struct_registry);
+                instantiate_generic_struct_refs(&ty, struct_registry)
             };
             let ffi_symbol = m.directives.iter().find_map(|d| {
                 if (d.name == "ffi" || d.name == "builtin")

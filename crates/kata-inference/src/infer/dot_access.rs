@@ -11,6 +11,7 @@
 //! `end` em `end + 1` antes de despachar (runtime espera exclusive).
 
 use kata_ast::{DotIndex, Expr, Span, Spanned, TensorAxis};
+use kata_core::StructKey;
 use kata_core::escape::EscapeTarget;
 use kata_core::ty::{PrimTy, Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
@@ -100,26 +101,49 @@ pub(crate) fn infer_dot_access(
         (Ty::Struct(key), DotIndex::Field(field_name)) => {
             // Para Instance(family, concrete), resolver campos do tipo
             // concreto (ex: NonZero::MyNum → campos de MyNum).
+            // Para Generic(name, type_args), instanciar campos com type args
+            // concretos (ex: Pair::(Int, Int) → first: Int, second: Int).
             let lookup_name = key.concrete_type().unwrap_or_else(|| key.name());
-            let info =
-                ctx.struct_registry
-                    .get(lookup_name)
+
+            // Se o struct é genérico (StructKey::Generic), usar
+            // lookup_instantiated para substituir Ty::Var nos fields.
+            let (field_index, field_ty) = if let StructKey::Generic(_, type_args) = key {
+                let instantiated = ctx
+                    .struct_registry
+                    .lookup_instantiated(lookup_name, type_args)
                     .ok_or_else(|| MiddleError::UnboundName {
                         suggestion: None,
                         name: format!("struct `{}` não registrado no StructRegistry", lookup_name),
                         span: (*span).into(),
                     })?;
-            let (field_index, field_info) =
-                info.find_field(field_name)
-                    .ok_or_else(|| MiddleError::UnknownField {
+                let (idx, info) = instantiated.find_field(field_name).ok_or_else(|| {
+                    MiddleError::UnknownField {
                         struct_name: lookup_name.to_string(),
                         field_name: field_name.clone(),
                         span: (*span).into(),
-                    })?;
-            let ty = field_info.ty.clone();
+                    }
+                })?;
+                (idx, info.ty.clone())
+            } else {
+                let info = ctx.struct_registry.get(lookup_name).ok_or_else(|| {
+                    MiddleError::UnboundName {
+                        suggestion: None,
+                        name: format!("struct `{}` não registrado no StructRegistry", lookup_name),
+                        span: (*span).into(),
+                    }
+                })?;
+                let (idx, info) =
+                    info.find_field(field_name)
+                        .ok_or_else(|| MiddleError::UnknownField {
+                            struct_name: lookup_name.to_string(),
+                            field_name: field_name.clone(),
+                            span: (*span).into(),
+                        })?;
+                (idx, info.ty.clone())
+            };
             Ok(TypedExpr {
                 span: *span,
-                ty,
+                ty: field_ty,
                 tail_pos,
                 escape: inner.escape,
                 kind: TypedExprKind::FieldAccess {

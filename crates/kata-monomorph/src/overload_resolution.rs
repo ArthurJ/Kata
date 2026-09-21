@@ -187,7 +187,19 @@ pub(crate) fn instantiate_generic_closure(
     // (ex: `show_A_Int`), causando colisão — a segunda instância é skipada
     // mas o callee é reescrito para um nome que não existe na symbol_table.
     let instance_name = format!("{func_lookup_name}_{subs_key}");
-    let orig_func = ctx.functions.iter().find(|f| f.name == func_lookup_name);
+    // Procura a função original (template) pelo nome mangled (ffi_symbol)
+    // ou pelo nome direto. Isto determina se a instância tem corpo Kata
+    // (função sintetizada) ou é FFI pura (sem corpo).
+    //
+    // Quando múltiplas TypedFunctions têm o mesmo nome (overloads), casar
+    // também os param_types com oi.params para encontrar o template correto.
+    // Sem isto, `find(|f| f.name == name)` retorna a primeira sobrecarga
+    // (ex: `= :: Float Int => Boolean` do prelude) em vez do método genérico
+    // (ex: `= :: Pair::(T) Pair::(T) => Boolean` do impl do usuário).
+    let orig_func = ctx
+        .functions
+        .iter()
+        .find(|f| f.name == func_lookup_name && f.param_types == oi.params);
 
     // Verifica se a instância já existe.
     if !ctx.existing.contains(&instance_name)
