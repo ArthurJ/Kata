@@ -85,6 +85,9 @@ interface FIELD implements RING
 
 interface NUM implements FIELD
 
+interface SCALAR implements NUM
+    one :: Self => Self
+
 interface SHOW
     show :: Self => Text
 
@@ -187,6 +190,10 @@ Int implements ORD
 
     <= :: Int Rational => Boolean
     lambda i r: <= (rational i) r
+
+Int implements SCALAR
+    one :: Int => Int
+    lambda _: 1
 
 Int implements SHOW
     @ffi("kata_rt_bi_show")
@@ -337,6 +344,10 @@ Float implements ORD
 
     <= :: Float Rational => Boolean
     lambda f r: <= f (float r)
+
+Float implements SCALAR
+    one :: Float => Float
+    lambda _: 1.0
 
 Float implements SHOW
     @ffi("kata_rt_float_to_text")
@@ -493,6 +504,10 @@ Rational implements ORD
 
     <= :: Rational Float => Boolean
     lambda r f: <= r (rational f)
+
+Rational implements SCALAR
+    one :: Rational => Rational
+    lambda _: rational 1
 
 Rational implements SHOW
     @ffi("kata_rt_rat_show")
