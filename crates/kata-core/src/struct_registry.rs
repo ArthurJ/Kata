@@ -74,15 +74,18 @@ impl PartialOrd for StructKey {
 
 impl Ord for StructKey {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        // Ordenar por nome primeiro, depois por discriminante do variant.
-        // Generic(args) compara por nome; args não participam da ordenação
-        // (Ty não implementa Ord). Isso é suficiente para BTreeMap —
-        // a unicidade é garantida por Eq+Hash, e a ordem só precisa ser
-        // consistente (não semanticamente significativa).
+        // Ordenação consistente com Eq: comparar por (discriminante, nome,
+        // dados relevantes). Generic(args) compara por nome; args não
+        // participam (Ty não impl Ord) — mas args participam de Eq/Hash,
+        // então Generic com mesmo nome mas args diferentes são entradas
+        // distintas no BTreeMap (Eq as distingue mesmo que Ord as considere
+        // iguais por nome).
         match (self, other) {
             (StructKey::Plain(a), StructKey::Plain(b)) => a.cmp(b),
             (StructKey::Family(a), StructKey::Family(b)) => a.cmp(b),
-            (StructKey::Instance(a, _), StructKey::Instance(b, _)) => a.cmp(b),
+            (StructKey::Instance(a, c1), StructKey::Instance(b, c2)) => {
+                a.cmp(b).then_with(|| c1.cmp(c2))
+            }
             (StructKey::Generic(a, _), StructKey::Generic(b, _)) => a.cmp(b),
             // Discriminante ordem: Plain < Family < Instance < Generic
             (StructKey::Plain(_), _) => std::cmp::Ordering::Less,
