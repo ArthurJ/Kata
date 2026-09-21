@@ -1,6 +1,6 @@
 # PRD — Generics Paramétricos para `data`
 
-**Status:** 🔴 Pendente
+**Status:** 🟡 Fases 1-6 concluídas, Fase 7 pendente
 **Data:** 2026-09-21
 
 ## Objetivo
@@ -539,14 +539,23 @@ que extrai o nome e/ou type args conforme necessário.
 - **DoD:** `type_implements_generic("Complex", [Int, Int], "RING")`
   retorna true. ✅
 
-### Fase 6 — Monomorphização de métodos
+### Fase 6 — Monomorphização de métodos ✅
 
 - Monomorphizer substitui `Ty::Var` por type args concretos nos corpos (via
   `apply_subs` estendido na Fase 2).
 - Instância on-demand por combinação de type args usada.
-- **DoD:** `+ z1 z2` onde `z1 : Complex::(Int, Int)` despacha para
-  `+ :: Complex::(Int, Int) Complex::(Int, Int) => Complex::(Int, Int)` com
-  body `(+ a.re b.re)` onde `a.re : Int`.
+- Construtor genérico retorna `StructKey::Generic` com type args, permitindo
+  que `apply_subs` substitua `Var("T")` pelo tipo concreto após `unify`.
+- Field access em struct genérico usa `lookup_instantiated` para substituir
+  `Var("T")` pelos type args concretos.
+- `instantiate_generic_struct_refs` em pass0b substitui `Plain` por `Generic`
+  nas assinaturas de métodos de `implements`.
+- Correção do bloqueador do monomorphizer: `find` por nome apenas era ambíguo
+  quando múltiplas `TypedFunction`s com mesmo nome (overloads). Agora casa
+  também `f.param_types == oi.params`.
+- **DoD:** `= p q` onde `p, q : Pair::(Int)` despacha para
+  `=_T_Int` com body `= a.first b.first` onde `a.first : Int`. ✅
+  Funciona também com `Pair::(Float)` sem SIGSEGV. ✅
 
 ### Fase 7 — Migração da stdlib
 
