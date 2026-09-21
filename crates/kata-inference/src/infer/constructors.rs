@@ -60,6 +60,14 @@ pub(crate) fn synthesize_constructors(
             });
         }
 
+        // Detectar se é struct paramétrico (tem type_params).
+        let is_generic = struct_info.type_params.is_some();
+        let type_params: Vec<String> = struct_info
+            .type_params
+            .as_ref()
+            .map(|tps| tps.iter().map(|tp| tp.name.clone()).collect())
+            .unwrap_or_default();
+
         // Registra overload no DispatchTable.
         dispatch_table.insert(OverloadInfo {
             name: struct_name.to_string(),
@@ -67,10 +75,10 @@ pub(crate) fn synthesize_constructors(
             ret: ret_ty.clone(),
             ffi_symbol: None, // função Kata pura
             is_action: false,
-            is_generic: false,
+            is_generic,
             is_constructor: true,
             associative_neutral: None,
-            type_params: vec![],
+            type_params,
             substitutions: None,
             param_names: vec![],
             param_defaults: vec![],

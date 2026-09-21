@@ -348,6 +348,23 @@ fn unify_one(
             )
         }
 
+        // Struct paramétrico: unifica type args recursivamente.
+        // Complex::(T, T) (param) vs Complex::(Int, Int) (arg) → unifica T→Int.
+        (
+            Ty::Struct(StructKey::Generic(n1, ps)),
+            Ty::Struct(StructKey::Generic(n2, as_)),
+        ) if n1 == n2 && ps.len() == as_.len() => {
+            for (p, a) in ps.iter().zip(as_) {
+                unify_one(p, a, type_params, subs, refines_registry, iface_registry)?;
+            }
+            Ok(())
+        }
+
+        // Struct paramétrico com Var nos args (param) vs tipo concreto (arg):
+        // Complex::(T, T) (param) vs Complex(Int, Int) que veio como
+        // Struct(Plain("Complex")) — não deveria acontecer na prática,
+        // mas se acontecer, cai no match estrutural abaixo.
+
         // Match estrutural para tipos concretos
         _ if param == arg => Ok(()),
 

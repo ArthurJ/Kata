@@ -11,7 +11,7 @@ use kata_ast::{Item, TypeExpr};
 use kata_core::{
     EnumRegistry, FieldInfo, ImplEntry, ImplMethodInfo, InterfaceInfo, InterfaceRegistry,
     InterfaceSignature, PrimTy, RefinesEntry, RefinesRegistry, StructKey, StructRegistry, Ty,
-    TypeEnv,
+    TypeEnv, TypeParamDecl,
 };
 
 use crate::type_resolve::{
@@ -278,7 +278,7 @@ pub(crate) fn run_pass0(
                 fields,
                 directives: data_dirs,
                 refined,
-                ..
+                where_bounds,
             } => {
                 // Valida diretivas: só @ffi é válida em data. Outras → erro.
                 for d in data_dirs {
@@ -482,7 +482,40 @@ pub(crate) fn run_pass0(
                             offset: (i as u32) * 8,
                         })
                         .collect();
-                    struct_registry.register(origin, name, field_infos);
+
+                    // Detectar type params: coletar Ty::Var(names) nos fields
+                    // onde name é PascalCase (is_type_param_name).
+                    // resolve_type_expr já produz Ty::Var("T") para PascalCase
+                    // que não é interface nem struct registrado.
+                    let mut type_param_names: Vec<String> = Vec::new();
+                    for fi in &field_infos {
+                        collect_type_param_names(&fi.ty, &mut type_param_names);
+                    }
+
+                    if !type_param_names.is_empty() {
+                        // Struct paramétrico: construir TypeParamDecls dos where_bounds.
+                        let type_params: Vec<TypeParamDecl> = type_param_names
+                            .iter()
+                            .map(|pn| {
+                                let bound = where_bounds
+                                    .iter()
+                                    .find(|(bn, _)| bn == pn)
+                                    .map(|(_, iface)| iface.clone());
+                                TypeParamDecl {
+                                    name: pn.clone(),
+                                    bound,
+                                }
+                            })
+                            .collect();
+                        struct_registry.register_generic(
+                            origin,
+                            name,
+                            field_infos,
+                            type_params,
+                        );
+                    } else {
+                        struct_registry.register(origin, name, field_infos);
+                    }
                 }
             }
             Item::AliasDecl { target, new_name } => {
@@ -1186,5 +1219,44 @@ fn resolve_base_ty(base_name: &str, type_env: &TypeEnv, iface_reg: &InterfaceReg
                 Ty::Struct(StructKey::Plain(base_name.into()))
             }
         }
+    }
+}
+
+/// Coleta nomes de type params (Ty::Var com nome PascalCase) de um tipo,
+/// recursivamente. Remove duplicatas preservando ordem de primeira ocorrência.
+/// Usado no pass0 para detectar se um `data` é paramétrico.
+fn collect_type_param_names(ty: &Ty, result: &mut Vec<String>) {
+    match ty {
+        Ty::Var(name) if is_type_param_name(name) && !result.contains(name) => {
+            result.push(name.clone());
+        }
+        Ty::Generic(_, args) => {
+            for arg in args {
+                collect_type_param_names(arg, result);
+            }
+        }
+        Ty::Struct(StructKey::Generic(_, args)) => {
+            for arg in args {
+                collect_type_param_names(arg, result);
+            }
+        }
+        Ty::List(inner) | Ty::Array(inner) | Ty::Range(inner) | Ty::Set(inner)
+        | Ty::Tensor(inner) => collect_type_param_names(inner, result),
+        Ty::Dict(k, v) => {
+            collect_type_param_names(k, result);
+            collect_type_param_names(v, result);
+        }
+        Ty::Tuple(elems) => {
+            for e in elems {
+                collect_type_param_names(e, result);
+            }
+        }
+        Ty::Function(params, ret) | Ty::Action(params, ret) => {
+            for p in params {
+                collect_type_param_names(p, result);
+            }
+            collect_type_param_names(ret, result);
+        }
+        _ => {}
     }
 }

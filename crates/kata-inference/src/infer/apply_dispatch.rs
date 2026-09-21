@@ -437,6 +437,28 @@ pub(crate) fn try_dispatch_table(
                         ctx.interface_registry,
                     ) {
                         Ok(_) => {
+                            // Verificar bounds de where-clause para construtores
+                            // genéricos. Se o overload é um construtor de struct
+                            // paramétrico, consultar StructRegistry para os bounds
+                            // e verificar que cada type arg satisfaz o bound.
+                            if oi.is_constructor && !oi.type_params.is_empty() {
+                                if let Some(bound_err) =
+                                    check_generic_bounds(
+                                        func_name,
+                                        &oi.type_params,
+                                        &subs,
+                                        ctx,
+                                    )
+                                {
+                                    // Bound falhou — não-terminal: continuar
+                                    // para próximo overload. Formatar como
+                                    // "não implementa" para cair no filter
+                                    // de propagação imediata se nenhuma
+                                    // outra overload casar.
+                                    unify_failed = true;
+                                    continue;
+                                }
+                            }
                             // Aplica substitutions no tipo de retorno.
                             let concrete_ret = super::generics::apply_subs(&oi.ret, &subs);
                             let expanded_ret = super::apply::expand_ret(&concrete_ret, ctx);
@@ -1214,4 +1236,46 @@ fn enrich_no_overload(
         name: func_name.to_string(),
         span: span.into(),
     }
+}
+
+/// Verifica os bounds de `where`-clause de um construtor genérico.
+/// Para cada type param com bound (ex: `T implements SCALAR`), consulta
+/// o StructRegistry para obter os bounds, extrai o type arg concreto
+/// das substituições, e verifica via `type_implements`.
+///
+/// Retorna `Some(MiddleError)` se o bound falha (formatado como
+/// "não implementa" para cair no filter de propagação imediata),
+/// ou `None` se todos os bounds satisfazem.
+fn check_generic_bounds(
+    struct_name: &str,
+    type_params: &[String],
+    subs: &super::generics::Substitutions,
+    ctx: &InferCtx,
+) -> Option<MiddleError> {
+    let struct_info = ctx.struct_registry.get(struct_name)?;
+    let params = struct_info.type_params.as_ref()?;
+
+    for tp in params {
+        let Some(ref bound_iface) = tp.bound else {
+            continue; // type param livre, sem bound
+        };
+        // Extrair o type arg concreto das substituições.
+        let concrete = subs.get(&tp.name)?;
+        // Extrair nome do tipo concreto para consulta string-based.
+        if let Some(type_name) = ty_name_for_iface_check(concrete) {
+            if !ctx
+                .interface_registry
+                .type_implements(&type_name, bound_iface)
+            {
+                return Some(MiddleError::TypeMismatch {
+                    expected: bound_iface.clone(),
+                    found: format!(
+                        "{type_name} — {type_name} não implementa {bound_iface}"
+                    ),
+                    span: kata_ast::Span::synthetic().into(),
+                });
+            }
+        }
+    }
+    None
 }
