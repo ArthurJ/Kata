@@ -525,13 +525,19 @@ que extrai o nome e/ou type args conforme necessário.
   era regenerado com Self=Int, produzindo `int(Int)` sem overload. Corrigido
   verificando também `signatures.iter().any(...)`.
 
-### Fase 5 — InterfaceRegistry
+### Fase 5 — InterfaceRegistry ✅
 
-- `ImplEntry` ganha `type_bounds`.
-- `type_implements_generic` unifica type args com bounds.
-- `Complex::(T, T) implements RING` registra uma única entrada.
-- **DoD:** `type_implements_generic("Complex", [Int, Int], "RING")` retorna
-  true.
+- `ImplEntry` ganha `type_bounds: Vec<(String, String)>` — pares
+  `(param_name, iface_name)` extraídos da cláusula `where` do `DataDecl`.
+- `type_implements_generic(type_name, type_args, iface)` verifica que
+  cada type arg satisfaz o bound nominal do param correspondente via
+  `type_implements`.
+- `pass0.rs` extrai `type_bounds` do `StructInfo.type_params` ao
+  processar `ImplementsDecl` para tipo genérico.
+- 4 testes novos cobrem: bounds satisfeitos, violados, sem bounds,
+  via supertrait (herança de interface não é reversiva).
+- **DoD:** `type_implements_generic("Complex", [Int, Int], "RING")`
+  retorna true. ✅
 
 ### Fase 6 — Monomorphização de métodos
 
