@@ -617,9 +617,7 @@ fn substitute_vars(ty: &Ty, subs: &std::collections::HashMap<String, Ty>) -> Ty 
             params.iter().map(|p| substitute_vars(p, subs)).collect(),
             Box::new(substitute_vars(ret, subs)),
         ),
-        Ty::Tuple(elems) => {
-            Ty::Tuple(elems.iter().map(|e| substitute_vars(e, subs)).collect())
-        }
+        Ty::Tuple(elems) => Ty::Tuple(elems.iter().map(|e| substitute_vars(e, subs)).collect()),
         Ty::List(e) => Ty::List(Box::new(substitute_vars(e, subs))),
         Ty::Array(e) => Ty::Array(Box::new(substitute_vars(e, subs))),
         _ => ty.clone(),

@@ -28,7 +28,11 @@ data Pair (first::T second::T) where T implements NUM
 Pair 3 4
 "#;
     let result = infer_src(src);
-    assert!(result.is_ok(), "inferência deve succeed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "inferência deve succeed: {:?}",
+        result.err()
+    );
 }
 
 /// `Pair 3.0 4.0` tipa como Pair::(Float, Float).
@@ -39,7 +43,11 @@ data Pair (first::T second::T) where T implements NUM
 Pair 3.0 4.0
 "#;
     let result = infer_src(src);
-    assert!(result.is_ok(), "inferência deve succeed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "inferência deve succeed: {:?}",
+        result.err()
+    );
 }
 
 /// `Pair "a" "b"` falha — Text não implementa NUM.
@@ -50,10 +58,7 @@ data Pair (first::T second::T) where T implements NUM
 Pair "a" "b"
 "#;
     let result = infer_src(src);
-    assert!(
-        result.is_err(),
-        "Text não implementa NUM — deve falhar"
-    );
+    assert!(result.is_err(), "Text não implementa NUM — deve falhar");
     let err = result.unwrap_err().to_string();
     assert!(
         err.contains("não implementa") || err.contains("NUM"),
@@ -70,7 +75,11 @@ data Par (first::A second::B)
 Par 3 "hello"
 "#;
     let result = infer_src(src);
-    assert!(result.is_ok(), "inferência deve succeed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "inferência deve succeed: {:?}",
+        result.err()
+    );
 }
 
 /// Type params livres com tipos iguais: `Par 3 4` também funciona.
@@ -81,5 +90,9 @@ data Par (first::A second::B)
 Par 3 4
 "#;
     let result = infer_src(src);
-    assert!(result.is_ok(), "inferência deve succeed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "inferência deve succeed: {:?}",
+        result.err()
+    );
 }

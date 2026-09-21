@@ -443,12 +443,7 @@ pub(crate) fn try_dispatch_table(
                             // e verificar que cada type arg satisfaz o bound.
                             if oi.is_constructor && !oi.type_params.is_empty() {
                                 if let Some(bound_err) =
-                                    check_generic_bounds(
-                                        func_name,
-                                        &oi.type_params,
-                                        &subs,
-                                        ctx,
-                                    )
+                                    check_generic_bounds(func_name, &oi.type_params, &subs, ctx)
                                 {
                                     // Bound falhou — não-terminal: continuar
                                     // para próximo overload. Formatar como
@@ -1269,9 +1264,7 @@ fn check_generic_bounds(
             {
                 return Some(MiddleError::TypeMismatch {
                     expected: bound_iface.clone(),
-                    found: format!(
-                        "{type_name} — {type_name} não implementa {bound_iface}"
-                    ),
+                    found: format!("{type_name} — {type_name} não implementa {bound_iface}"),
                     span: kata_ast::Span::synthetic().into(),
                 });
             }

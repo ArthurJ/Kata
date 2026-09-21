@@ -173,9 +173,7 @@ fn data_decl_with_multiple_bounds() {
     let item = first_item(&m);
     match item {
         Item::DataDecl {
-            name,
-            where_bounds,
-            ..
+            name, where_bounds, ..
         } => {
             assert_eq!(name, "Pair");
             assert_eq!(where_bounds.len(), 2);
@@ -192,9 +190,7 @@ fn data_decl_no_where_clause() {
     let item = first_item(&m);
     match item {
         Item::DataDecl {
-            name,
-            where_bounds,
-            ..
+            name, where_bounds, ..
         } => {
             assert_eq!(name, "Par");
             assert!(where_bounds.is_empty());

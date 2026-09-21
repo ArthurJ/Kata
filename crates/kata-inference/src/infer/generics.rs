@@ -350,10 +350,9 @@ fn unify_one(
 
         // Struct paramétrico: unifica type args recursivamente.
         // Complex::(T, T) (param) vs Complex::(Int, Int) (arg) → unifica T→Int.
-        (
-            Ty::Struct(StructKey::Generic(n1, ps)),
-            Ty::Struct(StructKey::Generic(n2, as_)),
-        ) if n1 == n2 && ps.len() == as_.len() => {
+        (Ty::Struct(StructKey::Generic(n1, ps)), Ty::Struct(StructKey::Generic(n2, as_)))
+            if n1 == n2 && ps.len() == as_.len() =>
+        {
             for (p, a) in ps.iter().zip(as_) {
                 unify_one(p, a, type_params, subs, refines_registry, iface_registry)?;
             }
@@ -426,12 +425,10 @@ pub fn apply_subs(ty: &Ty, subs: &Substitutions) -> Ty {
         Ty::Receiver(elem) => Ty::Receiver(Box::new(apply_subs(elem, subs))),
         Ty::ReceiverFactory(elem) => Ty::ReceiverFactory(Box::new(apply_subs(elem, subs))),
         // Struct paramétrico: substitui nos type args.
-        Ty::Struct(StructKey::Generic(name, args)) => {
-            Ty::Struct(StructKey::Generic(
-                name.clone(),
-                args.iter().map(|a| apply_subs(a, subs)).collect(),
-            ))
-        }
+        Ty::Struct(StructKey::Generic(name, args)) => Ty::Struct(StructKey::Generic(
+            name.clone(),
+            args.iter().map(|a| apply_subs(a, subs)).collect(),
+        )),
         _ => ty.clone(),
     }
 }
