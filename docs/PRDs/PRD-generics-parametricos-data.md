@@ -512,12 +512,18 @@ que extrai o nome e/ou type args conforme necessário.
 - **DoD:** `Complex 3 4` tipa como `Complex::(Int, Int)`.
   `Complex "a" "b"` falha com "Text não implementa SCALAR".
 
-### Fase 4 — SCALAR com `one`
+### Fase 4 — SCALAR com `one` ✅
 
 - `interface SCALAR extends NUM` com `one :: Self => Self`.
 - `zero :: Self => Self` já está em RING (herdado por NUM/FIELD/SCALAR).
-- Int e Float implementam SCALAR com `one` via FFI ou literais.
-- **DoD:** `(one x)` tipa como Int quando `x : Int`, Float quando `x : Float`.
+- Int e Float implementam SCALAR com `one` via lambda (`lambda _: 1`, `lambda _: 1.0`).
+- Rational também implementa SCALAR (`lambda _: rational 1`).
+- **DoD:** `(one x)` tipa como Int quando `x : Int`, Float quando `x : Float`. ✅
+- **Bug fix:** `is_overridden` em `pass0.rs:1154` não verificava signatures já
+  registradas por outros blocos `implements` do mesmo tipo. Quando SCALAR
+  (que herda de NUM→FIELD) era processado, o default method `//` de FIELD
+  era regenerado com Self=Int, produzindo `int(Int)` sem overload. Corrigido
+  verificando também `signatures.iter().any(...)`.
 
 ### Fase 5 — InterfaceRegistry
 
