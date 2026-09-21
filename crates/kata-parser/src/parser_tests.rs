@@ -144,6 +144,66 @@ fn data_decl_empty() {
 }
 
 #[test]
+fn data_decl_with_where_clause() {
+    let m = parse_src("data Complex (re::T im::T) where T implements SCALAR");
+    let item = first_item(&m);
+    match item {
+        Item::DataDecl {
+            name,
+            fields,
+            where_bounds,
+            refined,
+            ..
+        } => {
+            assert_eq!(name, "Complex");
+            assert_eq!(fields.len(), 2);
+            assert_eq!(fields[0].name, "re");
+            assert_eq!(fields[1].name, "im");
+            assert_eq!(where_bounds.len(), 1);
+            assert_eq!(where_bounds[0], ("T".to_string(), "SCALAR".to_string()));
+            assert!(refined.is_none());
+        }
+        other => panic!("expected DataDecl with where, got {other:?}"),
+    }
+}
+
+#[test]
+fn data_decl_with_multiple_bounds() {
+    let m = parse_src("data Pair (first::A second::B) where A implements NUM, B implements EQ");
+    let item = first_item(&m);
+    match item {
+        Item::DataDecl {
+            name,
+            where_bounds,
+            ..
+        } => {
+            assert_eq!(name, "Pair");
+            assert_eq!(where_bounds.len(), 2);
+            assert_eq!(where_bounds[0], ("A".to_string(), "NUM".to_string()));
+            assert_eq!(where_bounds[1], ("B".to_string(), "EQ".to_string()));
+        }
+        other => panic!("expected DataDecl with multiple bounds, got {other:?}"),
+    }
+}
+
+#[test]
+fn data_decl_no_where_clause() {
+    let m = parse_src("data Par (first::A second::B)");
+    let item = first_item(&m);
+    match item {
+        Item::DataDecl {
+            name,
+            where_bounds,
+            ..
+        } => {
+            assert_eq!(name, "Par");
+            assert!(where_bounds.is_empty());
+        }
+        other => panic!("expected DataDecl without where, got {other:?}"),
+    }
+}
+
+#[test]
 fn enum_decl_variants() {
     let m = parse_src("enum Boolean\n    True\n    False");
     let item = first_item(&m);

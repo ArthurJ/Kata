@@ -402,6 +402,12 @@ pub fn collect_type_params(param_types: &[Ty], return_type: &Ty) -> Vec<String> 
             {
                 result.push(concrete.clone());
             }
+            // Struct paramétrico: coleta type params dos type args.
+            Ty::Struct(StructKey::Generic(_, args)) => {
+                for arg in args {
+                    collect_into(arg, result);
+                }
+            }
             _ => {}
         }
     }

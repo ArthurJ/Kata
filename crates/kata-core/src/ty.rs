@@ -184,8 +184,12 @@ impl Ty {
             | Ty::Receiver(inner)
             | Ty::ReceiverFactory(inner) => inner.contains_var(),
             Ty::Dict(k, v) => k.contains_var() || v.contains_var(),
-            // Folhas sem Var: Prim, Unit, Struct, Sum, InferVar, Interface,
-            // Byte, Bytes, File, Socket, OverloadSet.
+            // Struct paramétrico: recursar nos type args.
+            Ty::Struct(crate::struct_registry::StructKey::Generic(_, args)) => {
+                args.iter().any(|a| a.contains_var())
+            }
+            // Folhas sem Var: Prim, Unit, Struct(Plain/Family/Instance), Sum,
+            // InferVar, Interface, Byte, Bytes, File, Socket, OverloadSet.
             _ => false,
         }
     }
@@ -235,6 +239,15 @@ impl Ty {
             Ty::ReceiverFactory(elem) => {
                 Ty::ReceiverFactory(Box::new(elem.substitute_self(replacement)))
             }
+            // Struct paramétrico: substituir Self nos type args.
+            Ty::Struct(crate::struct_registry::StructKey::Generic(name, args)) => {
+                Ty::Struct(crate::struct_registry::StructKey::Generic(
+                    name.clone(),
+                    args.iter()
+                        .map(|a| a.substitute_self(replacement))
+                        .collect(),
+                ))
+            }
             _ => self.clone(),
         }
     }
@@ -271,6 +284,17 @@ impl std::fmt::Display for Ty {
                 }
                 crate::struct_registry::StructKey::Instance(name, concrete) => {
                     write!(f, "{name} ({concrete})")
+                }
+                crate::struct_registry::StructKey::Generic(name, args) => {
+                    f.write_str(name)?;
+                    f.write_str("::(")?;
+                    for (i, arg) in args.iter().enumerate() {
+                        if i > 0 {
+                            f.write_str(", ")?;
+                        }
+                        write!(f, "{arg}")?;
+                    }
+                    f.write_str(")")
                 }
             },
             Ty::Generic(name, args) => {
@@ -364,6 +388,18 @@ impl Ty {
                 }
                 crate::struct_registry::StructKey::Instance(name, concrete) => {
                     format!("{name} ({concrete})")
+                }
+                crate::struct_registry::StructKey::Generic(name, args) => {
+                    if args.len() == 1 {
+                        format!("{name}::{}", args[0].display())
+                    } else {
+                        let args_str = args
+                            .iter()
+                            .map(|a| a.display())
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        format!("{name}::({args_str})")
+                    }
                 }
             },
             Ty::Sum(name) | Ty::Interface(name) => name.clone(),

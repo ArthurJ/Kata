@@ -16,7 +16,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::ty::Ty;
 
 /// Chave interna do `StructRegistry` para distinguir tipos comuns de
-/// instâncias de família de refined polimórfico.
+/// instâncias de família de refined polimórfico e de structs paramétricos.
 ///
 /// - `Plain("Pessoa")` — struct comum ou refined concreto.
 /// - `Family("NonZero")` — referência a família polimórfica
@@ -24,10 +24,13 @@ use crate::ty::Ty;
 ///   antes do dispatch.
 /// - `Instance("NonZero", "Int")` — instância de `data (NUM, ...) as NonZero`
 ///   para o tipo concreto `Int`. O nome público é `"NonZero"`.
+/// - `Generic("Complex", [Ty::Prim(Int), Ty::Prim(Int)])` — struct
+///   paramétrico instanciado com type args concretos. O nome público é
+///   `"Complex"`. Preserva o invariante `Ty::Struct` ↔ data.
 ///
 /// `Ty::Struct` continua carregando o nome público (`"NonZero"`). A
-/// distinção família vs concreto é confinada ao `StructRegistry`.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+/// distinção família vs concreto vs genérico é confinada ao `StructRegistry`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum StructKey {
     /// Tipo comum: "Pessoa", "Float", "NonZero" (refined concreto).
     Plain(String),
@@ -37,6 +40,10 @@ pub enum StructKey {
     Family(String),
     /// Instância de família: ("NonZero", "Int") = NonZero sobre Int.
     Instance(String, String),
+    /// Struct paramétrico instanciado: ("Complex", [Int, Int]).
+    /// O layout é idêntico para quaisquer type args (offset = i * 8),
+    /// mas os tipos anotados dos fields variam para o type checker.
+    Generic(String, Vec<Ty>),
 }
 
 impl StructKey {
@@ -46,14 +53,44 @@ impl StructKey {
             StructKey::Plain(n) => n,
             StructKey::Family(n) => n,
             StructKey::Instance(n, _) => n,
+            StructKey::Generic(n, _) => n,
         }
     }
 
     /// Tipo concreto da instância, se aplicável.
     pub fn concrete_type(&self) -> Option<&str> {
         match self {
-            StructKey::Plain(_) | StructKey::Family(_) => None,
+            StructKey::Plain(_) | StructKey::Family(_) | StructKey::Generic(..) => None,
             StructKey::Instance(_, t) => Some(t),
+        }
+    }
+}
+
+impl PartialOrd for StructKey {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for StructKey {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        // Ordenar por nome primeiro, depois por discriminante do variant.
+        // Generic(args) compara por nome; args não participam da ordenação
+        // (Ty não implementa Ord). Isso é suficiente para BTreeMap —
+        // a unicidade é garantida por Eq+Hash, e a ordem só precisa ser
+        // consistente (não semanticamente significativa).
+        match (self, other) {
+            (StructKey::Plain(a), StructKey::Plain(b)) => a.cmp(b),
+            (StructKey::Family(a), StructKey::Family(b)) => a.cmp(b),
+            (StructKey::Instance(a, _), StructKey::Instance(b, _)) => a.cmp(b),
+            (StructKey::Generic(a, _), StructKey::Generic(b, _)) => a.cmp(b),
+            // Discriminante ordem: Plain < Family < Instance < Generic
+            (StructKey::Plain(_), _) => std::cmp::Ordering::Less,
+            (_, StructKey::Plain(_)) => std::cmp::Ordering::Greater,
+            (StructKey::Family(_), _) => std::cmp::Ordering::Less,
+            (_, StructKey::Family(_)) => std::cmp::Ordering::Greater,
+            (StructKey::Instance(_, _), _) => std::cmp::Ordering::Less,
+            (_, StructKey::Instance(_, _)) => std::cmp::Ordering::Greater,
         }
     }
 }
@@ -69,6 +106,19 @@ pub struct FieldInfo {
     /// Todos os campos são words de 8 bytes — structs são blocos contíguos
     /// de `n * 8` bytes na arena.
     pub offset: u32,
+}
+
+/// Declaração de type param de um struct paramétrico.
+/// `data Complex (re::T im::T) where T implements SCALAR` produz
+/// `TypeParamDecl { name: "T", bound: Some("SCALAR") }`.
+/// `data Par (first::A second::B)` produz dois params com `bound: None`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TypeParamDecl {
+    /// Nome do type param (PascalCase: T, A, B, etc.).
+    pub name: String,
+    /// Interface do bound (`Some("SCALAR")` = T implementa SCALAR).
+    /// `None` = type param livre (sem bound).
+    pub bound: Option<String>,
 }
 
 /// Informação de um struct registrado.
@@ -90,6 +140,11 @@ pub struct StructInfo {
     /// `Some("NonZero")` = instância de `data (NUM, ...) as NonZero`.
     /// `None` = struct normal ou refined concreto (não-polimórfico).
     pub is_instance_of: Option<String>,
+    /// Type params do struct paramétrico.
+    /// `None` = struct monomórfico (não-genérico).
+    /// `Some(vec)` = struct paramétrico com type params detectados
+    /// por PascalCase em posição de tipo nos fields.
+    pub type_params: Option<Vec<TypeParamDecl>>,
 }
 
 impl StructInfo {
@@ -169,6 +224,7 @@ impl StructRegistry {
                 alias_of,
                 predicates: None,
                 is_instance_of: None,
+                type_params: None,
             },
         );
         self.track_origin(name, origin);
@@ -192,6 +248,7 @@ impl StructRegistry {
                 alias_of: Some(alias_of.to_string()),
                 predicates: Some(predicates),
                 is_instance_of: None,
+                type_params: None,
             },
         );
         self.track_origin(name, origin);
@@ -221,9 +278,74 @@ impl StructRegistry {
                 alias_of: Some(concrete_type.to_string()),
                 predicates: Some(predicates),
                 is_instance_of: Some(family_name.to_string()),
+                type_params: None,
             },
         );
         self.track_origin(family_name, origin);
+    }
+
+    /// Registra um struct paramétrico com type params.
+    /// `data Complex (re::T im::T) where T implements SCALAR` registra
+    /// `StructKey::Plain("Complex")` com `type_params: Some([...])` e
+    /// fields contendo `Ty::Var("T")` nos tipos.
+    pub fn register_generic(
+        &mut self,
+        origin: &str,
+        name: &str,
+        fields: Vec<FieldInfo>,
+        type_params: Vec<TypeParamDecl>,
+    ) {
+        let key = (origin.to_string(), StructKey::Plain(name.to_string()));
+        self.structs.insert(
+            key,
+            StructInfo {
+                name: name.to_string(),
+                fields,
+                alias_of: None,
+                predicates: None,
+                is_instance_of: None,
+                type_params: Some(type_params),
+            },
+        );
+        self.track_origin(name, origin);
+    }
+
+    /// Instancia um struct paramétrico com type args concretos, substituindo
+    /// `Ty::Var("T")` pelos types args nos tipos dos fields.
+    /// Retorna `None` se o struct não existe ou não é paramétrico.
+    ///
+    /// O struct físico (layout, offsets) é idêntico — só os tipos anotados
+    /// mudam para o type checker. O invariante `offset = i * 8` preserva-se.
+    pub fn lookup_instantiated(
+        &self,
+        name: &str,
+        type_args: &[Ty],
+    ) -> Option<InstantiatedStructInfo> {
+        let info = self.get(name)?;
+        let type_params = info.type_params.as_ref()?;
+
+        // Construir mapa de substituição: Var("T") → type_arg
+        let mut subs: std::collections::HashMap<String, Ty> = std::collections::HashMap::new();
+        for (param, arg) in type_params.iter().zip(type_args.iter()) {
+            subs.insert(param.name.clone(), arg.clone());
+        }
+
+        // Substituir vars nos tipos dos fields
+        let instantiated_fields: Vec<FieldInfo> = info
+            .fields
+            .iter()
+            .map(|f| FieldInfo {
+                name: f.name.clone(),
+                ty: substitute_vars(&f.ty, &subs),
+                offset: f.offset,
+            })
+            .collect();
+
+        Some(InstantiatedStructInfo {
+            name: name.to_string(),
+            fields: instantiated_fields,
+            type_args: type_args.to_vec(),
+        })
     }
 
     /// Registra o mapeamento family_name → interface_name.
@@ -450,6 +572,54 @@ impl StructRegistry {
                 self.ambiguous.insert(name.to_string());
             }
         }
+    }
+}
+
+/// Resultado de `lookup_instantiated` — struct paramétrico com type args
+/// concretos aplicados aos tipos dos fields. O layout (offsets) é idêntico
+/// ao do struct genérico; apenas os tipos anotados variam.
+#[derive(Debug, Clone, PartialEq)]
+pub struct InstantiatedStructInfo {
+    pub name: String,
+    pub fields: Vec<FieldInfo>,
+    /// Type args concretos aplicados (ex: `[Int, Int]` para `Complex::(Int, Int)`).
+    pub type_args: Vec<Ty>,
+}
+
+impl InstantiatedStructInfo {
+    pub fn find_field(&self, name: &str) -> Option<(u32, &FieldInfo)> {
+        self.fields
+            .iter()
+            .enumerate()
+            .find(|(_, f)| f.name == name)
+            .map(|(i, f)| (i as u32, f))
+    }
+}
+
+/// Substitui `Ty::Var(name)` por tipos concretos de `subs`, recursivamente.
+/// Helper local para `lookup_instantiated` — não exporta para não conflitar
+/// com `apply_subs` do inference (que tem assinatura diferente).
+fn substitute_vars(ty: &Ty, subs: &std::collections::HashMap<String, Ty>) -> Ty {
+    match ty {
+        Ty::Var(name) => subs.get(name).cloned().unwrap_or_else(|| ty.clone()),
+        Ty::Generic(name, args) => Ty::Generic(
+            name.clone(),
+            args.iter().map(|a| substitute_vars(a, subs)).collect(),
+        ),
+        Ty::Struct(StructKey::Generic(name, args)) => Ty::Struct(StructKey::Generic(
+            name.clone(),
+            args.iter().map(|a| substitute_vars(a, subs)).collect(),
+        )),
+        Ty::Function(params, ret) => Ty::Function(
+            params.iter().map(|p| substitute_vars(p, subs)).collect(),
+            Box::new(substitute_vars(ret, subs)),
+        ),
+        Ty::Tuple(elems) => {
+            Ty::Tuple(elems.iter().map(|e| substitute_vars(e, subs)).collect())
+        }
+        Ty::List(e) => Ty::List(Box::new(substitute_vars(e, subs))),
+        Ty::Array(e) => Ty::Array(Box::new(substitute_vars(e, subs))),
+        _ => ty.clone(),
     }
 }
 

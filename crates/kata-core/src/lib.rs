@@ -36,6 +36,8 @@ pub use interface_registry::{
 };
 pub use refines_registry::{RefinesEntry, RefinesRegistry};
 pub use snapshot::HeapSnapshotData;
-pub use struct_registry::{FieldInfo, StructInfo, StructKey, StructRegistry};
+pub use struct_registry::{
+    FieldInfo, InstantiatedStructInfo, StructInfo, StructKey, StructRegistry, TypeParamDecl,
+};
 pub use ty::{PrimTy, Ty, TypeEnv};
 pub use type_graph::{TypeGraph, TypeGraphBuilder};
