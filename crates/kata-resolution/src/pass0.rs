@@ -1151,9 +1151,17 @@ pub(crate) fn run_pass0(
                     // Pular se o impl já define este método com os mesmos
                     // param_types (override real). Cross-type overloads
                     // (param_types diferentes) não pular o default method.
+                    // Também verifica signatures já registradas por OUTROS
+                    // blocos `implements` do mesmo tipo — sem isso, default
+                    // methods de supertraits são regenerados duplicadamente
+                    // quando um novo impl (ex: SCALAR extends NUM) é
+                    // processado, causando erros de dispatch no corpo.
                     let is_overridden = defined_sigs
                         .iter()
-                        .any(|(name, pts)| name == &sig.name && pts == &param_types);
+                        .any(|(name, pts)| name == &sig.name && pts == &param_types)
+                        || signatures.iter().any(|s| {
+                            s.name == sig.name && s.param_types == param_types
+                        });
                     if is_overridden {
                         continue;
                     }
