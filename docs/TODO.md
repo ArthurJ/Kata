@@ -1,25 +1,12 @@
 # TODO — Kata-Lang
 
-Único arquivo de pendências. Atualizado 2026-09-18.
+Único arquivo de pendências. Atualizado 2026-09-21.
 Itens resolvidos devem ser removidos — o histórico vive no git.
 
 ---
 
 ## Pendentes
 ### 🟡 Médio
-
-#### `private_type.kata` — family_extension_invalid
-
-`Internal implements NUM` estende a família `NonZero`, mas o predicado
-da família não é válido para `Internal`. Erro de type system: o
-predicado `NonZero` rejeita o tipo `Internal` na extensão.
-
-**Impacto:** exemplo não roda. Pode ser um bug no exemplo (predicado
-mal escrito) ou uma limitação real do family refinement.
-
-**Caminho:** revisar o predicado `NonZero` e o tipo `Internal` no
-exemplo. Se o exemplo está correto, investigar por que o family
-checker rejeita a extensão.
 
 #### Trampoline do scheduler engole erros (interp)
 
