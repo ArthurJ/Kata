@@ -292,22 +292,26 @@ fn resolve_inner(
                 let param_types: Vec<Ty> = params
                     .iter()
                     .map(|t| {
-                        resolve_type_expr(
+                        let ty = resolve_type_expr(
                             &t.node,
                             &type_env,
                             &interface_registry,
                             &struct_registry,
                             Some(&type_graph),
-                        )
+                        );
+                        pass0::instantiate_generic_struct_refs(&ty, &struct_registry)
                     })
                     .collect();
-                let return_type = resolve_type_expr(
-                    &ret.node,
-                    &type_env,
-                    &interface_registry,
-                    &struct_registry,
-                    Some(&type_graph),
-                );
+                let return_type = {
+                    let ty = resolve_type_expr(
+                        &ret.node,
+                        &type_env,
+                        &interface_registry,
+                        &struct_registry,
+                        Some(&type_graph),
+                    );
+                    pass0::instantiate_generic_struct_refs(&ty, &struct_registry)
+                };
 
                 // Extrai metadados de diretivas
                 let mut ffi_symbol = None;
@@ -472,22 +476,26 @@ fn resolve_inner(
                 let param_types: Vec<Ty> = params
                     .iter()
                     .map(|t| {
-                        resolve_type_expr(
+                        let ty = resolve_type_expr(
                             &t.node,
                             &type_env,
                             &interface_registry,
                             &struct_registry,
                             Some(&type_graph),
-                        )
+                        );
+                        pass0::instantiate_generic_struct_refs(&ty, &struct_registry)
                     })
                     .collect();
-                let return_type = resolve_type_expr(
-                    &ret.node,
-                    &type_env,
-                    &interface_registry,
-                    &struct_registry,
-                    Some(&type_graph),
-                );
+                let return_type = {
+                    let ty = resolve_type_expr(
+                        &ret.node,
+                        &type_env,
+                        &interface_registry,
+                        &struct_registry,
+                        Some(&type_graph),
+                    );
+                    pass0::instantiate_generic_struct_refs(&ty, &struct_registry)
+                };
 
                 // Extrai ffi_symbol das diretivas da Action.
                 let ffi_symbol = action_dirs.iter().find_map(|d| {

@@ -30,7 +30,7 @@ use crate::typed::{
 };
 
 use super::show_synthesis_helpers::{
-    ffi_call1, field_access_expr, repr_expr, show_call, string_concat, text_lit,
+    ffi_call1, field_access_expr, repr_expr, show_call, show_expr, string_concat, text_lit,
 };
 
 /// Verifica se um tipo já tem implementação manual do método `show` (via
@@ -94,7 +94,24 @@ pub(crate) fn synthesize_show_functions(
         }
 
         let ret_ty = Ty::text();
-        let param_ty = Ty::Struct(StructKey::Plain(struct_name.to_string()));
+
+        // Structs genéricos usam StructKey::Generic com Var para cada type param,
+        // permitindo que o monomorphizador instancie o show para cada tipo concreto.
+        // Structs monomórficos usam Plain como antes.
+        let (param_ty, is_generic, type_params_strs): (Ty, bool, Vec<String>) =
+            match &struct_info.type_params {
+                Some(tps) if !tps.is_empty() => {
+                    let vars: Vec<Ty> = tps.iter().map(|tp| Ty::Var(tp.name.clone())).collect();
+                    let pt = Ty::Struct(StructKey::Generic(struct_name.to_string(), vars));
+                    let names: Vec<String> = tps.iter().map(|tp| tp.name.clone()).collect();
+                    (pt, true, names)
+                }
+                _ => (
+                    Ty::Struct(StructKey::Plain(struct_name.to_string())),
+                    false,
+                    vec![],
+                ),
+            };
         let mangled = format!("__kata_show__{struct_name}");
 
         // Registra overload `show :: Struct => Text` no DispatchTable.
@@ -104,10 +121,10 @@ pub(crate) fn synthesize_show_functions(
             ret: ret_ty.clone(),
             ffi_symbol: Some(mangled.clone()),
             is_action: false,
-            is_generic: false,
+            is_generic,
             is_constructor: false,
             associative_neutral: None,
-            type_params: vec![],
+            type_params: type_params_strs.clone(),
             substitutions: None,
             param_names: vec![],
             param_defaults: vec![],
@@ -119,7 +136,7 @@ pub(crate) fn synthesize_show_functions(
             .register_impl(ImplEntry {
                 origin: "__synthesis".to_string(),
                 type_name: struct_name.to_string(),
-                type_params: vec![],
+                type_params: type_params_strs.clone(),
                 interface_name: "SHOW".to_string(),
                 iface_params: vec![],
                 span: Span::synthetic(),
@@ -163,6 +180,10 @@ pub(crate) fn synthesize_show_functions(
                 escape: EscapeTarget::Caller,
                 kind: text_lit(struct_name.to_string()).node.kind,
             }
+        } else if is_generic {
+            // Struct genérico com campos: usa show_expr (trata Ty::Var nos
+            // fields via dispatch genérico, resolvido pelo monomorphizador).
+            build_generic_struct_show_body(struct_name, &struct_info.fields)
         } else {
             build_struct_show_body(struct_name, &struct_info.fields, struct_registry)
         };
@@ -388,6 +409,42 @@ fn build_struct_show_body(
             parts.push(text_lit(", ".to_string()));
         }
         parts.push(field_show(field, i, struct_registry));
+    }
+
+    parts.push(text_lit(")".to_string()));
+
+    let result = parts.into_iter().reduce(string_concat);
+    let body = result.expect("show body tem pelo menos 2 parts");
+
+    TypedExpr {
+        span: Span::synthetic(),
+        ty: Ty::text(),
+        tail_pos: true,
+        escape: EscapeTarget::Caller,
+        kind: body.node.kind,
+    }
+}
+
+/// Como `build_struct_show_body`, mas usa `show_expr` para cada field em vez
+/// de `field_show`. Necessário para structs paramétricos cujos fields têm
+/// `Ty::Var("T")` — `show_expr` produz `Closure { callee: Ident("show"),
+/// ffi_symbol: None }` para `Ty::Var`, que o monomorphizador resolve ao
+/// instanciar o tipo concreto. `field_show` não tem braço para `Ty::Var`
+/// (cai no fallback `kata_rt_int_to_text`).
+fn build_generic_struct_show_body(
+    struct_name: &str,
+    fields: &[kata_core::struct_registry::FieldInfo],
+) -> TypedExpr {
+    let mut parts: Vec<Spanned<TypedExpr>> = Vec::new();
+
+    parts.push(text_lit(format!("{struct_name}(")));
+
+    for (i, field) in fields.iter().enumerate() {
+        if i > 0 {
+            parts.push(text_lit(", ".to_string()));
+        }
+        let access = field_access_expr(i, &field.ty);
+        parts.push(show_expr(access, &field.ty));
     }
 
     parts.push(text_lit(")".to_string()));

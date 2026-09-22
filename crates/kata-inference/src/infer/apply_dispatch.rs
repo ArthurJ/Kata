@@ -363,6 +363,7 @@ pub(crate) fn try_dispatch_table(
             }
             // Se a overload tem type_params, unify com arg_types para resolver
             // o tipo de retorno concreto (ex: T→Int a partir de Result::(T, E)).
+            let mut bound_error: Option<MiddleError> = None;
             let expanded_ret = if !overload.type_params.is_empty() {
                 let mut subs: super::generics::Substitutions = HashMap::new();
                 match super::generics::unify(
@@ -374,6 +375,17 @@ pub(crate) fn try_dispatch_table(
                     ctx.interface_registry,
                 ) {
                     Ok(_) => {
+                        // Verificar bounds de where-clause para construtores
+                        // genéricos. Se o overload é um construtor de struct
+                        // paramétrico, consultar StructRegistry para os bounds
+                        // e verificar que cada type arg satisfaz o bound.
+                        if overload.is_constructor && !overload.type_params.is_empty() {
+                            if let Some(bound_err) =
+                                check_generic_bounds(func_name, &overload.type_params, &subs, ctx)
+                            {
+                                bound_error = Some(bound_err);
+                            }
+                        }
                         let concrete_ret = super::generics::apply_subs(&overload.ret, &subs);
                         super::apply::expand_ret(&concrete_ret, ctx)
                     }
@@ -382,6 +394,14 @@ pub(crate) fn try_dispatch_table(
             } else {
                 super::apply::expand_ret(&overload.ret, ctx)
             };
+
+            // Se o bound check falhou, retornar erro de tipo (não-terminal
+            // seria ideal, mas o caminho principal já selecionou esta overload
+            // via match_score; o erro de bound é mais específico que o erro
+            // de type mismatch genérico).
+            if let Some(err) = bound_error {
+                return Some(Err(err));
+            }
             let callee_ty = Ty::Function(overload.params.clone(), Box::new(expanded_ret.clone()));
             let callee_typed = TypedExpr {
                 span: callee.span,
@@ -416,6 +436,7 @@ pub(crate) fn try_dispatch_table(
             // Tenta caminho genérico: procura overload com type_params não-vazio.
             let mut arity_matched = false;
             let mut unify_failed = false;
+            let mut bound_fail_error: Option<MiddleError> = None;
             let mut total_candidates = 0u32;
             if let Some(overloads) = ctx.table.get_overloads(func_name) {
                 for oi in overloads
@@ -445,11 +466,11 @@ pub(crate) fn try_dispatch_table(
                                 if let Some(bound_err) =
                                     check_generic_bounds(func_name, &oi.type_params, &subs, ctx)
                                 {
-                                    // Bound falhou — não-terminal: continuar
-                                    // para próximo overload. Formatar como
-                                    // "não implementa" para cair no filter
-                                    // de propagação imediata se nenhuma
-                                    // outra overload casar.
+                                    // Guardar erro de bound para retornar se
+                                    // nenhuma outra overload casar. O erro de
+                                    // bound é mais específico que o TypeMismatch
+                                    // genérico construído abaixo.
+                                    bound_fail_error = Some(bound_err);
                                     unify_failed = true;
                                     continue;
                                 }
@@ -544,6 +565,11 @@ pub(crate) fn try_dispatch_table(
 
                 if total_candidates > 1 {
                     return Some(Err(enrich_no_overload(func_name, arg_types, ctx, *span)));
+                }
+                // Se o bound check falhou (where-clause), retornar o erro
+                // específico em vez do TypeMismatch genérico.
+                if let Some(bound_err) = bound_fail_error {
+                    return Some(Err(bound_err));
                 }
                 // 1 overload total: unify falhou → tipos inconsistentes.
                 // Constrói TypeMismatch com os tipos dos args conflitantes.

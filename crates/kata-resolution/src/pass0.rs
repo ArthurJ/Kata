@@ -1220,12 +1220,14 @@ pub(crate) fn run_pass0(
                     .iter()
                     .map(|t| {
                         let ty = t.substitute_self(&concrete_ty);
-                        instantiate_family_for_concrete(&ty, &deferred.type_name, struct_registry)
+                        let ty = instantiate_family_for_concrete(&ty, &deferred.type_name, struct_registry);
+                        instantiate_generic_struct_refs(&ty, struct_registry)
                     })
                     .collect();
                 let return_type = {
                     let ty = sig.ret.substitute_self(&concrete_ty);
-                    instantiate_family_for_concrete(&ty, &deferred.type_name, struct_registry)
+                    let ty = instantiate_family_for_concrete(&ty, &deferred.type_name, struct_registry);
+                    instantiate_generic_struct_refs(&ty, struct_registry)
                 };
 
                 // Pular se o impl já define este método com os mesmos
