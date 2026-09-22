@@ -633,13 +633,14 @@ em `kata-rt`, desacoplada do compilador. O runtime exporta ~220 funções
   `kata_rt_spawn_process`, `kata_rt_run`, `kata_rt_yield`, `kata_rt_yield_check`
 - **IPC (multiprocess):** `kata_rt_ipc_channel_create`, `kata_rt_ipc_queue_create`,
   `kata_rt_serialize_key`, `kata_rt_to_bytes`, `kata_rt_from_bytes`
-- **ARC (Arc<T> nativo):** `kata_rt_alloc_arc`, `kata_rt_incref`, `kata_rt_decref`,
-  `kata_rt_arc_fn_ptr`
+- **CaptureBox (closures):** `kata_rt_alloc_capture_box` — aloca na arena
+  especificada (fiber_arena, caller_arena ou root_arena, conforme
+  `EscapeTarget`). Sem refcount, sem `incref`/`decref`.
 - **Type Table (reflexão estrutural):** não exposta como FFI C-ABI — o driver
   Rust chama `register_type_table(rt, types)` diretamente antes da execução
   (Rust-to-Rust, pois `TypeShape` contém `Box`/`String`/`Vec` sem layout
-  C-ABI estável). O runtime consulta a type table internamente para `decref`
-  e pretty printing.
+  C-ABI estável). O runtime consulta a type table internamente para
+  pretty printing.
 - **Pretty Printing:** interno ao runtime via type table (não exposto como FFI)
 - **Logging (`@log`):** `kata_rt_log_publish`, `kata_rt_log_publish_default`,
   `kata_rt_log_publish_full`, `kata_rt_log_publish_topic`, `kata_rt_log_recv`,
@@ -674,7 +675,6 @@ fornecendo os contratos compartilhados entre camadas:
 
 - **`TypeShape`** — Projeção runtime de `Ty` para reflexão estrutural. Descarta
   InferVar/Generic/Interface (mapeados para Unit/User graceful). O codegen emite
-  `register_type(ptr, type_id)` após cada `alloc_arc` e
   `register_type_arena(ptr, type_id)` após cada `arena_alloc`, permitindo que
   `typeof` e `pretty_print` funcionem em tempo de execução.
 
@@ -1954,11 +1954,11 @@ exclusivamente via canais. O fork não produz um valor de retorno síncrono.
 ### 5.2.2. Modelo de Memória
 
 Kata usa **arenas bump per-fiber** para toda alocação de dados. Não há garbage
-collector nem free individual para dados. Closures com captura usam ARC
-manual (CaptureBox com refcount — ver §6.5), e file/socket handles usam
-close determinístico. O modelo de dados funciona porque três restrições se
-combinam para garantir que todo valor vive na arena certa e é liberado no
-momento certo.
+collector nem free individual para dados. Closures com captura usam CaptureBox
+alocado em arena (sem refcount — o box morre quando a arena é resetada ou
+destruída), e file/socket handles usam close determinístico no epílogo da
+Action. O modelo funciona porque três restrições se combinam para garantir
+que todo valor vive na arena certa e é liberado no momento certo.
 
 #### As três arenas
 
@@ -2309,13 +2309,12 @@ envia os bytes direto, sem re-serialização.
 **Marshalling:** entre processos, valores são sempre by-value (serializados).
 Tipos primitivos (SMI, Float) são copiados direto (8 bytes). Tipos heap-allocated
 (Text, Array, Dict, tuplas, structs, enums) são serializados recursivamente via
-`TypeShape` walk — a mesma estrutura que o decref walk percorre. O custo é
-proporcional ao tamanho dos dados.
+`TypeShape` walk. O custo é proporcional ao tamanho dos dados.
 
 O modelo é análogo ao de Erlang/BEAM: processos leves (fibers) para concorrência
 (CSP), processos OS para isolamento/paralelismo pesado.
 
-### 6.5. Memória: Arenas O(1), Caller's Arena e ARC
+### 6.5. Memória: Arenas O(1) e Caller's Arena
 
 Como não há Garbage Collector, a posse da memória é regida em tempo de compilação:
 
@@ -3180,14 +3179,14 @@ Na TAST, toda chamada de função é `TypedExprKind::Closure`:
 | `ffi_symbol` | Símbolo FFI resolvido pelo DispatchTable (`None` para funções Kata puras) |
 
 As variáveis capturadas por uma closure são lidas de `Lambda.captures` (single
-source of truth). O call site aloca um CaptureBox via `kata_rt_alloc_arc` e passa
-`box_ptr` como primeiro argumento. A seleção de arena (Local/Caller/Heap) é
-determinada pelo campo `escape: EscapeTarget` do nó, atribuído durante o
-inference (ver §5.2.2, EscapeTarget).
+source of truth). O call site aloca um CaptureBox via `kata_rt_alloc_capture_box`
+na arena indicada por `escape: EscapeTarget` (Local/Caller), atribuído durante
+o inference (ver §5.2.2, EscapeTarget), e passa `box_ptr` como primeiro
+argumento.
 
 ### Chamada a Closures Escapadas (`FnValueCall`)
 
-1. Carrega ponteiro da struct `Arc<ClosureBox>` do stack
+1. Carrega ponteiro do CaptureBox do stack
 2. Extrai `fn_ptr` e `captures`
 3. Monta argumentos
 4. Emite `call_indirect`
@@ -3696,8 +3695,8 @@ formato binário + struct espelho C-compatible — mais trabalho e mais frágil.
 O código JIT não precisa registrar tipos; a table já está no runtime.
 
 **`type_id`** é atribuído em compile-time para cada `Ty` distinto no módulo.
-É estrutural: mesmo `Ty` (por `Hash + Eq`) = mesmo `type_id`, independente de
-arena/ARC. `Tuple(Int, Float)` na arena e como ARC compartilham ID.
+É estrutural: mesmo `Ty` (por `Hash + Eq`) = mesmo `type_id`, independente
+da arena em que o valor foi alocado.
 
 **`TypeShape`** é a projeção runtime de `Ty` — descarta `InferVar`/`Generic`/
 `Interface` (mapeados para `Unit`/`User` graceful). `assign_type_ids` roda

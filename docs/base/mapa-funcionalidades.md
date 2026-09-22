@@ -245,11 +245,12 @@ Dependencies: 4 (alias), 7 (interfaces).
 
 ### 14 — Modelo de memória
 
-Arena (bump allocator, O(1) free ao término da Action). Escape Analysis
-(4 passes sobre TAST: retorno de função, posições de escape,
-propagação de aliases, promoção de CaptureStorage). ARC (incref/decref
-injetados pelo codegen no epílogo da Action). `FnValueCall`
-(call_indirect para closures escapadas).
+Arena (bump allocator, O(1) free ao término da Action). Escape analysis
+inline no inference: cada `TypedExpr` carrega `escape: EscapeTarget`
+(`Local`/`Caller`) que governa seleção de arena no codegen
+(`alloc_for_escape`). Sem refcount, sem ARC — structured concurrency
+(§5.2.2 do manual) torna ARC desnecessário. `FnValueCall` (call_indirect
+para closures escapadas).
 
 Dependencies: 3 (Actions — arena é por Action), 5 (closures — escape
 analysis opera sobre captures).
@@ -264,7 +265,8 @@ Diretivas: `@log` (telemetria via canais CSP). Special forms: `spawn!`
 (multiprocess — processo OS isolado via fork+IPC).
 
 Dependencies: 3 (concorrência só no domínio impuro), 14 (escape analysis
-— dados em canais escapam → ARC), 10 (FFI — channels são runtime).
+— dados em canais escapam para a caller_arena), 10 (FFI — channels são
+runtime).
 
 ### 16 — Otimização de TAST
 
@@ -298,13 +300,14 @@ Passes próprios em `kata-optimizer`:
   bloqueada em cauda)
 - Stream Fusion (`@builtin` map/filter/fold → fusão de cadeias)
 
-ARC (incref/decref) é injetado no codegen, não no optimizer — o epílogo
-da Action emite decref de variáveis ARC e close de handles de I/O.
+Close determinístico de I/O handles (File/Socket) é injetado no codegen,
+não no optimizer — o epílogo da Action emite `kata_rt_file_close` e
+`kata_rt_socket_close` para handles abertos.
 
 Diretiva: `@associative` (habilita TRMA).
 
-Dependencies: 10 (IR existe), 14 (ARC no codegen precisa de info de
-escape).
+Dependencies: 10 (IR existe), 14 (a seleção de arena no codegen precisa
+do `EscapeTarget` marcado no inference).
 
 Se a TAST carregar `tail_pos`, `escape`, `mono_instance` (Recomendação
 2 do post-mortem), o lowering preserva essa informação no IR e o
