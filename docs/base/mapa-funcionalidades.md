@@ -349,7 +349,7 @@ pipeline e não se encaixam no esquema de camadas sequenciais:
   `kata_rt_stdin/stdout/stderr`). `close!` é no-op (`is_stdio` flag),
   read/write enforcement por `IoMode` (runtime, não tipo).
   PRD-stdio-values.
-- **Sockets:** `Socket` (TCP/UDP), `select` (multiplexação de I/O
+- **Sockets:** `Socket` (TCP/Unix), `select` (multiplexação de I/O
   handles — file e socket). PRD-socket-io, PRD-select-io.
 - **Doctests:** `kata-driver/src/doctest.rs` — extração e execução de
   blocos de documentação como testes.
