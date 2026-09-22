@@ -162,4 +162,4 @@ The distinction between `:load` and `import` is intentional:
 
 You have completed all chapters of the main guide. There is also an appendix about supported platforms and limitations — including the state of the Windows port:
 
-→ [Appendix — Platforms and Limitations](17-plataformas-limitacoes.md)
+→ [Appendix — Platforms and Limitations](17-platforms-limitations.md)

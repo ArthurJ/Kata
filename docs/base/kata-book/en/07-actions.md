@@ -122,4 +122,4 @@ depois
 
 ## Next chapter
 
-Actions have state and control. The next chapter introduces collections — lists, tuples, dictionaries, sets — and how to iterate over them with `for`. → [Chapter 8](08-colecoes.md)
+Actions have state and control. The next chapter introduces collections — lists, tuples, dictionaries, sets — and how to iterate over them with `for`. → [Chapter 8](08-collections.md)

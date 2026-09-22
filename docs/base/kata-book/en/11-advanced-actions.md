@@ -247,7 +247,7 @@ Use `fork!` for lightweight concurrency within the same process. Use `spawn!` fo
 
 ## Limitations on Windows
 
-`fork!`, channels, `select`, and `sleep!` work on all platforms. However, `spawn!` — which creates isolated OS child processes — is a stub on Windows: it compiles, but at runtime does nothing (returns 0). If you need external processes, use Linux or macOS. See the [Appendix — Platforms and Limitations](17-plataformas-limitacoes.md) for details.
+`fork!`, channels, `select`, and `sleep!` work on all platforms. However, `spawn!` — which creates isolated OS child processes — is a stub on Windows: it compiles, but at runtime does nothing (returns 0). If you need external processes, use Linux or macOS. See the [Appendix — Platforms and Limitations](17-platforms-limitations.md) for details.
 
 ## Sockets — network I/O
 
@@ -331,4 +331,4 @@ succeeds.
 
 You have completed the main part of the Kata Book. From literals to concurrency — no `if`, no classes, no inheritance. Kata is small by design: prefix notation, pattern matching, and algebraic types solve what other languages spread across dozens of features.
 
-→ [Chapter 12 — Refined Types and Aliases](12-tipos-refinados.md)
+→ [Chapter 12 — Refined Types and Aliases](12-refined-types.md)

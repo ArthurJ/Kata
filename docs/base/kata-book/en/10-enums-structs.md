@@ -313,4 +313,4 @@ Use `?` when you want to propagate the error to the caller. Use `|` when you wan
 
 ## Next chapter
 
-Data types are the pure side. The next chapter enters the world of concurrency — `fork!`, channels, `select`, and communication between fibers. → [Chapter 11](11-actions-avancadas.md)
+Data types are the pure side. The next chapter enters the world of concurrency — `fork!`, channels, `select`, and communication between fibers. → [Chapter 11](11-advanced-actions.md)

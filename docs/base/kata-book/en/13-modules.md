@@ -169,4 +169,4 @@ Without the `stdlib.` prefix, `import math` would load the local module (if it e
 
 ## Next chapter
 
-Modules organize code. The next chapter shows the optimizations the compiler applies automatically — TCO, TRMA, stream fusion, and `@cache`. → [Chapter 14](14-otimizacoes.md)
+Modules organize code. The next chapter shows the optimizations the compiler applies automatically — TCO, TRMA, stream fusion, and `@cache`. → [Chapter 14](14-optimizations.md)

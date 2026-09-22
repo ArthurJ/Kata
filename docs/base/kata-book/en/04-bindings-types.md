@@ -281,4 +281,4 @@ echo!(+ b"abc" b"def")
 
 ## Next chapter
 
-Now that you know how to give names to values, the next chapter shows how to define functions with signatures, multiple clauses, and recursion. → [Chapter 5](05-funcoes.md)
+Now that you know how to give names to values, the next chapter shows how to define functions with signatures, multiple clauses, and recursion. → [Chapter 5](05-functions.md)

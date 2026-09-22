@@ -4,7 +4,7 @@ Kata is a functional language with prefix notation, algebraic types, and coopera
 
 ## Installation
 
-If you haven't compiled the `kata` binary yet, see [Chapter 0 — Compiling Kata](00-compilando.md) for build instructions. After installing, verify:
+If you haven't compiled the `kata` binary yet, see [Chapter 0 — Compiling Kata](00-compiling.md) for build instructions. After installing, verify:
 
 ```bash
 kata --version
@@ -14,7 +14,7 @@ kata --version
 kata 0.1.0
 ```
 
-Kata runs on Linux and macOS natively. There is an experimental port for Windows — see the [Appendix — Platforms and Limitations](17-plataformas-limitacoes.md) for details.
+Kata runs on Linux and macOS natively. There is an experimental port for Windows — see the [Appendix — Platforms and Limitations](17-platforms-limitations.md) for details.
 
 ## Your first program
 

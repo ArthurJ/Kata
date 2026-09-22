@@ -331,4 +331,4 @@ Each of these concepts is covered in depth in the next chapters. Chapter 3 shows
 
 For now, you've already written a real program in Kata — in three versions, from simplest to most decomposed. That's more than most languages offer on the first day.
 
-→ [Chapter 3 — Basic Syntax](03-sintaxe-basica.md)
+→ [Chapter 3 — Basic Syntax](03-basic-syntax.md)

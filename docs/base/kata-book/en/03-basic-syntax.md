@@ -142,4 +142,4 @@ hello world
 
 ## Next chapter
 
-Now that you know how to write expressions, the next chapter shows how to give names to values with bindings and explore the language's primitive types. → [Chapter 4](04-bindings-tipos.md)
+Now that you know how to write expressions, the next chapter shows how to give names to values with bindings and explore the language's primitive types. → [Chapter 4](04-bindings-types.md)

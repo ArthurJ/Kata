@@ -128,7 +128,7 @@ kata parse examples/basics/hello_action.kata
 
 ### `kata lsp` — language server
 
-Starts the LSP (Language Server Protocol) server on stdio. Editors like VS Code and Neovim can connect to get autocomplete, diagnostics, and type hover. The appendix on platforms ([Appendix](17-plataformas-limitacoes.md)) has more on where the LSP works.
+Starts the LSP (Language Server Protocol) server on stdio. Editors like VS Code and Neovim can connect to get autocomplete, diagnostics, and type hover. The appendix on platforms ([Appendix](17-platforms-limitations.md)) has more on where the LSP works.
 
 ## Where to find examples
 
@@ -175,4 +175,4 @@ In addition to the highlighter, the `kata` binary includes an LSP server (`kata 
 
 ## Next chapter
 
-With the binary compiled and the commands at hand, [Chapter 1](01-ola-kata.md) shows your first program in Kata.
+With the binary compiled and the commands at hand, [Chapter 1](01-hello-kata.md) shows your first program in Kata.
