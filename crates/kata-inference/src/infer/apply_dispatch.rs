@@ -316,7 +316,11 @@ pub(crate) fn try_dispatch_table(
                         let concrete_ret = super::generics::apply_subs(&overload.ret, &subs);
                         super::apply::expand_ret(&concrete_ret, ctx)
                     }
-                    Err(_) => super::apply::expand_ret(&overload.ret, ctx),
+                    Err(e) => {
+                        // unify falhou — propagar erro em vez de prosseguir
+                        // com tipo não-resolvido. Ver correlato na linha 392.
+                        return Some(Err(e));
+                    }
                 }
             } else {
                 super::apply::expand_ret(&overload.ret, ctx)
@@ -389,7 +393,15 @@ pub(crate) fn try_dispatch_table(
                         let concrete_ret = super::generics::apply_subs(&overload.ret, &subs);
                         super::apply::expand_ret(&concrete_ret, ctx)
                     }
-                    Err(_) => super::apply::expand_ret(&overload.ret, ctx),
+                    Err(e) => {
+                        // unify falhou — type params não puderam ser
+                        // resolvidos consistentemente (ex: SCALAR=Int
+                        // no primeiro arg, SCALAR=Float no segundo).
+                        // Propagar o erro em vez de prosseguir com tipo
+                        // não-resolvido (Var não-substituído), que chegaria
+                        // ao codegen e crashe em Cranelift.
+                        return Some(Err(e));
+                    }
                 }
             } else {
                 super::apply::expand_ret(&overload.ret, ctx)

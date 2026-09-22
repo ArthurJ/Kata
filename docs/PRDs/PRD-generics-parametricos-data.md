@@ -1,6 +1,6 @@
 # PRD — Generics Paramétricos para `data`
 
-**Status:** 🟡 Fases 1-6 concluídas, Fase 7 pendente
+**Status:** ✅ Todas as fases concluídas
 **Data:** 2026-09-21
 
 ## Objetivo
@@ -557,13 +557,13 @@ que extrai o nome e/ou type args conforme necessário.
   `=_T_Int` com body `= a.first b.first` onde `a.first : Int`. ✅
   Funciona também com `Pair::(Float)` sem SIGSEGV. ✅
 
-### Fase 7 — Migração da stdlib
+### Fase 7 — Migração da stdlib ✅
 
 - `complex.kata` migra para generics paramétricos.
 - Overloads específicos (`+ :: Complex Int => Complex`) mantidos como
   overloads adicionais.
 - **DoD:** `cargo test` passa. `kata run` em exemplos de Complex produz
-  output correto.
+  output correto. ✅
 
 ## Fora do escopo
 

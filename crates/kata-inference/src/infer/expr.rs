@@ -175,6 +175,14 @@ pub(crate) fn fits_return(actual: &Ty, declared: &Ty) -> bool {
         (Ty::Generic(n1, a1), Ty::Generic(n2, a2)) if n1 == n2 && a1.len() == a2.len() => {
             a1.iter().zip(a2).all(|(x, y)| fits_return(x, y))
         }
+        // Struct paramétrico: StructKey::Generic recursa nos type args,
+        // permitindo que Var("T") case com o tipo concreto do hint.
+        (
+            Ty::Struct(StructKey::Generic(n1, a1)),
+            Ty::Struct(StructKey::Generic(n2, a2)),
+        ) if n1 == n2 && a1.len() == a2.len() => {
+            a1.iter().zip(a2).all(|(x, y)| fits_return(x, y))
+        }
         // Tipos unários (List, Array, Range, Sender, Receiver, ReceiverFactory)
         // — recursão para o tipo interno, permitindo Var casar com concreto.
         (Ty::List(a), Ty::List(b))

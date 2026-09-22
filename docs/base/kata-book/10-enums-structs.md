@@ -101,6 +101,105 @@ main!()
 
 A distância ao quadrado da origem: `3² + 4² = 25`.
 
+## `data` com type params — generics paramétricos
+
+`data` pode ser parametrizado por type params. Type params são detectados
+implicitamente: PascalCase em posição de tipo nos fields (como `Ok(T)` em
+enums). Não há lista explícita `::(...)` na declaração — a instanciação
+`::(...)` é usada nos call sites.
+
+### Forma compartilhada — type param com bound
+
+```kata
+data Complex (re::T im::T) where T implements SCALAR
+```
+
+- `(re::T im::T)` — campos com type param `T`.
+- `where T implements SCALAR` — bound: `T` precisa implementar `SCALAR`.
+- `T` é o mesmo tipo em ambos os campos — `Complex 3 4` tipa como
+  `Complex::(Int, Int)`, `Complex 1.0 2.0` como `Complex::(Float, Float)`.
+- `Complex "a" "b"` falha — `Text` não implementa `SCALAR`.
+
+A instanciação `Complex::(Int, Int)` aparece automaticamente quando o
+construtor despacha: o monomorphizer cria métodos concretos on-demand
+para cada combinação de type args usada.
+
+### Forma independente — vars anônimas com bound
+
+```kata
+data Par (first::SCALAR scd::SCALAR)
+```
+
+- `SCALAR` na posição de tipo do campo é interpretado como "var fresca
+  anônima com bound `SCALAR`". Cada ocorrência é uma var distinta.
+- Permite tipos diferentes em cada campo: `Par 3 4.0` aceito (`Int` e
+  `Float` ambos implementam `SCALAR`).
+- É açúcar para bounds independentes, não para params compartilhados.
+
+### Forma livre — type param sem bound
+
+```kata
+data Par (first::A second::B)
+```
+
+- `A` e `B` são type params livres (sem bound). PascalCase em posição de
+  tipo, detectados no pass0.
+- Construtor aceita qualquer par de tipos: `Par 3 "hello"` é válido.
+
+### Instanciação
+
+A instanciação usa `::(...)` — **1 type arg por ocorrência de type param
+nos fields, não por variável distinta.**
+
+```kata
+data Complex (re::T im::T) where T implements SCALAR
+# 2 ocorrências de T → 2 type args
+# Complex::(Int, Int)         — re::Int, im::Int
+# Complex::(Float, Float)     — re::Float, im::Float
+
+data Pair (fst::A scd::B)
+# 2 params independentes → 2 type args
+# Pair::(Int, Text)
+```
+
+`::(...)` é instanciação, **não** declaração. Escrever
+`data Complex::(T) (re::T im::T)` é erro de sintaxe.
+
+### Implementando interfaces para tipos genéricos
+
+Métodos são definidos para uma instanciação específica:
+
+```kata
+data Complex (re::T im::T) where T implements SCALAR
+
+Complex::(Float, Float) implements RING
+    + :: Complex::(Float, Float) Complex::(Float, Float) => Complex::(Float, Float)
+    lambda a b: Complex (+ a.re b.re) (+ a.im b.im)
+```
+
+O monomorphizer instancia o corpo substituindo `T` pelo tipo concreto
+(`Float`), e `+ a.re b.re` despacha para `+ :: Float Float => Float`.
+
+### Exemplo completo
+
+```kata
+data Pair (first::T second::T) where T implements NUM
+
+Pair::(Int, Int) implements EQ
+    = :: Pair::(Int, Int) Pair::(Int, Int) => Boolean
+    lambda a b: and (= a.first b.first) (= a.second b.second)
+
+action main
+    let p := Pair 3 4
+    let q := Pair 3 4
+    echo!(= p q)
+main!()
+```
+
+```
+True
+```
+
 ## `?` — short-circuit em Actions
 
 O operador `?` desempacota `Result` e `Optional` dentro de Actions. Se o valor for `Ok(v)` ou `Some(v)`, devolve `v` e continua. Se for `Err(e)` ou `None`, aborta a action com `return Err(e)` ou `return None`:

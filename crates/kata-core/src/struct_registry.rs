@@ -317,6 +317,14 @@ impl StructRegistry {
     /// `Ty::Var("T")` pelos types args nos tipos dos fields.
     /// Retorna `None` se o struct não existe ou não é paramétrico.
     ///
+    /// A aridade de `type_args` deve ser igual ao número de **ocorrências**
+    /// de type params nos fields (não ao número de variáveis distintas).
+    /// Ex: `data Complex (re::T im::T)` tem 2 ocorrências de `T`, então
+    /// `type_args` deve ter 2 elementos. A substituição mapeia cada
+    /// ocorrência posicionalmente, mas usa o nome da variável para
+    /// preservar a igualdade (ambas as ocorrências de `T` recebem o
+    /// mesmo valor via `subs`).
+    ///
     /// O struct físico (layout, offsets) é idêntico — só os tipos anotados
     /// mudam para o type checker. O invariante `offset = i * 8` preserva-se.
     pub fn lookup_instantiated(
@@ -327,10 +335,23 @@ impl StructRegistry {
         let info = self.get(name)?;
         let type_params = info.type_params.as_ref()?;
 
-        // Construir mapa de substituição: Var("T") → type_arg
+        // Coletar ocorrências de type params nos fields, na ordem.
+        let occurrences = type_param_occurrences_in_fields(&info.fields, type_params);
+
+        // Verificar aridade: uma ocorrência por arg.
+        if type_args.len() != occurrences.len() {
+            return None;
+        }
+
+        // Construir mapa de substituição: Var("T") → type_arg.
+        // Mapeia cada ocorrência posicionalmente, mas como o nome da
+        // variável é o mesmo para ocorrências do mesmo param, o mapa
+        // `subs` acaba associando o nome a um único valor — preservando
+        // a igualdade. Se o caller passou args inconsistentes para
+        // ocorrências do mesmo param, o unify já deve ter rejeitado.
         let mut subs: std::collections::HashMap<String, Ty> = std::collections::HashMap::new();
-        for (param, arg) in type_params.iter().zip(type_args.iter()) {
-            subs.insert(param.name.clone(), arg.clone());
+        for (param_name, arg) in occurrences.iter().zip(type_args.iter()) {
+            subs.insert(param_name.clone(), arg.clone());
         }
 
         // Substituir vars nos tipos dos fields
@@ -602,6 +623,67 @@ impl InstantiatedStructInfo {
 /// Substitui `Ty::Var(name)` por tipos concretos de `subs`, recursivamente.
 /// Helper local para `lookup_instantiated` — não exporta para não conflitar
 /// com `apply_subs` do inference (que tem assinatura diferente).
+/// Coleta ocorrências de type params nos tipos dos fields, na ordem de aparição.
+///
+/// Percorre os fields em ordem, e dentro de cada field percorre o tipo
+/// recursivamente (em pré-ordem), coletando cada ocorrência de `Ty::Var(name)`
+/// onde `name` é um type param declarado. O mesmo `name` pode aparecer
+/// múltiplas vezes — cada ocorrência é uma entrada separada no resultado.
+///
+/// Ex: `data Complex (re::T im::T)` → `["T", "T"]` (2 ocorrências).
+/// Ex: `data Pair (first::A second::B)` → `["A", "B"]` (2 ocorrências).
+/// Ex: `data Graph (nodes::List::(N) edges::List::(Pair::(N, N)))`
+///   → `["N", "N", "N"]` (3 ocorrências).
+pub fn type_param_occurrences_in_fields(
+    fields: &[FieldInfo],
+    type_params: &[TypeParamDecl],
+) -> Vec<String> {
+    let param_names: Vec<&str> = type_params.iter().map(|tp| tp.name.as_str()).collect();
+    let mut result = Vec::new();
+    for field in fields {
+        collect_occurrences(&field.ty, &param_names, &mut result);
+    }
+    result
+}
+
+/// Percorre um `Ty` recursivamente em pré-ordem, coletando ocorrências
+/// de `Ty::Var(name)` onde `name` está em `param_names`.
+fn collect_occurrences(ty: &Ty, param_names: &[&str], result: &mut Vec<String>) {
+    match ty {
+        Ty::Var(name) if param_names.contains(&name.as_str()) => {
+            result.push(name.clone());
+        }
+        Ty::Generic(_, args) => {
+            for arg in args {
+                collect_occurrences(arg, param_names, result);
+            }
+        }
+        Ty::Struct(StructKey::Generic(_, args)) => {
+            for arg in args {
+                collect_occurrences(arg, param_names, result);
+            }
+        }
+        Ty::List(inner) | Ty::Array(inner) | Ty::Range(inner) | Ty::Set(inner)
+        | Ty::Tensor(inner) => collect_occurrences(inner, param_names, result),
+        Ty::Dict(k, v) => {
+            collect_occurrences(k, param_names, result);
+            collect_occurrences(v, param_names, result);
+        }
+        Ty::Tuple(elems) => {
+            for e in elems {
+                collect_occurrences(e, param_names, result);
+            }
+        }
+        Ty::Function(params, ret) | Ty::Action(params, ret) => {
+            for p in params {
+                collect_occurrences(p, param_names, result);
+            }
+            collect_occurrences(ret, param_names, result);
+        }
+        _ => {}
+    }
+}
+
 fn substitute_vars(ty: &Ty, subs: &std::collections::HashMap<String, Ty>) -> Ty {
     match ty {
         Ty::Var(name) => subs.get(name).cloned().unwrap_or_else(|| ty.clone()),

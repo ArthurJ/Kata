@@ -206,7 +206,7 @@ guards e patterns). O `::` unificado com distinção por lookahead de 1 token
 |---|---|---|---|
 | Assinatura de função | `+ :: Int Int => Int` | A função `+` | Sua assinatura completa |
 | Campo de struct | `data Pessoa (nome::Text idade::Int)` | O campo `nome` | Seu tipo `Text` |
-| Parâmetro de tipo (genérico) | `Result::(T, E)`, `Iterable::A` | O tipo genérico `Result` | Seus parâmetros `(T, E)` |
+| Parâmetro de tipo (genérico) | `Result::(T, E)`, `Iterable::A`, `Complex::(Int, Int)` | O tipo genérico `Result` / struct paramétrico `Complex` | Seus parâmetros `(T, E)` / `(Int, Int)` |
 | Qualificação de variante | `Transacao::Aprovada`, `Result::Ok` | O enum `Transacao` / `Result` | A variante `Aprovada` / `Ok` |
 | Ascription de expressão | `5::PositiveInt`, `x::Int` | A expressão `5` / `x` | O tipo afirmado `PositiveInt` / `Int` |
 | Downcast estrutural | `a::Int` onde `a :: PositiveInt` | O valor `a` (refined/alias) | Seu tipo base `Int` |
@@ -221,6 +221,7 @@ guards e patterns). O `::` unificado com distinção por lookahead de 1 token
   - **Açúcar `[T]`**: `quicksort :: [Int] => [Int]` é equivalente a `quicksort :: List::Int => List::Int`. O parser desugara `[T]` para `TypeExpr::ParamApp { name: "List", params: [T] }` — o mesmo nó AST que `List::T` produz. Funciona em qualquer posição de tipo: parâmetros, retorno, anotações. Aninhamento: `[[Int]]` → `List::(List::Int)`. Múltiplos: `[A] [B]` → duas `List::` independentes. O desugaring é puramente sintático — typeck, codegen e runtime veem apenas `List::T`.
   - **Downcast estrutural** (post-refines): `a::Int` onde `a` é refined ou alias sobre `Int` rebaixa ao tipo base. O typeck verifica que `target_ty` é o base (via `alias_of`). No-op em runtime (mesmos bits) — o codegen emite `bitcast` apenas quando o Cranelift type difere (ex: `I64→F64`). Não valida predicado; é a válvula explícita para combinar refineds distintos ou interagir com a base, complementar ao `refines` (que é automático via fallback). Ver manual §4.2.7 modo 4 e §4.4.
   - **Instanciação de família polimórfica** (`NonZero::Int`): em position de tipo, `Família::Concreto` produz `ParamApp { name: "Família", params: [Named("Concreto")] }`. O `resolve_type_expr` resolve para `Instance("NonZero", "Int")` quando a família está registrada e a instância existe. Permite referenciar uma instância específica de família polimórfica dentro de um `implements` (ex: `/ :: Float NonZero::Int => Float` dentro de `Float implements NUM`). Em ascription de expressão (`3::NonZero`), o typeck promove `Family("NonZero")` → `Instance("NonZero", "Int")` baseado no tipo primitivo do inner.
+  - **Instanciação de `data` genérico** (`Complex::(Int, Int)`): struct paramétrico declarado com type params nos fields produz `StructKey::Generic("Complex", [Int, Int])`. A aridade da instanciação = ocorrências de type params nos fields, não variáveis distintas. `data Complex (re::T im::T)` tem 2 ocorrências de `T` → `Complex::(Int, Int)` (2 args). `data Pair (fst::A scd::B)` → `Pair::(Int, Text)` (2 args independentes). `::(...)` é instanciação, não declaração — não se escreve `data Complex::(T) (re::T im::T)`. Ver "Generics Paramétricos em `data`" abaixo.
 
 ---
 
@@ -1084,6 +1085,98 @@ NonZero refines NUM
 
 ---
 
+## Generics Paramétricos em `data`
+
+`data` pode ser parametrizado por type params, eliminando declarações
+monomórficas separadas para cada combinação de tipos de campo. O
+monomorphizer instancia métodos on-demand para cada combinação de type
+args usada em call sites alcançados.
+
+### Três formas de declaração
+
+#### Forma compartilhada — type param com bound
+
+```kata
+data Complex (re::T im::T) where T implements SCALAR
+```
+
+- `(re::T im::T)` — campos com type param `T` (PascalCase em posição de
+  tipo, como `Ok(T)` em enums).
+- `where T implements SCALAR` — bound: `T` precisa implementar `SCALAR`.
+- `T` é o mesmo tipo em ambos os campos. `Complex 3 4` tipa como
+  `Complex::(Int, Int)`. `Complex 3 4.0` é rejeitado (unify exige mesmo
+  `T`).
+
+#### Forma independente — vars anônimas com bound
+
+```kata
+data Par (first::SCALAR scd::SCALAR)
+```
+
+- `SCALAR` na posição de tipo do campo é interpretado como "var fresca
+  anônima com bound `SCALAR`". Cada ocorrência é uma var distinta.
+- Desugar para `Par (first::_SCALAR_0 scd::_SCALAR_1)` com bounds
+  independentes: `_SCALAR_0 implements SCALAR, _SCALAR_1 implements SCALAR`.
+- Permite tipos diferentes em cada campo: `Par 3 4.0` aceito.
+
+#### Forma livre — type param sem bound
+
+```kata
+data Par (first::A second::B)
+```
+
+- `A` e `B` são type params livres (sem bound). PascalCase em posição de
+  tipo, detectados no pass0.
+- Construtor aceita qualquer par de tipos.
+
+### Detecção de type params
+
+Type params são detectados **implicitamente** por PascalCase em posição de
+tipo nos fields — não há lista explícita `::(...)` na declaração. O pass0
+consulta `InterfaceRegistry` para distinguir interface de type param: se o
+nome é interface registrada (ex: `SCALAR`), é bound (gera var anônima); se
+não é interface, é type param livre.
+
+### Instanciação `::(T)`
+
+A instanciação usa `::(...)` — **1 type arg por ocorrência de type param
+nos fields, não por variável distinta:**
+
+```kata
+data Complex (re::T im::T) where T implements SCALAR
+# 2 ocorrências de T → 2 type args
+Complex::(Int, Int)       # re::Int, im::Int
+Complex::(Float, Float)   # re::Float, im::Float
+
+data Pair (fst::A scd::B)
+# 2 params independentes → 2 type args
+Pair::(Int, Text)
+```
+
+`::(...)` é instanciação, **não** declaração. Escrever
+`data Complex::(T) (re::T im::T)` é erro de sintaxe.
+
+### `where` clause
+
+```kata
+data Complex (re::T im::T) where T implements SCALAR
+data Matrix (rows::List::(T) cols::List::(T)) where T implements NUM
+```
+
+- `where` é lowercase keyword.
+- Múltiplos bounds separados por vírgula: `where T implements SCALAR, R implements NAT`.
+- Bounds são verificados após `unify` bindar o type param, em `apply_dispatch`.
+- Rejeição de bound é terminal: `"Text não implementa SCALAR"`.
+
+### Ortogonalidade com famílias refined
+
+Generics paramétricos (`StructKey::Generic`) e famílias refined
+(`StructKey::Instance`) coexistem. Um tipo não pode ser ambos. `data (NUM,
+...) as NonZero` com type params nos fields é rejeitado — família refined
+não aceita type params.
+
+---
+
 ## Açúcar `T?` (Tipo Falível)
 
 ```kata
@@ -1116,7 +1209,7 @@ soma_positiva :: PositiveInt PositiveInt => PositiveInt?
 |---|---|
 | `lambda` / `λ` | Declara função anônima. Múltiplas cláusulas após assinatura: `lambda <padrões>: <corpo>` — a primeira que encaixa vence |
 | `action` | Declara Action com params nomeados. Duas formas: **posicional** `action nome (p::T, ...) => Ret` (açúcar para dict-template sem defaults) ou **dict-template** `action nome {p::T: _, q::T: 5} => Ret` onde `_` marca obrigatório e literal marca default. `=>` separa args de retorno. Sem params: `action greet` (retorna `Unit`) ou `action greet => Unit` (retorno explícito). |
-| `data` | Declara tipo produto. **Struct:** `data Pessoa (nome::Text, idade::Int)`. **Refined:** `data (Base, predicados...) as Nome`. **Família polimórfica:** `data (INTERFACE, predicados...) as Nome` — quando Base é interface, gera instâncias por implementor (ver "Famílias Polimórficas" abaixo) |
+| `data` | Declara tipo produto. **Struct:** `data Pessoa (nome::Text, idade::Int)`. **Refined:** `data (Base, predicados...) as Nome`. **Família polimórfica:** `data (INTERFACE, predicados...) as Nome` — quando Base é interface, gera instâncias por implementor (ver "Famílias Polimórficas" abaixo). **Genérico paramétrico:** `data Complex (re::T im::T) where T implements SCALAR` — type params detectados por PascalCase em posição de tipo nos fields; `where` clause especifica bounds. Instanciação nos call sites: `Complex::(Int, Int)`. Três formas: compartilhada (type param com bound via `where`), independente (`data Par (fst::SCALAR scd::SCALAR)` — cada ocorrência de interface é var anônima fresca com bound), livre (`data Par (first::A second::B)` — params sem bound). |
 | `enum` | Declara tipo soma |
 | `alias` | Cria Newtype |
 | `interface` | Declara contrato de tipo |
@@ -1127,7 +1220,8 @@ soma_positiva :: PositiveInt PositiveInt => PositiveInt?
 | `import` | Importa módulo |
 | `export` | Exporta itens |
 | `as` | Alias de import (`import x as y`) ou de tipo (`data (...) as Nome`, `alias T as Nome`) |
-| `with` | Bloco bottom-up ao final de lambda: computações prévias nomeadas para Guards, e restrições de genéricos |
+| `where` | Cláusula de bounds em `data` genérico: `data Complex (re::T im::T) where T implements SCALAR`. Especifica que type params devem implementar interfaces. Múltiplos bounds separados por vírgula: `where T implements SCALAR, R implements NAT`. Lowercase keyword — não colide com PascalCase (tipos), ALL_CAPS (interfaces), nem snake_case (funções/variáveis) |
+| `with` | Bloco bottom-up ao final de lambda: computações prévias nomeadas para Guards |
 | `match` | Pattern matching disponível em ambos os domínios (funções puras e Actions). `otherwise` é obrigatório quando há guards na cláusula e o compilador não consegue provar estaticamente que os braços cobrem todas as variantes possíveis do tipo inspecionado. Sem guards, o body direto dispensa `otherwise`. Em funções puras, cada braço deve retornar um valor (expressão); em Actions, braços podem ser statements. O body do braço pode ser: (a) uma expressão na mesma linha do `:` (`Pattern: expr`); (b) um bloco indentado com múltiplas statements separadas por StmtSep, onde a última é o valor retornado (`Pattern:\n  stmt1\n  stmt2\n  final_expr`); (c) caso misto — expressão na mesma linha que continua em linhas indentadas (`Pattern: stmt1\n  stmt2\n  final_expr`). Múltiplas statements produzem `Expr::Block`. |
 | `return` | Early return em Actions. Não existe em funções puras. |
 | `if` | **Não existe — invariante absoluta.** Lógica condicional é expressa via pattern matching (que garante exaustividade) e guards (que garantem fallback via `otherwise`). |

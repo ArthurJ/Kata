@@ -50,14 +50,20 @@ pub(crate) fn synthesize_constructors(
             .unwrap_or_default();
 
         // Para structs paramétricos, o tipo de retorno carrega os type args
-        // como Ty::Var — apply_subs os substitui pelos tipos concretos após
-        // unify, produzindo StructKey::Generic("Pair", [Int, Int]).
+        // como Ty::Var — uma por **ocorrência** de type param nos fields
+        // (não por variável distinta). Ex: `data Complex (re::T im::T)` tem
+        // 2 ocorrências de T, então ret_ty = Complex::(Var("T"), Var("T")).
+        // O unify binda T = Float no primeiro arg e confirma T = Float no
+        // segundo — preservando a igualdade entre fields do mesmo param.
         // Para structs monomórficos, mantém Plain.
         let ret_ty = if is_generic {
-            let type_args: Vec<Ty> = type_params
-                .iter()
-                .map(|name| Ty::Var(name.clone()))
-                .collect();
+            let type_args: Vec<Ty> = kata_core::struct_registry::type_param_occurrences_in_fields(
+                &struct_info.fields,
+                struct_info.type_params.as_ref().unwrap(),
+            )
+            .into_iter()
+            .map(|name| Ty::Var(name))
+            .collect();
             Ty::Struct(StructKey::Generic(struct_name.to_string(), type_args))
         } else {
             Ty::Struct(StructKey::Plain(struct_name.to_string()))

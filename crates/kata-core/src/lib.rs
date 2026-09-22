@@ -38,6 +38,7 @@ pub use refines_registry::{RefinesEntry, RefinesRegistry};
 pub use snapshot::HeapSnapshotData;
 pub use struct_registry::{
     FieldInfo, InstantiatedStructInfo, StructInfo, StructKey, StructRegistry, TypeParamDecl,
+    type_param_occurrences_in_fields,
 };
 pub use ty::{PrimTy, Ty, TypeEnv};
 pub use type_graph::{TypeGraph, TypeGraphBuilder};

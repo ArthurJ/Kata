@@ -563,6 +563,21 @@ pub fn match_score(args: &[Ty], params: &[Ty], iface_reg: &InterfaceRegistry) ->
                         // para que um overload com Instance exato vença.
                         iface += 1;
                     }
+                    // Generic ↔ Generic: mesmo struct paramétrico.
+                    // Recursar nos type args — Var casa com concreto
+                    // (ex: Complex::(T) vs Complex::(Float)).
+                    (StructKey::Generic(_, a_args), StructKey::Generic(_, p_args))
+                        if a_args.len() == p_args.len() =>
+                    {
+                        if a_args.iter().zip(p_args).all(|(a, p)| ty_var_compatible(a, p)) {
+                            // Var casando com concreto não é exact match
+                            // — usa iface para que um overload instanciado
+                            // exato vença sobre o genérico.
+                            iface += 1;
+                        } else {
+                            return Score::incompatible();
+                        }
+                    }
                     _ => return Score::incompatible(),
                 }
             } else {

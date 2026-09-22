@@ -1,46 +1,47 @@
 # Complex — exemplo canônico de tipo numérico implementado em Kata puro.
-# Demonstra que a infraestrutura de interfaces (Fases 1-8) funciona end-to-end
+# Demonstra que a infraestrutura de interfaces funciona end-to-end
 # para um tipo definido pelo usuário sem FFI.
 #
-# Complex não define `/ :: Complex NonZero => Complex` — divisão por escalar
-# não-zero não é parte do contrato de RING (Complex é algebricamente um anel,
-# não um corpo). `type.missing_overload` dispara se alguém tentar usar
-# `Complex / NonZero`.
+# Complex é paramétrico em T (onde T implementa SCALAR), permitindo
+# Complex::(Int, Int), Complex::(Float, Float), Complex::(Rational, Rational).
+# Overloads de RING/EQ/SHOW são monomórficos para Complex::(Float, Float)
+# pois usam operações Float-specific (sqrt, 0.0, float).
+# Construtor é genérico — Complex 3 4 produz Complex::(Int).
 
 import core
 
-data Complex (re::Float im::Float)
+data Complex (re::T im::T) where T implements SCALAR
 
-Complex implements RING
-    + :: Complex Complex => Complex
+Complex::(Float, Float) implements RING
+    + :: Complex::(Float, Float) Complex::(Float, Float) => Complex::(Float, Float)
     lambda a b: Complex (+ a.re b.re) (+ a.im b.im)
     @commutative
-    + :: Complex Int => Complex
+    + :: Complex::(Float, Float) Int => Complex::(Float, Float)
     lambda a b: Complex (+ a.re (float b)) a.im
-    - :: Complex Complex => Complex
+    - :: Complex::(Float, Float) Complex::(Float, Float) => Complex::(Float, Float)
     lambda a b: Complex (- a.re b.re) (- a.im b.im)
-    * :: Complex Complex => Complex
+    * :: Complex::(Float, Float) Complex::(Float, Float) => Complex::(Float, Float)
     lambda a b: Complex (- (* a.re b.re) (* a.im b.im)) (+ (* a.re b.im) (* a.im b.re))
 
     @commutative
-    * :: Complex Int => Complex
+    * :: Complex::(Float, Float) Int => Complex::(Float, Float)
     lambda a b: Complex (* a.re (float b)) (* a.im (float b))
 
     @commutative
-    * :: Complex Float => Complex
+    * :: Complex::(Float, Float) Float => Complex::(Float, Float)
     lambda a b: Complex (* a.re b) (* a.im b)
 
-    - :: Complex Int => Complex
+    - :: Complex::(Float, Float) Int => Complex::(Float, Float)
     lambda a b: Complex (- a.re (float b)) a.im
 
-    - :: Complex Float => Complex
+    - :: Complex::(Float, Float) Float => Complex::(Float, Float)
     lambda a b: Complex (- a.re b) a.im
 
     @commutative
-    + :: Complex Float => Complex
+    + :: Complex::(Float, Float) Float => Complex::(Float, Float)
     lambda a b: Complex (+ a.re b) a.im
 
-    div :: Complex Complex => Result::(Complex, Text)
+    div :: Complex::(Float, Float) Complex::(Float, Float) => Result::(Complex::(Float, Float), Text)
     lambda a b:
         = denom 0.0: core.Result::Err "divisão por zero"
         otherwise: core.Result::Ok (Complex (div nr denom | 0.0) (div ni denom | 0.0))
@@ -49,24 +50,24 @@ Complex implements RING
             nr := + (* a.re b.re) (* a.im b.im)
             ni := - (* a.im b.re) (* a.re b.im)
 
-    zero :: Complex => Complex
+    zero :: Complex::(Float, Float) => Complex::(Float, Float)
     lambda _: Complex 0.0 0.0
 
-    abs :: Complex => Complex
+    abs :: Complex::(Float, Float) => Complex::(Float, Float)
     lambda a: Complex (sqrt (+ (* a.re a.re) (* a.im a.im))) 0.0
 
-Complex implements EQ
-    = :: Complex Complex => Boolean
+Complex::(Float, Float) implements EQ
+    = :: Complex::(Float, Float) Complex::(Float, Float) => Boolean
     lambda a b: and (= a.re b.re) (= a.im b.im)
-    != :: Complex Complex => Boolean
+    != :: Complex::(Float, Float) Complex::(Float, Float) => Boolean
     lambda a b: not (= a b)
 
-Complex implements SHOW
-    show :: Complex => Text
+Complex::(Float, Float) implements SHOW
+    show :: Complex::(Float, Float) => Text
     lambda a: + "(" (+ (show a.re) (+ " + " (+ (show a.im) "i)")))
 
-# int: Complex → Int (trunca parte real)
-int :: Complex => Int
+# int: Complex::(Float, Float) → Int (trunca parte real)
+int :: Complex::(Float, Float) => Int
 lambda z: int z.re
 
 # complex: Float → Complex (construtor com im=0)

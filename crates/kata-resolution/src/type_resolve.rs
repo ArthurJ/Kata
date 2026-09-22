@@ -282,6 +282,17 @@ pub fn resolve_type_expr(
                     }
                     // Tenta resolver como Ty::Var se o param é um nome que não está no TypeEnv
                     // (ex: "T" em Result::(T, E) dentro de uma declaração de função genérica).
+                    // Mas se o nome é um struct paramétrico (tem type_params),
+                    // produz Ty::Struct(StructKey::Generic(...)) — structs usam
+                    // StructKey, não Ty::Generic (que é para enums/intrínsecos).
+                    if let Some(info) = struct_reg.get(name) {
+                        if info.type_params.is_some() {
+                            return Ty::Struct(StructKey::Generic(
+                                name.clone(),
+                                resolved_params,
+                            ));
+                        }
+                    }
                     Ty::Generic(name.clone(), resolved_params)
                 }
             }
@@ -342,7 +353,13 @@ pub(crate) fn infer_payload_ty_from_literal(expr: &Expr) -> Option<Ty> {
 /// `T`, `E`, `A` → true. `Int`, `Complex`, `NUM` → false (tem minúsculas).
 /// `Self` → false (não é type param genérico, é placeholder de interface).
 pub(crate) fn is_type_param_name(name: &str) -> bool {
-    name.chars().all(|c| c.is_ascii_uppercase()) && !name.is_empty() && name != "Self"
+    // Type params: UPPER_CASE com optional underscores e dígitos.
+    // T, E, A → true. _SCALAR_0 → true (var anônima do desugar de interface).
+    // Int, Complex, NUM → false (tem minúsculas). Self → false.
+    name != "Self"
+        && !name.is_empty()
+        && name.chars().all(|c| c.is_ascii_uppercase() || c == '_' || c.is_ascii_digit())
+        && name.chars().any(|c| c.is_ascii_uppercase())
 }
 
 /// Coleta type params de uma assinatura resolvida.

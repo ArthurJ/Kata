@@ -95,13 +95,19 @@ pub(crate) fn synthesize_show_functions(
 
         let ret_ty = Ty::text();
 
-        // Structs genéricos usam StructKey::Generic com Var para cada type param,
-        // permitindo que o monomorphizador instancie o show para cada tipo concreto.
+        // Structs genéricos usam StructKey::Generic com Var para cada
+        // **ocorrência** de type param nos fields (não por variável distinta),
+        // permitindo que o monomorphizador instancie o show para cada tipo
+        // concreto. Ex: `data Complex (re::T im::T)` → show :: Complex::(T, T) => Text.
         // Structs monomórficos usam Plain como antes.
         let (param_ty, is_generic, type_params_strs): (Ty, bool, Vec<String>) =
             match &struct_info.type_params {
                 Some(tps) if !tps.is_empty() => {
-                    let vars: Vec<Ty> = tps.iter().map(|tp| Ty::Var(tp.name.clone())).collect();
+                    let occurrences = kata_core::struct_registry::type_param_occurrences_in_fields(
+                        &struct_info.fields,
+                        tps,
+                    );
+                    let vars: Vec<Ty> = occurrences.into_iter().map(|name| Ty::Var(name)).collect();
                     let pt = Ty::Struct(StructKey::Generic(struct_name.to_string(), vars));
                     let names: Vec<String> = tps.iter().map(|tp| tp.name.clone()).collect();
                     (pt, true, names)

@@ -1120,7 +1120,9 @@ sintetizado, que aloca a struct e preenche os campos.
 `data Complex (re::Float, im::Float)` gera `Complex :: Float Float => Complex`,
 não `Complex :: NUM NUM => Complex`. A assinatura é determinada pelos tipos
 declarados dos campos — o construtor precisa saber exatamente qual tipo
-esperar para alocar e preencher a struct.
+esperar para alocar e preencher a struct. Para tipos paramétricos onde os
+campos usam type params em vez de tipos concretos, ver §4.2.12 (Generics
+Paramétricos).
 
 Isto previne auto-referência: se o construtor aceitasse `NUM`, `Complex` (que
 implementa `NUM`) seria aceito como argumento de `Complex`, criando a
@@ -1452,6 +1454,83 @@ prioridade.
 * **Downcast é a válvula explícita:** `a::Int` onde `a :: PositiveInt`
   rebaixa ao base sem custo em runtime (§4.2.7, modo 4). É a forma explícita
   de extrair a base, complementar ao `refines`.
+
+#### 4.2.12. Generics Paramétricos em `data`
+
+`data` pode ser parametrizado por type params, eliminando declarações
+monomórficas separadas para cada combinação de tipos de campo. O
+monomorphizer instancia métodos on-demand para cada combinação de type
+args usada em call sites alcançados. PRD: `docs/PRDs/PRD-generics-parametricos-data.md`.
+
+**Type params são detectados implicitamente** por PascalCase em posição de
+tipo nos fields (como `Ok(T)` em enums). Não há lista explícita `::(...)`
+na declaração. A instanciação `::(...)` é usada nos call sites.
+
+**Três formas de declaração:**
+
+* **Forma compartilhada** — type param com bound via `where`:
+
+```kata
+data Complex (re::T im::T) where T implements SCALAR
+```
+
+`T` é o mesmo tipo em ambos os campos. `Complex 3 4` tipa como
+`Complex::(Int, Int)`. `Complex "a" "b"` falha — `Text` não implementa
+`SCALAR`. O `where` clause especifica que `T` precisa implementar `SCALAR`.
+Múltiplos bounds: `where T implements SCALAR, R implements NAT`.
+
+* **Forma independente** — vars anônimas com bound:
+
+```kata
+data Par (first::SCALAR scd::SCALAR)
+```
+
+`SCALAR` na posição de tipo do campo é interpretado como "var fresca
+anônima com bound `SCALAR`". Cada ocorrência é uma var distinta — desugar
+para `Par (first::_SCALAR_0 scd::_SCALAR_1)` com bounds independentes.
+Permite tipos diferentes em cada campo: `Par 3 4.0` aceito (`Int` e
+`Float` ambos implementam `SCALAR`).
+
+* **Forma livre** — type param sem bound:
+
+```kata
+data Par (first::A second::B)
+```
+
+`A` e `B` são type params livres (sem bound). Construtor aceita qualquer
+par de tipos.
+
+**Instanciação `::(T)`:** 1 type arg por ocorrência de type param nos
+fields, não por variável distinta. `data Complex (re::T im::T)` tem 2
+ocorrências de `T` → `Complex::(Int, Int)` (2 args). `data Pair (fst::A
+scd::B)` → `Pair::(Int, Text)` (2 args independentes). `::(...)` é
+instanciação, **não** declaração — escrever `data Complex::(T) (re::T
+im::T)` é erro.
+
+**Smart constructor genérico:** Um único overload genérico é registrado no
+`DispatchTable`. O `unify` binda `Ty::Var("T")` para tipos concretos dos
+argumentos. Após bindar, o type checker verifica o bound: `Int implements
+SCALAR?` via `InterfaceRegistry::type_implements`. Se falha, erro terminal:
+`"Text não implementa SCALAR"`.
+
+**Interface impls para instanciação específica:** Métodos são definidos
+para uma instanciação concreta:
+
+```kata
+data Complex (re::T im::T) where T implements SCALAR
+
+Complex::(Float, Float) implements RING
+    + :: Complex::(Float, Float) Complex::(Float, Float) => Complex::(Float, Float)
+    lambda a b: Complex (+ a.re b.re) (+ a.im b.im)
+```
+
+O monomorphizer instancia o corpo substituindo `T` por `Float`, e
+`+ a.re b.re` despacha para `+ :: Float Float => Float`.
+
+**Ortogonalidade com famílias refined:** Generics paramétricos
+(`StructKey::Generic`) e famílias refined (`StructKey::Instance`) coexistem.
+Um tipo não pode ser ambos. `data (NUM, ...) as NonZero` com type params
+nos fields é rejeitado — família refined não aceita type params.
 
 ### 4.3. Assinaturas e Tipos de Primeira Classe (`=>` vs `->`)
 
@@ -2494,6 +2573,23 @@ ADTs sem métodos acoplados.
 
 Conjunção lógica (AND), bloco contíguo alocado (Struct). Declaração posicional
 em parênteses ou formatação indentada. Tipagem dos campos via `::`.
+
+**`data` monomórfico:** Campos com tipos concretos. Construtor sintetizado
+infalível com tipos concretos dos campos. Ver §4.2.3.
+
+**`data` genérico paramétrico:** Campos com type params (PascalCase em
+posição de tipo). Type params detectados implicitamente; bounds via `where`
+clause. O monomorphizer instancia métodos on-demand para cada combinação de
+type args. Três formas:
+
+| Forma | Sintaxe | Type params |
+|---|---|---|
+| Compartilhada | `data Complex (re::T im::T) where T implements SCALAR` | `T` compartilhado entre fields, com bound |
+| Independente | `data Par (fst::SCALAR scd::SCALAR)` | Vars anônimas frescas por ocorrência, com bound |
+| Livre | `data Par (first::A second::B)` | Params independentes sem bound |
+
+Instanciação nos call sites: `Complex::(Int, Int)` — 1 type arg por ocorrência
+de type param nos fields. Ver §4.2.12 para detalhes.
 
 ### 9.2. Tipos Soma (`enum`) e Variantes Predicadas
 

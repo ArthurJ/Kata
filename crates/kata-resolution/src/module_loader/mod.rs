@@ -390,6 +390,23 @@ impl ModuleLoader {
         let imports = self.load_imports(&module, &entry_dir)?;
         if !imports.is_empty() {
             crate::merge_imports::merge_imports(&mut merged, &imports);
+            // Fixup post-merge: converter Ty::Generic("Complex", [Float]) →
+            // Ty::Struct(StructKey::Generic("Complex", [Float])) em signatures
+            // e functions que referenciam structs paramétricos de imports
+            // antes do struct_registry do import estar disponível.
+            let sr = &merged.struct_registry;
+            for sig in &mut merged.signatures {
+                for pt in &mut sig.param_types {
+                    *pt = crate::pass0::instantiate_generic_struct_refs(pt, sr);
+                }
+                sig.return_type = crate::pass0::instantiate_generic_struct_refs(&sig.return_type, sr);
+            }
+            for func in &mut merged.functions {
+                for pt in &mut func.param_types {
+                    *pt = crate::pass0::instantiate_generic_struct_refs(pt, sr);
+                }
+                func.return_type = crate::pass0::instantiate_generic_struct_refs(&func.return_type, sr);
+            }
         }
 
         self.loading.remove(path);

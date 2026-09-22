@@ -171,31 +171,31 @@ lambda r: exp (float r)
 # Trigonometria complexa. z = x + yi. Fórmulas de Euler / identidades
 # hiperbólicas. Usam apenas +, -, * (Complex) e sin/cos/sinh/cosh/exp (Float).
 
-sin :: Complex => Complex
+sin :: Complex::(Float, Float) => Complex::(Float, Float)
 lambda z: Complex (* (sin z.re) (cosh z.im)) (* (cos z.re) (sinh z.im))
 
-cos :: Complex => Complex
+cos :: Complex::(Float, Float) => Complex::(Float, Float)
 lambda z: Complex (* (cos z.re) (cosh z.im)) (* -1.0 (* (sin z.re) (sinh z.im)))
 
-tan :: Complex => Complex
+tan :: Complex::(Float, Float) => Complex::(Float, Float)
 lambda z: div (sin z) (cos z) | Complex 0.0 0.0
 
-sinh :: Complex => Complex
+sinh :: Complex::(Float, Float) => Complex::(Float, Float)
 lambda z: Complex (* (sinh z.re) (cos z.im)) (* (cosh z.re) (sin z.im))
 
-cosh :: Complex => Complex
+cosh :: Complex::(Float, Float) => Complex::(Float, Float)
 lambda z: Complex (* (cosh z.re) (cos z.im)) (* (sinh z.re) (sin z.im))
 
-tanh :: Complex => Complex
+tanh :: Complex::(Float, Float) => Complex::(Float, Float)
 lambda z: div (sinh z) (cosh z) | Complex 0.0 0.0
 
-exp :: Complex => Complex
+exp :: Complex::(Float, Float) => Complex::(Float, Float)
 lambda z: Complex (* (exp z.re) (cos z.im)) (* (exp z.re) (sin z.im))
 
 # sqrt Complex — raiz principal.
 # r = |z| = norm z. sqrt(z) = sqrt((r+x)/2) + i·sign(y)·sqrt((r-x)/2).
 # Multiplicar por 0.5 evita divisão. sign(y) via guards: y >= 0 → +, y < 0 → -.
-sqrt :: Complex => Complex
+sqrt :: Complex::(Float, Float) => Complex::(Float, Float)
 lambda z:
     >= z.im 0.0: Complex (sqrt (* (+ r z.re) 0.5)) (sqrt (* (- r z.re) 0.5))
     otherwise: Complex (sqrt (* (+ r z.re) 0.5)) (* -1.0 (sqrt (* (- r z.re) 0.5)))
@@ -204,18 +204,18 @@ lambda z:
 
 # log Complex — logaritmo natural complexo.
 # log(z) = ln|z| + i·arg(z), onde |z| = norm z, arg(z) = atan2(y, x).
-log :: Complex => Complex
+log :: Complex::(Float, Float) => Complex::(Float, Float)
 lambda z: Complex (log (norm z)) (atan2 z.im z.re)
 
 # log2/log10 Complex — derivam de log por mudança de base.
-log2 :: Complex => Complex
+log2 :: Complex::(Float, Float) => Complex::(Float, Float)
 lambda z: div (log z) (complex (log 2.0)) | Complex 0.0 0.0
 
-log10 :: Complex => Complex
+log10 :: Complex::(Float, Float) => Complex::(Float, Float)
 lambda z: div (log z) (complex (log 10.0)) | Complex 0.0 0.0
 
 # cbrt Complex — cbrt(z) = exp(log(z)/3).
-cbrt :: Complex => Complex
+cbrt :: Complex::(Float, Float) => Complex::(Float, Float)
 lambda z: exp (div (log z) (Complex 3.0 0.0) | Complex 0.0 0.0)
 
 # ── Inversas Complex → Complex ──────────────────────────────────
@@ -225,14 +225,14 @@ lambda z: exp (div (log z) (Complex 3.0 0.0) | Complex 0.0 0.0)
 
 # asin(z) = -i·log(iz + sqrt(1 - z²))
 # iz = Complex (* -1.0 z.im) z.re. -i·w = Complex w.im (* -1.0 w.re).
-asin :: Complex => Complex
+asin :: Complex::(Float, Float) => Complex::(Float, Float)
 lambda z:
     let w := log (+ (Complex (* -1.0 z.im) z.re) (sqrt (- (Complex 1.0 0.0) (* z z))))
     Complex w.im (* -1.0 w.re)
 
 # acos(z) = -i·log(z + i·sqrt(1 - z²))
 # i·s = Complex (* -1.0 s.im) s.re. -i·w = Complex w.im (* -1.0 w.re).
-acos :: Complex => Complex
+acos :: Complex::(Float, Float) => Complex::(Float, Float)
 lambda z:
     let s := sqrt (- (Complex 1.0 0.0) (* z z))
     let w := log (+ z (Complex (* -1.0 s.im) s.re))
@@ -240,33 +240,33 @@ lambda z:
 
 # atan(z) = (i/2)·(log(1 - iz) - log(1 + iz))
 # iz = Complex (* -1.0 z.im) z.re. (i/2)·w = Complex (* w.im -0.5) (* w.re 0.5).
-atan :: Complex => Complex
+atan :: Complex::(Float, Float) => Complex::(Float, Float)
 lambda z:
     let w := - (log (- (Complex 1.0 0.0) (Complex (* -1.0 z.im) z.re))) (log (+ (Complex 1.0 0.0) (Complex (* -1.0 z.im) z.re)))
     Complex (* w.im -0.5) (* w.re 0.5)
 
 # asinh(z) = log(z + sqrt(z² + 1))
-asinh :: Complex => Complex
+asinh :: Complex::(Float, Float) => Complex::(Float, Float)
 lambda z: log (+ z (sqrt (+ (* z z) (Complex 1.0 0.0))))
 
 # acosh(z) = log(z + sqrt(z+1)·sqrt(z-1))
-acosh :: Complex => Complex
+acosh :: Complex::(Float, Float) => Complex::(Float, Float)
 lambda z: log (+ z (* (sqrt (+ z (Complex 1.0 0.0))) (sqrt (- z (Complex 1.0 0.0)))))
 
 # atanh(z) = (1/2)·(log(1+z) - log(1-z))
 # (1/2)·w = Complex (* w.re 0.5) (* w.im 0.5).
-atanh :: Complex => Complex
+atanh :: Complex::(Float, Float) => Complex::(Float, Float)
 lambda z:
     let w := - (log (+ (Complex 1.0 0.0) z)) (log (- (Complex 1.0 0.0) z))
     Complex (* w.re 0.5) (* w.im 0.5)
 
 # ── Sobrecargas Complex → Float ─────────────────────────────────
 # norm(z) = |z| = sqrt(x² + y²) — módulo do complexo.
-norm :: Complex => Float
+norm :: Complex::(Float, Float) => Float
 lambda z: sqrt (+ (* z.re z.re) (* z.im z.im))
 
 # arg(z) = atan2(y, x) — argumento (fase) do complexo.
-arg :: Complex => Float
+arg :: Complex::(Float, Float) => Float
 lambda z: atan2 z.im z.re
 
 # ── Floor e ceil (Float → Int) ──────────────────────────────────

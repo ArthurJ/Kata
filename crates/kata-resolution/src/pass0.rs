@@ -57,9 +57,16 @@ pub(crate) fn instantiate_generic_struct_refs(ty: &Ty, struct_reg: &StructRegist
         Ty::Struct(StructKey::Plain(name)) => {
             if let Some(info) = struct_reg.get(name) {
                 if let Some(type_params) = &info.type_params {
-                    let type_args: Vec<Ty> = type_params
-                        .iter()
-                        .map(|tp| Ty::Var(tp.name.clone()))
+                    // Gerar type args a partir das **ocorrências** de type params
+                    // nos fields (não por variável distinta). Ex: Complex com
+                    // re::T im::T produz [Var("T"), Var("T")].
+                    let type_args: Vec<Ty> =
+                        kata_core::struct_registry::type_param_occurrences_in_fields(
+                            &info.fields,
+                            type_params,
+                        )
+                        .into_iter()
+                        .map(|name| Ty::Var(name))
                         .collect();
                     return Ty::Struct(StructKey::Generic(name.clone(), type_args));
                 }
@@ -100,12 +107,29 @@ pub(crate) fn instantiate_generic_struct_refs(ty: &Ty, struct_reg: &StructRegist
             Box::new(instantiate_generic_struct_refs(k, struct_reg)),
             Box::new(instantiate_generic_struct_refs(v, struct_reg)),
         ),
-        Ty::Generic(name, args) => Ty::Generic(
-            name.clone(),
-            args.iter()
-                .map(|a| instantiate_generic_struct_refs(a, struct_reg))
-                .collect(),
-        ),
+        Ty::Generic(name, args) => {
+            // Se o nome é um struct paramétrico no struct_registry,
+            // converter Ty::Generic → Ty::Struct(StructKey::Generic).
+            // Isto corrige tipos produzidos por resolve_type_expr antes
+            // do struct_registry do módulo importado estar disponível
+            // (ex: math.kata referencia Complex::(Float) antes do
+            // struct_registry de complex.kata ser merged).
+            if let Some(info) = struct_reg.get(name) {
+                if info.type_params.is_some() {
+                    let converted_args: Vec<Ty> = args
+                        .iter()
+                        .map(|a| instantiate_generic_struct_refs(a, struct_reg))
+                        .collect();
+                    return Ty::Struct(StructKey::Generic(name.clone(), converted_args));
+                }
+            }
+            Ty::Generic(
+                name.clone(),
+                args.iter()
+                    .map(|a| instantiate_generic_struct_refs(a, struct_reg))
+                    .collect(),
+            )
+        }
         _ => ty.clone(),
     }
 }
@@ -551,7 +575,7 @@ pub(crate) fn run_pass0(
                 // Se o DataDecl tem campos não-vazios, registra no StructRegistry.
                 // Offset de cada campo = field_index * 8 (todos os campos são words de 8 bytes).
                 if !fields.is_empty() {
-                    let field_infos: Vec<FieldInfo> = fields
+                    let mut field_infos: Vec<FieldInfo> = fields
                         .iter()
                         .enumerate()
                         .map(|(i, f)| FieldInfo {
@@ -567,27 +591,68 @@ pub(crate) fn run_pass0(
                         })
                         .collect();
 
+                    // Desugar: interfaces em posição de field viram vars
+                    // anônimas frescas com bound = a interface. Cada ocorrência
+                    // é uma var distinta (PRD §"Forma independente"):
+                    // `data Pair (fst::SCALAR scd::SCALAR)` desugar para
+                    // `Pair (fst::_SCALAR_0 scd::_SCALAR_1)` com bounds
+                    // `_SCALAR_0 implements SCALAR, _SCALAR_1 implements SCALAR`.
+                    // Isso permite tipos independentes em cada field.
+                    let mut anon_bounds: Vec<(String, String)> = Vec::new();
+                    let mut anon_counter = 0usize;
+                    for fi in &mut field_infos {
+                        desugar_interface_to_var(
+                            &mut fi.ty,
+                            interface_registry,
+                            &mut anon_bounds,
+                            &mut anon_counter,
+                        );
+                    }
+
                     // Detectar type params: coletar Ty::Var(names) nos fields
                     // onde name é PascalCase (is_type_param_name).
                     // resolve_type_expr já produz Ty::Var("T") para PascalCase
                     // que não é interface nem struct registrado.
+                    // Vars anônimas do desugar (_SCALAR_0 etc.) também são
+                    // coletadas — is_type_param_name retorna true para elas
+                    // (todas maiúsculas + underscores).
                     let mut type_param_names: Vec<String> = Vec::new();
                     for fi in &field_infos {
                         collect_type_param_names(&fi.ty, &mut type_param_names);
                     }
 
                     if !type_param_names.is_empty() {
-                        // Struct paramétrico: construir TypeParamDecls dos where_bounds.
+                        // Struct paramétrico: construir TypeParamDecls dos where_bounds
+                        // + bounds anônimos do desugar de interface.
                         let type_params: Vec<TypeParamDecl> = type_param_names
                             .iter()
                             .map(|pn| {
-                                let bound = where_bounds
+                                // where_bound explícito tem prioridade.
+                                if let Some(bound) = where_bounds
                                     .iter()
                                     .find(|(bn, _)| bn == pn)
-                                    .map(|(_, iface)| iface.clone());
+                                    .map(|(_, iface)| iface.clone())
+                                {
+                                    return TypeParamDecl {
+                                        name: pn.clone(),
+                                        bound: Some(bound),
+                                    };
+                                }
+                                // Bound anônimo do desugar (ex: _SCALAR_0 → SCALAR).
+                                if let Some(bound) = anon_bounds
+                                    .iter()
+                                    .find(|(bn, _)| bn == pn)
+                                    .map(|(_, iface)| iface.clone())
+                                {
+                                    return TypeParamDecl {
+                                        name: pn.clone(),
+                                        bound: Some(bound),
+                                    };
+                                }
+                                // Sem bound.
                                 TypeParamDecl {
                                     name: pn.clone(),
-                                    bound,
+                                    bound: None,
                                 }
                             })
                             .collect();
@@ -1349,6 +1414,64 @@ fn collect_type_param_names(ty: &Ty, result: &mut Vec<String>) {
                 collect_type_param_names(p, result);
             }
             collect_type_param_names(ret, result);
+        }
+        _ => {}
+    }
+}
+
+/// Desugar: substitui cada `Ty::Interface(name)` por `Ty::Var(fresh_name)`
+/// onde `fresh_name` é único por ocorrência. Registra o bound
+/// `(fresh_name, name)` em `anon_bounds`.
+///
+/// Isso implementa a "forma independente" do PRD: `data Pair (fst::SCALAR scd::SCALAR)`
+/// desugar para `Pair (fst::_SCALAR_0 scd::_SCALAR_1)` com bounds independentes.
+///
+/// Recursiva em tipos compostos (Function, Tuple, List, etc.).
+fn desugar_interface_to_var(
+    ty: &mut Ty,
+    iface_reg: &kata_core::InterfaceRegistry,
+    anon_bounds: &mut Vec<(String, String)>,
+    counter: &mut usize,
+) {
+    match ty {
+        Ty::Interface(name) => {
+            // Só desugar se é uma interface registrada. Se não está registrada,
+            // é um nome não-resolvido — deixar como está (erro em outro lugar).
+            if iface_reg.get_interface(name).is_some() {
+                let fresh = format!("_{name}_{counter}");
+                *counter += 1;
+                anon_bounds.push((fresh.clone(), name.clone()));
+                *ty = Ty::Var(fresh);
+            }
+        }
+        Ty::Generic(_, args) => {
+            for arg in args.iter_mut() {
+                desugar_interface_to_var(arg, iface_reg, anon_bounds, counter);
+            }
+        }
+        Ty::Struct(StructKey::Generic(_, args)) => {
+            for arg in args.iter_mut() {
+                desugar_interface_to_var(arg, iface_reg, anon_bounds, counter);
+            }
+        }
+        Ty::List(inner) | Ty::Array(inner) | Ty::Range(inner) | Ty::Set(inner)
+        | Ty::Tensor(inner) => {
+            desugar_interface_to_var(inner, iface_reg, anon_bounds, counter);
+        }
+        Ty::Dict(k, v) => {
+            desugar_interface_to_var(k, iface_reg, anon_bounds, counter);
+            desugar_interface_to_var(v, iface_reg, anon_bounds, counter);
+        }
+        Ty::Tuple(elems) => {
+            for e in elems.iter_mut() {
+                desugar_interface_to_var(e, iface_reg, anon_bounds, counter);
+            }
+        }
+        Ty::Function(params, ret) | Ty::Action(params, ret) => {
+            for p in params.iter_mut() {
+                desugar_interface_to_var(p, iface_reg, anon_bounds, counter);
+            }
+            desugar_interface_to_var(ret, iface_reg, anon_bounds, counter);
         }
         _ => {}
     }

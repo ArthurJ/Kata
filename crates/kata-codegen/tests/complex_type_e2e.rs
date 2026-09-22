@@ -158,8 +158,8 @@ fn complex_smart_constructor_aloca_struct() {
     let (raw, ty) = eval_src(&src);
     assert_eq!(
         ty,
-        Ty::Struct(StructKey::Plain("Complex".into())),
-        "Complex 3.0 4.0 deve retornar Ty::Struct(\"Complex\")"
+        Ty::Struct(StructKey::Generic("Complex".into(), vec![Ty::Prim(kata_core::PrimTy::Float), Ty::Prim(kata_core::PrimTy::Float)])),
+        "Complex 3.0 4.0 deve retornar Ty::Struct(Generic(\"Complex\", [Float, Float]))"
     );
     // Struct é alocada na arena — raw é ponteiro (não-zero, LSB=0).
     assert_ne!(raw, 0, "struct alocada não deve ser ponteiro nulo");

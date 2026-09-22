@@ -742,6 +742,25 @@ pub fn merge_two(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModul
         &struct_registry,
     );
 
+    // Fixup post-merge: converter Ty::Generic("Complex", [Float]) →
+    // Ty::Struct(StructKey::Generic("Complex", [Float])) em signatures
+    // e functions de módulos que referenciam structs paramétricos de
+    // imports antes do struct_registry do import estar disponível.
+    // (ex: math.kata referencia Complex::(Float) antes do struct_registry
+    // de complex.kata ser merged.)
+    for sig in &mut signatures {
+        for pt in &mut sig.param_types {
+            *pt = pass0::instantiate_generic_struct_refs(pt, &struct_registry);
+        }
+        sig.return_type = pass0::instantiate_generic_struct_refs(&sig.return_type, &struct_registry);
+    }
+    for func in &mut functions {
+        for pt in &mut func.param_types {
+            *pt = pass0::instantiate_generic_struct_refs(pt, &struct_registry);
+        }
+        func.return_type = pass0::instantiate_generic_struct_refs(&func.return_type, &struct_registry);
+    }
+
     // Diretivas: mescla preservando overloads por (when, on).
     // Diferente de actions (nomes se substituem), diretivas com mesmo nome
     // coexistem quando (when, on) diferem.
