@@ -274,3 +274,53 @@ fn filter_exports_internal_signatures_transitive() {
         "base_fn deve estar em internal_signatures (chamada transitivamente por mid_fn)"
     );
 }
+
+/// Cross-module E2E: `base` exporta helper, `mid` importa base e re-exporta
+/// função que chama helper. `main` importa mid. Deve rodar sem UnboundName.
+/// Bug reproduzido com stdlib/math.kata que importa stdlib/complex.kata —
+/// usuário `import math` quebra porque `complex` (função de complex.kata) não
+/// chega ao módulo do usuário.
+#[test]
+fn filter_exports_cross_module_e2e_with_importer() {
+    let tmp = tempfile::tempdir().unwrap();
+    create_temp_file(
+        tmp.path(),
+        "base.kata",
+        "helper_fn :: Int => Int @ffi(\"kata_rt_bi_add\")\n\
+         export helper_fn",
+    );
+    create_temp_file(
+        tmp.path(),
+        "mid.kata",
+        "import base\n\
+         \n\
+         process :: Int => Int\n\
+         lambda x: helper_fn x\n\
+         \n\
+         export process",
+    );
+    create_temp_file(
+        tmp.path(),
+        "main.kata",
+        "import mid\n\
+         \n\
+         process 5",
+    );
+
+    let mut loader = ModuleLoader::new(vec![tmp.path().to_path_buf()]);
+    let resolved_main = loader
+        .load(&["main".into()], tmp.path())
+        .expect("main.kata deve carregar sem erro");
+
+    // A função `helper_fn` precisa estar disponível (via internal_signatures
+    // ou signatures) para o typecheck do corpo de `process` no main.
+    let has_helper = resolved_main.signatures.iter().any(|s| s.name == "helper_fn")
+        || resolved_main
+            .internal_signatures
+            .iter()
+            .any(|s| s.name == "helper_fn");
+    assert!(
+        has_helper,
+        "helper_fn deve estar disponível no main (via signatures ou internal_signatures)"
+    );
+}

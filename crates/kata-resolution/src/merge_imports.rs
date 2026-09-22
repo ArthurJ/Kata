@@ -117,6 +117,26 @@ pub fn merge_imports(merged: &mut ResolvedModule, imports: &[ImportedModule]) {
         merged
             .embed_dependencies
             .extend(imported.resolved.embed_dependencies.iter().cloned());
+
+        // Propagar internal_signatures do módulo importado: são dependências
+        // internas do corpo de funções exportadas por aquele módulo
+        // (ex: `math.sin :: Complex=>Complex` usa `complex` de complex.kata).
+        // Sem essa propagação, o módulo importador quebra com UnboundName
+        // ao typecheck do corpo re-exportado. Dedup por (nome, params, ret).
+        for sig in &imported.resolved.internal_signatures {
+            let dup = merged.internal_signatures.iter().any(|s| {
+                s.name == sig.name
+                    && s.param_types == sig.param_types
+                    && s.return_type == sig.return_type
+            }) || merged.signatures.iter().any(|s| {
+                s.name == sig.name
+                    && s.param_types == sig.param_types
+                    && s.return_type == sig.return_type
+            });
+            if !dup {
+                merged.internal_signatures.push(sig.clone());
+            }
+        }
     }
 }
 
